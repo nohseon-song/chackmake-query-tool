@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Reading {
@@ -21,6 +22,7 @@ interface ReadingsManagementProps {
   savedReadings: Reading[];
   onSaveReading: (reading: Reading) => void;
   isDark: boolean;
+  logs: any[];
 }
 
 const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
@@ -30,7 +32,8 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
   showInputs,
   savedReadings,
   onSaveReading,
-  isDark
+  isDark,
+  logs
 }) => {
   const [design, setDesign] = useState('');
   const [measure, setMeasure] = useState('');
@@ -64,6 +67,23 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
     });
   };
 
+  const downloadPDF = () => {
+    const responseEntries = logs.filter(log => log.isResponse);
+    if (responseEntries.length === 0) {
+      toast({
+        title: "다운로드 불가",
+        description: "다운로드할 응답 데이터가 없습니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "PDF 다운로드",
+      description: "PDF 다운로드 기능은 추후 구현 예정입니다.",
+    });
+  };
+
   return (
     <>
       {showInputs && (
@@ -88,13 +108,23 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
               className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
             />
           </div>
-          <Button
-            onClick={handleSaveReading}
-            variant="outline"
-            className="ml-auto block px-4 py-2 text-sm"
-          >
-            임시저장
-          </Button>
+          <div className="flex gap-2 justify-end">
+            <Button
+              onClick={handleSaveReading}
+              variant="outline"
+              className="px-4 py-2 text-sm"
+            >
+              임시저장
+            </Button>
+            <Button
+              onClick={downloadPDF}
+              variant="outline"
+              className="px-4 py-2 text-sm flex items-center gap-2 min-w-[120px]"
+            >
+              <FileDown className="w-4 h-4" />
+              PDF 다운로드
+            </Button>
+          </div>
         </div>
       )}
 
@@ -102,9 +132,7 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
         <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3 text-sm`}>
           {savedReadings.map((reading, idx) => (
             <div key={idx} className="mb-1">
-              {idx + 1}. [{reading.equipment}{'>'}
-              {reading.class1}{'>'}
-              {reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
+              {idx + 1}. [{reading.equipment}{'>'}{reading.class1}{'>'}{reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
             </div>
           ))}
         </div>

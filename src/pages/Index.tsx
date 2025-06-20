@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
@@ -267,6 +266,7 @@ const Index = () => {
               savedReadings={savedReadings}
               onSaveReading={handleSaveReading}
               isDark={isDark}
+              logs={logs}
             />
           </CardContent>
         </Card>
@@ -275,7 +275,6 @@ const Index = () => {
           savedReadingsCount={savedReadings.length}
           isProcessing={isProcessing}
           onSubmit={handleSubmit}
-          logs={logs}
           isDark={isDark}
         />
 
