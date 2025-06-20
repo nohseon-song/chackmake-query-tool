@@ -64,11 +64,6 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
     });
   };
 
-  // Expose setDesign for OCR functionality
-  React.useImperativeHandle(React.forwardRef(() => null), () => ({
-    setDesign
-  }));
-
   return (
     <>
       {showInputs && (

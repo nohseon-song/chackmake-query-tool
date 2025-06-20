@@ -1,13 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { MessageSquare, Moon, Sun, FileDown } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ChatModal from '@/components/ChatModal';
 import OCRFeature from '@/components/OCRFeature';
 import LogDisplay from '@/components/LogDisplay';
+import ThemeToggle from '@/components/ThemeToggle';
+import ActionButtons from '@/components/ActionButtons';
 
 interface Reading {
   equipment: string;
@@ -226,25 +228,7 @@ const Index = () => {
   };
 
   const handleOCRResult = (result: string) => {
-    // This would need to be implemented with proper ref forwarding to ReadingsManagement
     console.log('OCR Result:', result);
-  };
-
-  const downloadPDF = () => {
-    const responseEntries = logs.filter(log => log.isResponse);
-    if (responseEntries.length === 0) {
-      toast({
-        title: "다운로드 불가",
-        description: "다운로드할 응답 데이터가 없습니다.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    toast({
-      title: "PDF 다운로드",
-      description: "PDF 다운로드 기능은 추후 구현 예정입니다.",
-    });
   };
 
   const selectedEquipment = EQUIPMENT_TREE[equipment as keyof typeof EQUIPMENT_TREE];
@@ -255,12 +239,7 @@ const Index = () => {
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {/* Header */}
       <header className={`flex flex-col items-center p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm relative`}>
-        <button
-          onClick={toggleTheme}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-        >
-          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
+        <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
         <h1 className="text-xl font-bold mb-1">CheckMake Pro-Ultra 2.0</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 전문 기술 진단 App</p>
       </header>
@@ -292,24 +271,13 @@ const Index = () => {
           </CardContent>
         </Card>
 
-        {/* Action Buttons */}
-        <div className="mt-4 space-y-2">
-          <Button
-            onClick={handleSubmit}
-            disabled={savedReadings.length === 0 || isProcessing}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-full"
-          >
-            {isProcessing ? '처리 중...' : '전문 기술검토 및 진단 받기'}
-          </Button>
-          <Button
-            onClick={downloadPDF}
-            variant="outline"
-            className="ml-auto block px-4 py-2 text-sm"
-          >
-            <FileDown className="w-4 h-4 mr-2" />
-            PDF 다운로드
-          </Button>
-        </div>
+        <ActionButtons
+          savedReadingsCount={savedReadings.length}
+          isProcessing={isProcessing}
+          onSubmit={handleSubmit}
+          logs={logs}
+          isDark={isDark}
+        />
 
         <LogDisplay logs={logs} isDark={isDark} />
       </main>
@@ -322,12 +290,12 @@ const Index = () => {
           onAddLogEntry={addLogEntry}
           class2={class2}
         />
-        <Button
+        <button
           onClick={() => setChatOpen(true)}
-          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center"
         >
           <MessageSquare className="w-6 h-6" />
-        </Button>
+        </button>
       </div>
 
       <ChatModal
