@@ -1,12 +1,13 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Camera, MessageSquare, Moon, Sun, ArrowLeft, FileDown } from 'lucide-react';
+import { MessageSquare, Moon, Sun, FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import EquipmentSelection from '@/components/EquipmentSelection';
+import ReadingsManagement from '@/components/ReadingsManagement';
+import ChatModal from '@/components/ChatModal';
+import OCRFeature from '@/components/OCRFeature';
+import LogDisplay from '@/components/LogDisplay';
 
 interface Reading {
   equipment: string;
@@ -108,16 +109,11 @@ const Index = () => {
   const [equipment, setEquipment] = useState<string>('');
   const [class1, setClass1] = useState<string>('');
   const [class2, setClass2] = useState<string>('');
-  const [design, setDesign] = useState<string>('');
-  const [measure, setMeasure] = useState<string>('');
   const [savedReadings, setSavedReadings] = useState<Reading[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{text: string, isUser: boolean}[]>([]);
-  const [chatInput, setChatInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -148,32 +144,8 @@ const Index = () => {
     resetSelections(1);
   };
 
-  const saveReading = () => {
-    if (!design.trim() || !measure.trim()) {
-      toast({
-        title: "입력 오류",
-        description: "설계값과 측정값을 모두 입력해주세요.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const newReading: Reading = {
-      equipment,
-      class1,
-      class2,
-      design: design.trim(),
-      measure: measure.trim()
-    };
-
-    setSavedReadings(prev => [...prev, newReading]);
-    setDesign('');
-    setMeasure('');
-    
-    toast({
-      title: "임시저장 완료",
-      description: "측정값이 저장되었습니다.",
-    });
+  const handleSaveReading = (reading: Reading) => {
+    setSavedReadings(prev => [...prev, reading]);
   };
 
   const clearSavedReadings = () => {
@@ -246,60 +218,16 @@ const Index = () => {
     setClass2('');
   };
 
-  const handleChatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    const userMessage = chatInput.trim();
-    setChatMessages(prev => [...prev, { text: userMessage, isUser: true }]);
-    setChatInput('');
-
+  const handleChatMessage = async (message: string) => {
     await sendWebhook({
-      chat: userMessage,
+      chat: message,
       timestamp: Date.now()
     });
   };
 
-  const handleOCR = () => {
-    if (!class2) {
-      addLogEntry('🔔 안내', '설비→주요 점검 부분→세부 점검 항목을 먼저 선택하세요.');
-      return;
-    }
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsProcessing(true);
-      
-      // OCR 기능은 실제 구현을 위해 별도 라이브러리가 필요하므로 
-      // 여기서는 시뮬레이션으로 처리
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockOCRResult = "25.5°C";
-      setDesign(mockOCRResult);
-      
-      addLogEntry('📑 OCR 결과', mockOCRResult);
-      
-      toast({
-        title: "OCR 완료",
-        description: "이미지에서 텍스트를 추출했습니다.",
-      });
-    } catch (error) {
-      toast({
-        title: "OCR 실패",
-        description: "이미지 처리 중 오류가 발생했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleOCRResult = (result: string) => {
+    // This would need to be implemented with proper ref forwarding to ReadingsManagement
+    console.log('OCR Result:', result);
   };
 
   const downloadPDF = () => {
@@ -313,7 +241,6 @@ const Index = () => {
       return;
     }
 
-    // PDF 생성 로직은 실제 구현을 위해 별도 라이브러리가 필요
     toast({
       title: "PDF 다운로드",
       description: "PDF 다운로드 기능은 추후 구현 예정입니다.",
@@ -342,102 +269,26 @@ const Index = () => {
       <main className="flex-1 overflow-y-auto p-3 pb-24">
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4 space-y-4">
-            {/* Equipment Selection */}
-            <div>
-              <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-                점검 설비를 선택해 주세요.
-              </Label>
-              <Select value={equipment} onValueChange={handleEquipmentChange}>
-                <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
-                  <SelectValue placeholder="선택…" />
-                </SelectTrigger>
-                <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
-                  {Object.keys(EQUIPMENT_TREE).map((eq) => (
-                    <SelectItem key={eq} value={eq}>{eq}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <EquipmentSelection
+              equipment={equipment}
+              class1={class1}
+              class2={class2}
+              equipmentTree={EQUIPMENT_TREE}
+              onEquipmentChange={handleEquipmentChange}
+              onClass1Change={handleClass1Change}
+              onClass2Change={setClass2}
+              isDark={isDark}
+            />
 
-            {/* Class 1 Selection */}
-            {selectedEquipment && (
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-                  주요 점검 부분 선택
-                </Label>
-                <Select value={class1} onValueChange={handleClass1Change}>
-                  <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
-                    <SelectValue placeholder="선택…" />
-                  </SelectTrigger>
-                  <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
-                    {Object.keys(selectedEquipment).map((cls) => (
-                      <SelectItem key={cls} value={cls}>{cls}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Class 2 Selection */}
-            {selectedClass1 && Array.isArray(selectedClass1) && (
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-                  세부 점검 항목
-                </Label>
-                <Select value={class2} onValueChange={setClass2}>
-                  <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
-                    <SelectValue placeholder="선택…" />
-                  </SelectTrigger>
-                  <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
-                    {selectedClass1.map((item) => (
-                      <SelectItem key={item} value={item}>{item}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Input Fields */}
-            {showInputs && (
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">설계값</Label>
-                  <Input
-                    value={design}
-                    onChange={(e) => setDesign(e.target.value)}
-                    placeholder="설계값"
-                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">측정값</Label>
-                  <Input
-                    value={measure}
-                    onChange={(e) => setMeasure(e.target.value)}
-                    placeholder="측정값"
-                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
-                  />
-                </div>
-                <Button
-                  onClick={saveReading}
-                  variant="outline"
-                  className="ml-auto block px-4 py-2 text-sm"
-                >
-                  임시저장
-                </Button>
-              </div>
-            )}
-
-            {/* Saved Readings Display */}
-            {savedReadings.length > 0 && (
-              <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3 text-sm`}>
-                {savedReadings.map((reading, idx) => (
-                  <div key={idx} className="mb-1">
-                    {idx + 1}. [{reading.equipment}>{reading.class1}>{reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
-                  </div>
-                ))}
-              </div>
-            )}
+            <ReadingsManagement
+              equipment={equipment}
+              class1={class1}
+              class2={class2}
+              showInputs={showInputs}
+              savedReadings={savedReadings}
+              onSaveReading={handleSaveReading}
+              isDark={isDark}
+            />
           </CardContent>
         </Card>
 
@@ -460,35 +311,17 @@ const Index = () => {
           </Button>
         </div>
 
-        {/* Log Section */}
-        {logs.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className={`p-3 rounded-lg text-sm ${
-                  log.isResponse
-                    ? `border-l-4 border-blue-500 ${isDark ? 'bg-gray-800' : 'bg-white'}`
-                    : `${isDark ? 'bg-gray-800' : 'bg-white'}`
-                } shadow-sm`}
-              >
-                <div className="font-medium mb-1">{log.tag}</div>
-                <pre className="whitespace-pre-wrap text-xs">{log.content}</pre>
-              </div>
-            ))}
-          </div>
-        )}
+        <LogDisplay logs={logs} isDark={isDark} />
       </main>
 
       {/* Floating Action Buttons */}
       <div className="fixed bottom-20 right-4 space-y-3">
-        <Button
-          onClick={handleOCR}
-          disabled={isProcessing}
-          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-        >
-          <Camera className="w-6 h-6" />
-        </Button>
+        <OCRFeature
+          isProcessing={isProcessing}
+          onOCRResult={handleOCRResult}
+          onAddLogEntry={addLogEntry}
+          class2={class2}
+        />
         <Button
           onClick={() => setChatOpen(true)}
           className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
@@ -497,53 +330,12 @@ const Index = () => {
         </Button>
       </div>
 
-      {/* Hidden File Input for OCR */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFileChange}
+      <ChatModal
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        onSendMessage={handleChatMessage}
+        isDark={isDark}
       />
-
-      {/* Chat Modal */}
-      {chatOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-end">
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} w-full max-h-[60%] rounded-t-2xl flex flex-col`}>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`max-w-[70%] p-3 rounded-xl text-sm ${
-                    msg.isUser
-                      ? 'ml-auto bg-blue-600 text-white'
-                      : `mr-auto ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`
-                  }`}
-                >
-                  {msg.text}
-                </div>
-              ))}
-            </div>
-            <form onSubmit={handleChatSubmit} className="flex p-3 border-t border-gray-200 dark:border-gray-700">
-              <Input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="메시지를 입력하세요…"
-                className="flex-1 mr-2"
-              />
-              <Button type="submit" className="px-4">전송</Button>
-            </form>
-            <Button
-              onClick={() => setChatOpen(false)}
-              variant="ghost"
-              className="absolute top-2 right-2"
-            >
-              ✕
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
