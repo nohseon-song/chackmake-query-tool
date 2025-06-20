@@ -1,383 +1,549 @@
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Thermometer, Settings, MessageSquare } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Camera, MessageSquare, Moon, Sun, ArrowLeft, FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-interface Equipment {
-  label: string;
-  primary?: Record<string, {
-    label: string;
-    secondary?: { value: string; label: string }[];
-  }>;
+interface Reading {
+  equipment: string;
+  class1: string;
+  class2: string;
+  design: string;
+  measure: string;
 }
 
-const EQUIPMENT: Record<string, Equipment> = {
-  chiller: {
-    label: '냉동기',
-    primary: {
-      evaporator: {
-        label: '증발기(냉수)',
-        secondary: [
-          { value: 'inlet-temp', label: '입구온도 [℃]' },
-          { value: 'outlet-temp', label: '출구온도 [℃]' },
-        ],
-      },
-      condenser: {
-        label: '응축기(냉각수)',
-        secondary: [
-          { value: 'inlet-temp', label: '입구온도 [℃]' },
-          { value: 'outlet-temp', label: '출구온도 [℃]' },
-        ],
-      },
-    },
+interface LogEntry {
+  id: string;
+  tag: string;
+  content: string;
+  isResponse?: boolean;
+  timestamp: number;
+}
+
+const EQUIPMENT_TREE = {
+  "냉동기(일반/압축식)": {
+    "증발기(냉수)": ["입구 온도 [℃]","출구 온도 [℃]","냉수 유량 [LPM]","출열 [kcal/h]","냉수 설정 온도 [℃]"],
+    "압축기": ["운전시 전력소비량 [kW]","입열 [kcal/h]"],
+    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 온도 [℃]"],
+    "성적계수(COP)": ["냉매 종류","냉방 능력 (usRT)","[냉수] 입구 온도 (℃)","[냉수] 출구 온도 (℃)","[냉수] 순환량 (㎥/h)","소비전력 (kWh)"]
   },
-  boiler: {
-    label: '보일러',
-    primary: {
-      'hot-water': {
-        label: '온수',
-        secondary: [
-          { value: 'supply-temp', label: '공급온도 [℃]' },
-          { value: 'return-temp', label: '환수온도 [℃]' },
-        ],
-      },
-    },
+  "냉동기(흡수식)": {
+    "증발기(냉수)": ["입구 온도 [℃]","출구 온도 [℃]","냉수 유량 [LPM]","냉수 설정 온도 [℃]"],
+    "압축기(재생기)": ["입열 [kcal/h]"],
+    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 온도 [℃]"],
+    "성적계수(COP)": ["냉매 종류","냉방 능력(usRT)","[냉수] 입구온도(℃)","[냉수] 출구온도(℃)","[냉수] 순환량(㎥/h)","[흡수제 펌프 등] 소비전력(kWh)","[직화식] 연료 발열량(kcal/㎥)","[직화식-가스] 연료 사용량(㎥)","[중온수] 중온수 열량(kcal)","[중온수] 중온수 유량(LPM)","[중온수] 냉수 유량(LPM)","[증기식] 증기 열량(kcal)","[증기식] 증기 사용량(㎏)"]
   },
-  'air-handler': {
-    label: '공조기',
-    primary: {
-      'supply-air': {
-        label: '급기',
-        secondary: [
-          { value: 'temp', label: '온도 [℃]' },
-          { value: 'humidity', label: '습도 [%]' },
-        ],
-      },
-      'return-air': {
-        label: '환기',
-        secondary: [
-          { value: 'temp', label: '온도 [℃]' },
-          { value: 'humidity', label: '습도 [%]' },
-        ],
-      },
-    },
+  "냉각탑": {
+    "냉각수": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 온도 [℃]"],
+    "외기 조건": ["외기 온도 [℃]","외기 습도 [%]","습구 온도 [℃]","엔탈피 [kcal/kg]"],
+    "냉각 능력(CRT)": ["정격 냉각 열량 [kcal/h]","측정 냉각 열량 [kcal/h]"]
   },
-  'free-question': {
-    label: '편하게 질문하기!',
-    primary: {
-      qna: {
-        label: '문의',
-        secondary: [],
-      },
-    },
+  "축열조": {
+    "브라인(1차측)": ["입구 온도 [℃]","출구 온도 [℃]","유량 [㎥/h]"],
+    "냉수(2차측)": ["입구 온도 [℃]","출구 온도 [℃]","유량 [㎥/h]"]
   },
+  "보일러": {
+    "사용 조건": ["외기 온도 [℃]","실내 온도 [℃]"],
+    "사용 연료": ["연료 종류(가스)","연료 종류(경유)","연료 종류(벙커C유)","연료 종류(기타 입력)","연료 사용량 [㎥/h]","연료 공급 온도 [℃]"],
+    "급수 및 증기량": ["급수 공급 온도 [℃]","증기 공급 온도 [℃]","급수 및 증기량 [㎏]"],
+    "성능 조건": ["운전 압력 [MPa]","연소용 공기온도 [℃]","운전부하(상당증발량) [㎏/h]","부하율 [%]","공기비","효율 [%]"]
+  },
+  "열교환기": {
+    "중온수(1차 열원)": ["입구 온도 [℃]","출구 온도 [℃]","유량 [LPM]","처리열량 [kcal/h]"],
+    "온수(2차 공급)": ["입구 온도 [℃]","출구 온도 [℃]","유량 [LPM]","처리열량 [kcal/h_]"],
+    "압력(1차 열원)": ["입구 압력 [㎏/㎠]","출구 압력 [㎏/㎠]"],
+    "압력(2차 공급)": ["입구 압력 [㎏/㎠]","출구 압력 [㎏/㎠]"]
+  },
+  "펌프": {
+    "양정": ["흡입 압력 [㎏f/㎠]","토출 압력 [㎏f/㎠]"],
+    "사용 조건": ["유량 [LPM]","소비 전류 [A]","소비 전력 [㎾]"]
+  },
+  "공기조화기": {
+    "풍량": ["급기 단면적 [㎡]","환기 단면적 [㎡]","급기 풍속 [m/s]","환기 풍속 [m/s]","급기 풍량 [CMH]","환기 풍량 [CMH]"],
+    "운전 정압": ["급기 [㎜Aq]","환기 [㎜Aq]"],
+    "소비 전력 및 전류": ["급기 소비 전력 [kW]","급기 소비 전류 [A]","환기 소비 전력 [kW]","환기 소비 전류 [A]"],
+    "필터 차압": ["정압 손실 [㎜Aq]"]
+  },
+  "환기설비": {
+    "풍량": ["급기 단면적 [㎡]","배기 단면적 [㎡]","급기 풍속 [m/s]","배기 풍속 [m/s]","급기 풍량 [CMH]","배기 풍량 [CMH]"],
+    "운전 정압": ["급기 [㎜Aq]","배기 [㎜Aq]"],
+    "소비 전력 및 전류": ["급기 소비 전력 [kW]","급기 소비 전류 [A]","배기 소비 전력 [kW]","배기 소비 전류 [A]"],
+    "필터 차압": ["정압 손실 [㎜Aq]"]
+  },
+  "현열교환기": {
+    "현열 교환 효율": ["외기 건구 온도 [℃]","급기 건구 온도 [℃]","환기 건구 온도 [℃]"]
+  },
+  "전열교환기": {
+    "전열 교환 효율": ["외기 엔탈피 [kJ/kg(DA)]","급기 엔탈피 [kJ/kg(DA)]","환기 엔탈피 [kJ/kg(DA)]","외기 건구 온도 [℃]","급기 건구 온도 [℃]","환기 건구 온도 [℃]","외기 상대 습도 [%]","급기 상대 습도 [%]","환기 상대 습도 [%]"]
+  },
+  "팬코일유니트": {
+    "강": ["풍량 [CMH]","풍속 [m/s]"],
+    "중": ["풍량 [CMH]","풍속 [m/s]"],
+    "약": ["풍량 [CMH]","풍속 [m/s]"],
+    "토출 공기": ["토출 공기 온도 [℃]"]
+  },
+  "위생기구설비": {
+    "최상층": ["압력 [kPa]"],
+    "최하층": ["압력 [kPa]"]
+  },
+  "급수급탕설비": {
+    "1차 증기": ["증기 압력 [kPa]"],
+    "2차 공급": ["공급 압력 [kPa]"],
+    "급탕 온도": ["급탕 온도 [℃]"]
+  }
 };
 
+const WEBHOOK_URL = 'https://hook.eu2.make.com/8fj69eg79sbcssao26zgtxd1360pd1rq';
+
 const Index = () => {
-  const [equipment, setEquipment] = useState<string>('');
-  const [primary, setPrimary] = useState<string>('');
-  const [secondary, setSecondary] = useState<string>('');
-  const [designValue, setDesignValue] = useState<string>('');
-  const [measureValue, setMeasureValue] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [response, setResponse] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark';
+  });
   
+  const [equipment, setEquipment] = useState<string>('');
+  const [class1, setClass1] = useState<string>('');
+  const [class2, setClass2] = useState<string>('');
+  const [design, setDesign] = useState<string>('');
+  const [measure, setMeasure] = useState<string>('');
+  const [savedReadings, setSavedReadings] = useState<Reading[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{text: string, isUser: boolean}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const selectedEquipment = EQUIPMENT[equipment];
-  const selectedPrimary = selectedEquipment?.primary?.[primary];
-  const isQnaMode = equipment === 'free-question';
-  const canShowInputs = (selectedPrimary && !selectedPrimary.secondary?.length) || secondary || isQnaMode;
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
+
+  const toggleTheme = () => {
+    setIsDark(!isDark);
+  };
+
+  const resetSelections = (level: number) => {
+    if (level <= 0) {
+      setClass1('');
+      setClass2('');
+    } else if (level === 1) {
+      setClass2('');
+    }
+  };
 
   const handleEquipmentChange = (value: string) => {
     setEquipment(value);
-    setPrimary('');
-    setSecondary('');
-    setError('');
+    resetSelections(0);
   };
 
-  const handlePrimaryChange = (value: string) => {
-    setPrimary(value);
-    setSecondary('');
-    setError('');
+  const handleClass1Change = (value: string) => {
+    setClass1(value);
+    resetSelections(1);
   };
 
-  const handleSecondaryChange = (value: string) => {
-    setSecondary(value);
-    setError('');
-  };
-
-  const validateForm = () => {
-    if (!equipment) {
-      setError('설비를 선택하세요.');
-      return false;
+  const saveReading = () => {
+    if (!design.trim() || !measure.trim()) {
+      toast({
+        title: "입력 오류",
+        description: "설계값과 측정값을 모두 입력해주세요.",
+        variant: "destructive",
+      });
+      return;
     }
-    if (isQnaMode && !designValue.trim()) {
-      setError('질문 내용을 입력하세요.');
-      return false;
-    }
-    return true;
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!validateForm()) return;
-
-    const payload = {
+    const newReading: Reading = {
       equipment,
-      primary,
-      secondary,
-      design: designValue.trim(),
-      measure: measureValue.trim(),
+      class1,
+      class2,
+      design: design.trim(),
+      measure: measure.trim()
     };
 
-    setIsLoading(true);
+    setSavedReadings(prev => [...prev, newReading]);
+    setDesign('');
+    setMeasure('');
+    
+    toast({
+      title: "임시저장 완료",
+      description: "측정값이 저장되었습니다.",
+    });
+  };
+
+  const clearSavedReadings = () => {
+    setSavedReadings([]);
+  };
+
+  const addLogEntry = (tag: string, content: string, isResponse = false) => {
+    const logEntry: LogEntry = {
+      id: Date.now().toString(),
+      tag,
+      content: typeof content === 'string' ? content : JSON.stringify(content, null, 2),
+      isResponse,
+      timestamp: Date.now()
+    };
+    setLogs(prev => [...prev, logEntry]);
+  };
+
+  const sendWebhook = async (payload: any) => {
+    addLogEntry('📤 전송', payload);
+    setIsProcessing(true);
+    
     try {
-      console.log('Sending payload:', payload);
-      
-      // Simulate API call for demo
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockResponse = {
-        status: 'success',
-        analysis: isQnaMode 
-          ? `질문에 대한 답변: ${designValue}에 대한 전문적인 분석 결과입니다.`
-          : `${selectedEquipment?.label} - ${selectedPrimary?.label} 분석 결과\n설계값: ${designValue}\n측정값: ${measureValue}\n\n분석: 정상 범위 내에 있습니다.`,
-        timestamp: new Date().toLocaleString('ko-KR'),
-      };
-      
-      setResponse(JSON.stringify(mockResponse, null, 2));
-      toast({
-        title: "분석 완료",
-        description: "결과가 성공적으로 생성되었습니다.",
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
-    } catch (err) {
-      const errorMessage = '분석 중 오류가 발생했습니다.';
-      setError(errorMessage);
+      
+      const responseText = await response.text();
+      addLogEntry('📥 응답', responseText, true);
+      
       toast({
-        title: "오류",
+        title: "전송 완료",
+        description: "전문 기술검토가 완료되었습니다.",
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      addLogEntry('⚠️ 오류', errorMessage);
+      
+      toast({
+        title: "전송 실패",
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
-  const resetForm = () => {
+  const handleSubmit = async () => {
+    if (savedReadings.length === 0) {
+      toast({
+        title: "데이터 없음",
+        description: "저장된 측정값이 없습니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await sendWebhook({
+      readings: savedReadings,
+      timestamp: Date.now()
+    });
+    
+    clearSavedReadings();
     setEquipment('');
-    setPrimary('');
-    setSecondary('');
-    setDesignValue('');
-    setMeasureValue('');
-    setResponse('');
-    setError('');
+    setClass1('');
+    setClass2('');
   };
 
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMessage = chatInput.trim();
+    setChatMessages(prev => [...prev, { text: userMessage, isUser: true }]);
+    setChatInput('');
+
+    await sendWebhook({
+      chat: userMessage,
+      timestamp: Date.now()
+    });
+  };
+
+  const handleOCR = () => {
+    if (!class2) {
+      addLogEntry('🔔 안내', '설비→주요 점검 부분→세부 점검 항목을 먼저 선택하세요.');
+      return;
+    }
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsProcessing(true);
+      
+      // OCR 기능은 실제 구현을 위해 별도 라이브러리가 필요하므로 
+      // 여기서는 시뮬레이션으로 처리
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const mockOCRResult = "25.5°C";
+      setDesign(mockOCRResult);
+      
+      addLogEntry('📑 OCR 결과', mockOCRResult);
+      
+      toast({
+        title: "OCR 완료",
+        description: "이미지에서 텍스트를 추출했습니다.",
+      });
+    } catch (error) {
+      toast({
+        title: "OCR 실패",
+        description: "이미지 처리 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const downloadPDF = () => {
+    const responseEntries = logs.filter(log => log.isResponse);
+    if (responseEntries.length === 0) {
+      toast({
+        title: "다운로드 불가",
+        description: "다운로드할 응답 데이터가 없습니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // PDF 생성 로직은 실제 구현을 위해 별도 라이브러리가 필요
+    toast({
+      title: "PDF 다운로드",
+      description: "PDF 다운로드 기능은 추후 구현 예정입니다.",
+    });
+  };
+
+  const selectedEquipment = EQUIPMENT_TREE[equipment as keyof typeof EQUIPMENT_TREE];
+  const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
+  const showInputs = class2 && selectedClass1;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-            ChackMake PRO‑Ultra v2.0
-          </h1>
-          <p className="text-slate-300 text-lg">
-            고급 HVAC 설비 분석 도구
-          </p>
+    <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      {/* Header */}
+      <header className={`flex flex-col items-center p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm relative`}>
+        <button
+          onClick={toggleTheme}
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+        >
+          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
+        <h1 className="text-xl font-bold mb-1">CheckMake Pro-Ultra 2.0</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 전문 기술 진단 App</p>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto p-3 pb-24">
+        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+          <CardContent className="p-4 space-y-4">
+            {/* Equipment Selection */}
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
+                점검 설비를 선택해 주세요.
+              </Label>
+              <Select value={equipment} onValueChange={handleEquipmentChange}>
+                <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
+                  <SelectValue placeholder="선택…" />
+                </SelectTrigger>
+                <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
+                  {Object.keys(EQUIPMENT_TREE).map((eq) => (
+                    <SelectItem key={eq} value={eq}>{eq}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Class 1 Selection */}
+            {selectedEquipment && (
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
+                  주요 점검 부분 선택
+                </Label>
+                <Select value={class1} onValueChange={handleClass1Change}>
+                  <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
+                    <SelectValue placeholder="선택…" />
+                  </SelectTrigger>
+                  <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
+                    {Object.keys(selectedEquipment).map((cls) => (
+                      <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Class 2 Selection */}
+            {selectedClass1 && Array.isArray(selectedClass1) && (
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
+                  세부 점검 항목
+                </Label>
+                <Select value={class2} onValueChange={setClass2}>
+                  <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
+                    <SelectValue placeholder="선택…" />
+                  </SelectTrigger>
+                  <SelectContent className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white'}`}>
+                    {selectedClass1.map((item) => (
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Input Fields */}
+            {showInputs && (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">설계값</Label>
+                  <Input
+                    value={design}
+                    onChange={(e) => setDesign(e.target.value)}
+                    placeholder="설계값"
+                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">측정값</Label>
+                  <Input
+                    value={measure}
+                    onChange={(e) => setMeasure(e.target.value)}
+                    placeholder="측정값"
+                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
+                  />
+                </div>
+                <Button
+                  onClick={saveReading}
+                  variant="outline"
+                  className="ml-auto block px-4 py-2 text-sm"
+                >
+                  임시저장
+                </Button>
+              </div>
+            )}
+
+            {/* Saved Readings Display */}
+            {savedReadings.length > 0 && (
+              <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3 text-sm`}>
+                {savedReadings.map((reading, idx) => (
+                  <div key={idx} className="mb-1">
+                    {idx + 1}. [{reading.equipment}>{reading.class1}>{reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="mt-4 space-y-2">
+          <Button
+            onClick={handleSubmit}
+            disabled={savedReadings.length === 0 || isProcessing}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-full"
+          >
+            {isProcessing ? '처리 중...' : '전문 기술검토 및 진단 받기'}
+          </Button>
+          <Button
+            onClick={downloadPDF}
+            variant="outline"
+            className="ml-auto block px-4 py-2 text-sm"
+          >
+            <FileDown className="w-4 h-4 mr-2" />
+            PDF 다운로드
+          </Button>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Input Form */}
-          <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-white flex items-center gap-2">
-                <Settings className="w-5 h-5 text-blue-400" />
-                설비 선택 및 설정
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                분석할 설비와 측정값을 입력하세요
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Equipment Selection */}
-                <div className="space-y-2">
-                  <Label htmlFor="equipment" className="text-white">설비 선택</Label>
-                  <Select value={equipment} onValueChange={handleEquipmentChange}>
-                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                      <SelectValue placeholder="설비를 선택하세요" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-700 border-slate-600">
-                      {Object.entries(EQUIPMENT).map(([key, eq]) => (
-                        <SelectItem key={key} value={key} className="text-white focus:bg-slate-600">
-                          {eq.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+        {/* Log Section */}
+        {logs.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {logs.map((log) => (
+              <div
+                key={log.id}
+                className={`p-3 rounded-lg text-sm ${
+                  log.isResponse
+                    ? `border-l-4 border-blue-500 ${isDark ? 'bg-gray-800' : 'bg-white'}`
+                    : `${isDark ? 'bg-gray-800' : 'bg-white'}`
+                } shadow-sm`}
+              >
+                <div className="font-medium mb-1">{log.tag}</div>
+                <pre className="whitespace-pre-wrap text-xs">{log.content}</pre>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
 
-                {/* Primary Classification */}
-                {selectedEquipment?.primary && (
-                  <div className="space-y-2">
-                    <Label htmlFor="primary" className="text-white">1차 분류</Label>
-                    <Select value={primary} onValueChange={handlePrimaryChange}>
-                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                        <SelectValue placeholder="1차 분류를 선택하세요" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-700 border-slate-600">
-                        {Object.entries(selectedEquipment.primary).map(([key, prim]) => (
-                          <SelectItem key={key} value={key} className="text-white focus:bg-slate-600">
-                            {prim.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Secondary Classification */}
-                {selectedPrimary?.secondary && selectedPrimary.secondary.length > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="secondary" className="text-white">2차 분류</Label>
-                    <Select value={secondary} onValueChange={handleSecondaryChange}>
-                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                        <SelectValue placeholder="2차 분류를 선택하세요" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-700 border-slate-600">
-                        {selectedPrimary.secondary.map((sec) => (
-                          <SelectItem key={sec.value} value={sec.value} className="text-white focus:bg-slate-600">
-                            {sec.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Input Fields */}
-                {canShowInputs && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="design" className="text-white flex items-center gap-2">
-                        {isQnaMode ? (
-                          <>
-                            <MessageSquare className="w-4 h-4 text-green-400" />
-                            질문 내용
-                          </>
-                        ) : (
-                          <>
-                            <Thermometer className="w-4 h-4 text-blue-400" />
-                            설계값
-                          </>
-                        )}
-                      </Label>
-                      <Input
-                        id="design"
-                        value={designValue}
-                        onChange={(e) => setDesignValue(e.target.value)}
-                        placeholder={isQnaMode ? "궁금한 내용을 자유롭게 입력하세요..." : "설계값을 입력하세요"}
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      />
-                    </div>
-
-                    {!isQnaMode && (
-                      <div className="space-y-2">
-                        <Label htmlFor="measure" className="text-white flex items-center gap-2">
-                          <Thermometer className="w-4 h-4 text-orange-400" />
-                          측정값
-                        </Label>
-                        <Input
-                          id="measure"
-                          value={measureValue}
-                          onChange={(e) => setMeasureValue(e.target.value)}
-                          placeholder="측정값을 입력하세요"
-                          className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Error Display */}
-                {error && (
-                  <Alert className="bg-red-900/20 border-red-500 text-red-300">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        분석 중...
-                      </>
-                    ) : (
-                      '결과 요청'
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={resetForm}
-                    variant="outline"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                  >
-                    초기화
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* Results */}
-          <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-white">분석 결과</CardTitle>
-              <CardDescription className="text-slate-400">
-                전문적인 HVAC 설비 분석 결과
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {response ? (
-                <div className="bg-slate-900/50 rounded-lg p-4 min-h-[300px] overflow-auto">
-                  <pre className="text-sm text-green-300 whitespace-pre-wrap font-mono">
-                    {response}
-                  </pre>
-                </div>
-              ) : (
-                <div className="bg-slate-900/30 rounded-lg p-8 min-h-[300px] flex items-center justify-center border-2 border-dashed border-slate-600">
-                  <div className="text-center text-slate-400">
-                    <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg mb-2">분석 결과 대기 중</p>
-                    <p className="text-sm">설비를 선택하고 값을 입력한 후 분석을 요청하세요</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-8 text-slate-400 text-sm">
-          <p>© 2025 ChackMake PRO‑Ultra v2.0 - 고급 HVAC 분석 도구</p>
-        </div>
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-20 right-4 space-y-3">
+        <Button
+          onClick={handleOCR}
+          disabled={isProcessing}
+          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+        >
+          <Camera className="w-6 h-6" />
+        </Button>
+        <Button
+          onClick={() => setChatOpen(true)}
+          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+        >
+          <MessageSquare className="w-6 h-6" />
+        </Button>
       </div>
+
+      {/* Hidden File Input for OCR */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* Chat Modal */}
+      {chatOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-end">
+          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} w-full max-h-[60%] rounded-t-2xl flex flex-col`}>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {chatMessages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`max-w-[70%] p-3 rounded-xl text-sm ${
+                    msg.isUser
+                      ? 'ml-auto bg-blue-600 text-white'
+                      : `mr-auto ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleChatSubmit} className="flex p-3 border-t border-gray-200 dark:border-gray-700">
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="메시지를 입력하세요…"
+                className="flex-1 mr-2"
+              />
+              <Button type="submit" className="px-4">전송</Button>
+            </form>
+            <Button
+              onClick={() => setChatOpen(false)}
+              variant="ghost"
+              className="absolute top-2 right-2"
+            >
+              ✕
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
