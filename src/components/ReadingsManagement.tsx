@@ -102,7 +102,9 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
         <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3 text-sm`}>
           {savedReadings.map((reading, idx) => (
             <div key={idx} className="mb-1">
-              {idx + 1}. [{reading.equipment}&gt;{reading.class1}&gt;{reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
+              {idx + 1}. [{reading.equipment}{'>'}
+              {reading.class1}{'>'}
+              {reading.class2}] 설계: {reading.design} / 측정: {reading.measure}
             </div>
           ))}
         </div>
