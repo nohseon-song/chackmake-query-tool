@@ -172,6 +172,32 @@ const Index = () => {
     setLogs(prev => [...prev, logEntry]);
   };
 
+  const handleDeleteLog = (id: string) => {
+    setLogs(prev => prev.filter(log => log.id !== id));
+    toast({
+      title: "삭제 완료",
+      description: "진단 결과가 삭제되었습니다.",
+    });
+  };
+
+  const handleDownloadPdf = (content: string) => {
+    // Create a blob with the content
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `진단결과_${new Date().toLocaleDateString()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "진단 결과가 다운로드되었습니다.",
+    });
+  };
+
   const sendWebhook = async (payload: any) => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
@@ -289,7 +315,12 @@ const Index = () => {
           isDark={isDark}
         />
 
-        <LogDisplay logs={logs} isDark={isDark} />
+        <LogDisplay 
+          logs={logs} 
+          isDark={isDark} 
+          onDeleteLog={handleDeleteLog}
+          onDownloadPdf={handleDownloadPdf}
+        />
       </main>
 
       {/* Floating Action Buttons */}
