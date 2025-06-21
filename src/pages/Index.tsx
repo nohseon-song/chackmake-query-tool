@@ -36,7 +36,7 @@ const EQUIPMENT_TREE = {
   "냉동기(흡수식)": {
     "증발기(냉수)": ["입구 온도 [℃]","출구 온도 [℃]","냉수 유량 [LPM]","냉수 설정 온도 [℃]"],
     "압축기(재생기)": ["입열 [kcal/h]"],
-    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 온도 [℃]"],
+    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 �온도 [℃]"],
     "성적계수(COP)": ["냉매 종류","냉방 능력(usRT)","[냉수] 입구온도(℃)","[냉수] 출구온도(℃)","[냉수] 순환량(㎥/h)","[흡수제 펌프 등] 소비전력(kWh)","[직화식] 연료 발열량(kcal/㎥)","[직화식-가스] 연료 사용량(㎥)","[중온수] 중온수 열량(kcal)","[중온수] 중온수 유량(LPM)","[중온수] 냉수 유량(LPM)","[증기식] 증기 열량(kcal)","[증기식] 증기 사용량(㎏)"]
   },
   "냉각탑": {
@@ -147,6 +147,14 @@ const Index = () => {
 
   const handleSaveReading = (reading: Reading) => {
     setSavedReadings(prev => [...prev, reading]);
+  };
+
+  const handleUpdateReading = (index: number, reading: Reading) => {
+    setSavedReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
+  };
+
+  const handleDeleteReading = (index: number) => {
+    setSavedReadings(prev => prev.filter((_, idx) => idx !== index));
   };
 
   const clearSavedReadings = () => {
@@ -266,6 +274,8 @@ const Index = () => {
               showInputs={showInputs}
               savedReadings={savedReadings}
               onSaveReading={handleSaveReading}
+              onUpdateReading={handleUpdateReading}
+              onDeleteReading={handleDeleteReading}
               isDark={isDark}
               logs={logs}
             />
