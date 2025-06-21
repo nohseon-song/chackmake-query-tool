@@ -241,6 +241,7 @@ const Index = () => {
         <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
         <h1 className="text-xl font-bold mb-1">CheckMake Pro-Ultra 2.0</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 전문 기술 진단 App</p>
+        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">professional-engineering Insight by SNS</p>
       </header>
 
       {/* Main Content */}

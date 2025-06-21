@@ -31,8 +31,8 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
   return (
     <>
       <div>
-        <Label className="text-xs text-gray-600 dark:text-gray-400 mb-3 block">
-          점검 설비를 선택해 주세요.
+        <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
+          🔧 점검 설비를 선택해 주세요.
         </Label>
         <div className="grid grid-cols-3 gap-3 mb-4">
           {Object.keys(equipmentTree).map((eq) => (
@@ -57,8 +57,8 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
 
       {selectedEquipment && (
         <div>
-          <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-            주요 점검 부분 선택
+          <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+            🎯 주요 점검 부분 선택
           </Label>
           <Select value={class1} onValueChange={onClass1Change}>
             <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
@@ -75,8 +75,8 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
 
       {selectedClass1 && Array.isArray(selectedClass1) && (
         <div>
-          <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-            세부 점검 항목
+          <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+            📋 세부 점검 항목
           </Label>
           <Select value={class2} onValueChange={onClass2Change}>
             <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>

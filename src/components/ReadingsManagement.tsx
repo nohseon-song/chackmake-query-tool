@@ -89,7 +89,9 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
       {showInputs && (
         <div className="space-y-3">
           <div>
-            <Label htmlFor="design" className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">설계값</Label>
+            <Label htmlFor="design" className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+              📐 설계값 입력
+            </Label>
             <Input
               id="design"
               value={design}
@@ -99,7 +101,9 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
             />
           </div>
           <div>
-            <Label htmlFor="measure" className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">측정값</Label>
+            <Label htmlFor="measure" className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+              📏 측정값 입력
+            </Label>
             <Input
               id="measure"
               value={measure}
