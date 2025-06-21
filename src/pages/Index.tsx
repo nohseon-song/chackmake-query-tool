@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { MessageSquare, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import EquipmentSelection from '@/components/EquipmentSelection';
-import ReadingsManagement from '@/components/ReadingsManagement';
-import ChatModal from '@/components/ChatModal';
-import OCRFeature from '@/components/OCRFeature';
-import LogDisplay from '@/components/LogDisplay';
 import ThemeToggle from '@/components/ThemeToggle';
-import ActionButtons from '@/components/ActionButtons';
+import MainContent from '@/components/MainContent';
+import FloatingButtons from '@/components/FloatingButtons';
+import ChatModal from '@/components/ChatModal';
 
 interface Reading {
   equipment: string;
@@ -36,7 +31,7 @@ const EQUIPMENT_TREE = {
   "냉동기(흡수식)": {
     "증발기(냉수)": ["입구 온도 [℃]","출구 온도 [℃]","냉수 유량 [LPM]","냉수 설정 온도 [℃]"],
     "압축기(재생기)": ["입열 [kcal/h]"],
-    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 �온도 [℃]"],
+    "응축기(냉각수)": ["입구 온도 [℃]","출구 온도 [℃]","냉각수 유량 [LPM]","냉각수 설정 온도 [℃]"],
     "성적계수(COP)": ["냉매 종류","냉방 능력(usRT)","[냉수] 입구온도(℃)","[냉수] 출구온도(℃)","[냉수] 순환량(㎥/h)","[흡수제 펌프 등] 소비전력(kWh)","[직화식] 연료 발열량(kcal/㎥)","[직화식-가스] 연료 사용량(㎥)","[중온수] 중온수 열량(kcal)","[중온수] 중온수 유량(LPM)","[중온수] 냉수 유량(LPM)","[증기식] 증기 열량(kcal)","[증기식] 증기 사용량(㎏)"]
   },
   "냉각탑": {
@@ -181,7 +176,6 @@ const Index = () => {
   };
 
   const handleDownloadPdf = (content: string) => {
-    // Create a blob with the content
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -264,10 +258,6 @@ const Index = () => {
     console.log('OCR Result:', result);
   };
 
-  const selectedEquipment = EQUIPMENT_TREE[equipment as keyof typeof EQUIPMENT_TREE];
-  const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
-  const showInputs = class2 && selectedClass1;
-
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {/* Header */}
@@ -278,103 +268,35 @@ const Index = () => {
         <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">professional-engineering Insight by SNS</p>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-3 pb-24">
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
-          <CardContent className="p-4 space-y-4">
-            <EquipmentSelection
-              equipment={equipment}
-              class1={class1}
-              class2={class2}
-              equipmentTree={EQUIPMENT_TREE}
-              onEquipmentChange={handleEquipmentChange}
-              onClass1Change={handleClass1Change}
-              onClass2Change={setClass2}
-              isDark={isDark}
-            />
+      <MainContent
+        equipment={equipment}
+        class1={class1}
+        class2={class2}
+        equipmentTree={EQUIPMENT_TREE}
+        savedReadings={savedReadings}
+        logs={logs}
+        isProcessing={isProcessing}
+        isDark={isDark}
+        onEquipmentChange={handleEquipmentChange}
+        onClass1Change={handleClass1Change}
+        onClass2Change={setClass2}
+        onSaveReading={handleSaveReading}
+        onUpdateReading={handleUpdateReading}
+        onDeleteReading={handleDeleteReading}
+        onSubmit={handleSubmit}
+        onDeleteLog={handleDeleteLog}
+        onDownloadPdf={handleDownloadPdf}
+        onChatOpen={() => setChatOpen(true)}
+        onAddLogEntry={addLogEntry}
+      />
 
-            {/* Chat and OCR Card Buttons */}
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              <Card 
-                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
-                  isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
-                }`}
-                onClick={() => setChatOpen(true)}
-              >
-                <CardContent className="p-3 flex items-center justify-center space-x-2">
-                  <MessageSquare className="w-5 h-5 text-blue-600" />
-                  <span className="text-sm font-medium">챗봇</span>
-                </CardContent>
-              </Card>
-
-              <Card 
-                className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
-                  isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
-                }`}
-                onClick={() => {
-                  if (!class2) {
-                    addLogEntry('🔔 안내', '설비→주요 점검 부분→세부 점검 항목을 먼저 선택하세요.');
-                    return;
-                  }
-                  // OCR functionality would be handled here
-                  toast({
-                    title: "OCR 기능",
-                    description: "이미지를 선택하여 텍스트를 추출하세요.",
-                  });
-                }}
-              >
-                <CardContent className="p-3 flex items-center justify-center space-x-2">
-                  <Camera className="w-5 h-5 text-blue-600" />
-                  <span className="text-sm font-medium">OCR</span>
-                </CardContent>
-              </Card>
-            </div>
-
-            <ReadingsManagement
-              equipment={equipment}
-              class1={class1}
-              class2={class2}
-              showInputs={showInputs}
-              savedReadings={savedReadings}
-              onSaveReading={handleSaveReading}
-              onUpdateReading={handleUpdateReading}
-              onDeleteReading={handleDeleteReading}
-              isDark={isDark}
-              logs={logs}
-            />
-          </CardContent>
-        </Card>
-
-        <ActionButtons
-          savedReadingsCount={savedReadings.length}
-          isProcessing={isProcessing}
-          onSubmit={handleSubmit}
-          isDark={isDark}
-        />
-
-        <LogDisplay 
-          logs={logs} 
-          isDark={isDark} 
-          onDeleteLog={handleDeleteLog}
-          onDownloadPdf={handleDownloadPdf}
-        />
-      </main>
-
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-20 right-4 space-y-3">
-        <OCRFeature
-          isProcessing={isProcessing}
-          onOCRResult={handleOCRResult}
-          onAddLogEntry={addLogEntry}
-          class2={class2}
-        />
-        <button
-          onClick={() => setChatOpen(true)}
-          className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center"
-        >
-          <MessageSquare className="w-6 h-6" />
-        </button>
-      </div>
+      <FloatingButtons
+        isProcessing={isProcessing}
+        class2={class2}
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={handleOCRResult}
+        onAddLogEntry={addLogEntry}
+      />
 
       <ChatModal
         isOpen={chatOpen}
