@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -109,6 +110,7 @@ const Index = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [ocrResult, setOcrResult] = useState<string>('');
   
   const { toast } = useToast();
 
@@ -255,9 +257,8 @@ const Index = () => {
   };
 
   const handleOCRResult = (result: string) => {
+    setOcrResult(result);
     console.log('OCR Result:', result);
-    // OCR 결과를 설계값 입력창에 설정하기 위해 전역 상태로 관리할 수 있도록 확장
-    // 현재는 콘솔에 로그만 출력하고 실제 구현은 ReadingsManagement에서 처리됨
   };
 
   return (
@@ -279,6 +280,7 @@ const Index = () => {
         logs={logs}
         isProcessing={isProcessing}
         isDark={isDark}
+        ocrResult={ocrResult}
         onEquipmentChange={handleEquipmentChange}
         onClass1Change={handleClass1Change}
         onClass2Change={setClass2}

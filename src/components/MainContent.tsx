@@ -31,6 +31,7 @@ interface MainContentProps {
   logs: LogEntry[];
   isProcessing: boolean;
   isDark: boolean;
+  ocrResult?: string;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -54,6 +55,7 @@ const MainContent: React.FC<MainContentProps> = ({
   logs,
   isProcessing,
   isDark,
+  ocrResult,
   onEquipmentChange,
   onClass1Change,
   onClass2Change,
@@ -100,6 +102,7 @@ const MainContent: React.FC<MainContentProps> = ({
             onDeleteReading={onDeleteReading}
             isDark={isDark}
             logs={logs}
+            ocrResult={ocrResult}
           />
         </CardContent>
       </Card>

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +24,7 @@ interface ReadingsManagementProps {
   onDeleteReading: (index: number) => void;
   isDark: boolean;
   logs: any[];
+  ocrResult?: string;
 }
 
 const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
@@ -37,13 +37,21 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
   onUpdateReading,
   onDeleteReading,
   isDark,
-  logs
+  logs,
+  ocrResult
 }) => {
   const [design, setDesign] = useState('');
   const [measure, setMeasure] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingReading, setEditingReading] = useState<Reading | null>(null);
   const { toast } = useToast();
+
+  // OCR 결과가 업데이트되면 설계값에 반영
+  useEffect(() => {
+    if (ocrResult) {
+      setDesign(ocrResult);
+    }
+  }, [ocrResult]);
 
   const handleSaveReading = () => {
     if (!design.trim() || !measure.trim()) {

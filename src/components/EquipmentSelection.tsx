@@ -123,19 +123,33 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
                   </Card>
                 )}
                 
-                {/* 급수급탕설비 우측에 OCR 카드 배치 */}
+                {/* 급수급탕설비 우측에 OCR 카드 배치 - 50% 너비로 조정 */}
                 {isWaterSupply && (
-                  <Card 
-                    className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 mt-3 ${
-                      isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={handleOCRClick}
-                  >
-                    <CardContent className="p-3 flex items-center justify-center space-x-2">
-                      <Camera className="w-5 h-5 text-blue-600" />
-                      <span className="text-sm font-medium">명판 OCR</span>
-                    </CardContent>
-                  </Card>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <Card 
+                      className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                        isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
+                      }`}
+                      onClick={onChatOpen}
+                    >
+                      <CardContent className="p-3 flex items-center justify-center space-x-2">
+                        <MessageSquare className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-medium">Chatbot AI</span>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card 
+                      className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
+                        isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
+                      }`}
+                      onClick={handleOCRClick}
+                    >
+                      <CardContent className="p-3 flex items-center justify-center space-x-2">
+                        <Camera className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-medium">명판 OCR</span>
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
               </div>
             );
