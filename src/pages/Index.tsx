@@ -256,6 +256,8 @@ const Index = () => {
 
   const handleOCRResult = (result: string) => {
     console.log('OCR Result:', result);
+    // OCR 결과를 설계값 입력창에 설정하기 위해 전역 상태로 관리할 수 있도록 확장
+    // 현재는 콘솔에 로그만 출력하고 실제 구현은 ReadingsManagement에서 처리됨
   };
 
   return (
@@ -287,6 +289,7 @@ const Index = () => {
         onDeleteLog={handleDeleteLog}
         onDownloadPdf={handleDownloadPdf}
         onChatOpen={() => setChatOpen(true)}
+        onOCRResult={handleOCRResult}
         onAddLogEntry={addLogEntry}
       />
 

@@ -5,7 +5,6 @@ import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
-import ChatOCRCards from '@/components/ChatOCRCards';
 
 interface Reading {
   equipment: string;
@@ -42,6 +41,7 @@ interface MainContentProps {
   onDeleteLog: (id: string) => void;
   onDownloadPdf: (content: string) => void;
   onChatOpen: () => void;
+  onOCRResult: (result: string) => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
 
@@ -64,6 +64,7 @@ const MainContent: React.FC<MainContentProps> = ({
   onDeleteLog,
   onDownloadPdf,
   onChatOpen,
+  onOCRResult,
   onAddLogEntry
 }) => {
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
@@ -82,14 +83,10 @@ const MainContent: React.FC<MainContentProps> = ({
             onEquipmentChange={onEquipmentChange}
             onClass1Change={onClass1Change}
             onClass2Change={onClass2Change}
-            isDark={isDark}
-          />
-
-          <ChatOCRCards
-            class2={class2}
-            isDark={isDark}
             onChatOpen={onChatOpen}
+            onOCRResult={onOCRResult}
             onAddLogEntry={onAddLogEntry}
+            isDark={isDark}
           />
 
           <ReadingsManagement
