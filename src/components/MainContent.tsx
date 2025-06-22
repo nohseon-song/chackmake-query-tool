@@ -31,7 +31,6 @@ interface MainContentProps {
   logs: LogEntry[];
   isProcessing: boolean;
   isDark: boolean;
-  ocrResult?: string;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -42,7 +41,6 @@ interface MainContentProps {
   onDeleteLog: (id: string) => void;
   onDownloadPdf: (content: string) => void;
   onChatOpen: () => void;
-  onOCRResult: (result: string) => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
 
@@ -55,7 +53,6 @@ const MainContent: React.FC<MainContentProps> = ({
   logs,
   isProcessing,
   isDark,
-  ocrResult,
   onEquipmentChange,
   onClass1Change,
   onClass2Change,
@@ -66,7 +63,6 @@ const MainContent: React.FC<MainContentProps> = ({
   onDeleteLog,
   onDownloadPdf,
   onChatOpen,
-  onOCRResult,
   onAddLogEntry
 }) => {
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
@@ -86,7 +82,7 @@ const MainContent: React.FC<MainContentProps> = ({
             onClass1Change={onClass1Change}
             onClass2Change={onClass2Change}
             onChatOpen={onChatOpen}
-            onOCRResult={onOCRResult}
+            onOCRResult={() => {}}
             onAddLogEntry={onAddLogEntry}
             isDark={isDark}
           />
@@ -102,7 +98,6 @@ const MainContent: React.FC<MainContentProps> = ({
             onDeleteReading={onDeleteReading}
             isDark={isDark}
             logs={logs}
-            ocrResult={ocrResult}
           />
         </CardContent>
       </Card>

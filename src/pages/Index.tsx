@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -110,7 +109,6 @@ const Index = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [ocrResult, setOcrResult] = useState<string>('');
   
   const { toast } = useToast();
 
@@ -256,11 +254,6 @@ const Index = () => {
     });
   };
 
-  const handleOCRResult = (result: string) => {
-    setOcrResult(result);
-    console.log('OCR Result:', result);
-  };
-
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {/* Header */}
@@ -280,7 +273,6 @@ const Index = () => {
         logs={logs}
         isProcessing={isProcessing}
         isDark={isDark}
-        ocrResult={ocrResult}
         onEquipmentChange={handleEquipmentChange}
         onClass1Change={handleClass1Change}
         onClass2Change={setClass2}
@@ -291,7 +283,6 @@ const Index = () => {
         onDeleteLog={handleDeleteLog}
         onDownloadPdf={handleDownloadPdf}
         onChatOpen={() => setChatOpen(true)}
-        onOCRResult={handleOCRResult}
         onAddLogEntry={addLogEntry}
       />
 
@@ -299,7 +290,7 @@ const Index = () => {
         isProcessing={isProcessing}
         class2={class2}
         onChatOpen={() => setChatOpen(true)}
-        onOCRResult={handleOCRResult}
+        onOCRResult={() => {}}
         onAddLogEntry={addLogEntry}
       />
 
