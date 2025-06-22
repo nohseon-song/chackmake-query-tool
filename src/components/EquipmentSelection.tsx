@@ -2,8 +2,9 @@
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
+import EquipmentCard from '@/components/EquipmentCard';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface EquipmentSelectionProps {
   equipment: string;
@@ -19,6 +20,14 @@ interface EquipmentSelectionProps {
   isDark: boolean;
 }
 
+const EQUIPMENT_ITEMS = [
+  "냉동기(일반/압축식)", "냉동기(흡수식)", "냉각탑",
+  "축열조", "보일러", "열교환기",
+  "펌프", "공기조화기", "환기설비",
+  "현열교환기", "전열교환기", "팬코일유니트",
+  "위생기구설비", "급수급탕설비"
+];
+
 const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
   equipment,
   class1,
@@ -28,8 +37,6 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
   onClass1Change,
   onClass2Change,
   onChatOpen,
-  onOCRResult,
-  onAddLogEntry,
   isDark
 }) => {
   const selectedEquipment = equipmentTree[equipment];
@@ -42,221 +49,16 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
           🔧 점검 설비를 선택해 주세요.
         </Label>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          {/* 첫 번째 행 */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "냉동기(일반/압축식)" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("냉동기(일반/압축식)")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                냉동기(일반/압축식)
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "냉동기(흡수식)" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("냉동기(흡수식)")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                냉동기(흡수식)
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "냉각탑" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("냉각탑")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                냉각탑
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 두 번째 행 */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "축열조" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("축열조")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                축열조
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "보일러" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("보일러")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                보일러
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "열교환기" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("열교환기")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                열교환기
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 세 번째 행 */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "펌프" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("펌프")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                펌프
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "공기조화기" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("공기조화기")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                공기조화기
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "환기설비" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("환기설비")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                환기설비
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 네 번째 행 */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "현열교환기" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("현열교환기")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                현열교환기
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "전열교환기" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("전열교환기")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                전열교환기
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "팬코일유니트" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("팬코일유니트")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                팬코일유니트
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 다섯 번째 행 */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "위생기구설비" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("위생기구설비")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                위생기구설비
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              equipment === "급수급탕설비" 
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'hover:shadow-md hover:scale-105'
-            } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
-            onClick={() => onEquipmentChange("급수급탕설비")}
-          >
-            <CardContent className="p-3">
-              <div className="text-sm font-medium text-center leading-tight">
-                급수급탕설비
-              </div>
-            </CardContent>
-          </Card>
-
+          {EQUIPMENT_ITEMS.map((item) => (
+            <EquipmentCard
+              key={item}
+              name={item}
+              isSelected={equipment === item}
+              onClick={() => onEquipmentChange(item)}
+              isDark={isDark}
+            />
+          ))}
+          
           <Card 
             className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
               isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'
