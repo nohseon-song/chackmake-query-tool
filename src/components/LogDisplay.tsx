@@ -36,6 +36,23 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
     }
   };
 
+  const isHtmlContent = (content: string) => {
+    return content.trim().startsWith('<!DOCTYPE html') || content.trim().startsWith('<html');
+  };
+
+  const renderContent = (content: string) => {
+    if (isHtmlContent(content)) {
+      return (
+        <div 
+          className="prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      );
+    } else {
+      return <pre className="whitespace-pre-wrap text-sm">{content}</pre>;
+    }
+  };
+
   return (
     <div className="mt-4 space-y-2">
       {responseLogs.map((log) => (
@@ -68,7 +85,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
               </Button>
             </div>
           </div>
-          <pre className="whitespace-pre-wrap text-sm">{log.content}</pre>
+          {renderContent(log.content)}
         </div>
       ))}
     </div>
