@@ -31,6 +31,7 @@ interface MainContentProps {
   logs: LogEntry[];
   isProcessing: boolean;
   isDark: boolean;
+  tempMessagesCount: number;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -53,6 +54,7 @@ const MainContent: React.FC<MainContentProps> = ({
   logs,
   isProcessing,
   isDark,
+  tempMessagesCount,
   onEquipmentChange,
   onClass1Change,
   onClass2Change,
@@ -107,6 +109,7 @@ const MainContent: React.FC<MainContentProps> = ({
         isProcessing={isProcessing}
         onSubmit={onSubmit}
         isDark={isDark}
+        tempMessagesCount={tempMessagesCount}
       />
 
       <LogDisplay 

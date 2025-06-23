@@ -18,6 +18,7 @@ const Index = () => {
     logs,
     chatOpen,
     isProcessing,
+    tempMessages,
     toggleTheme,
     handleEquipmentChange,
     handleClass1Change,
@@ -27,6 +28,9 @@ const Index = () => {
     setSavedReadings,
     setLogs,
     setChatOpen,
+    addTempMessage,
+    deleteTempMessage,
+    clearTempMessages,
     addLogEntry,
     sendWebhook,
     toast
@@ -42,21 +46,31 @@ const Index = () => {
   } = useReadings(savedReadings, setSavedReadings);
 
   const handleSubmit = async () => {
-    if (savedReadings.length === 0) {
+    if (savedReadings.length === 0 && tempMessages.length === 0) {
       toast({
         title: "데이터 없음",
-        description: "저장된 측정값이 없습니다.",
+        description: "저장된 측정값이나 임시저장된 메시지가 없습니다.",
         variant: "destructive",
       });
       return;
     }
 
-    await sendWebhook({
-      readings: savedReadings,
+    const payload: any = {
       timestamp: Date.now()
-    });
+    };
+
+    if (savedReadings.length > 0) {
+      payload.readings = savedReadings;
+    }
+
+    if (tempMessages.length > 0) {
+      payload.messages = tempMessages;
+    }
+
+    await sendWebhook(payload);
     
     clearSavedReadings();
+    clearTempMessages();
     setEquipment('');
     setClass1('');
     setClass2('');
@@ -87,6 +101,7 @@ const Index = () => {
         logs={logs}
         isProcessing={isProcessing}
         isDark={isDark}
+        tempMessagesCount={tempMessages.length}
         onEquipmentChange={handleEquipmentChange}
         onClass1Change={handleClass1Change}
         onClass2Change={setClass2}
@@ -113,6 +128,9 @@ const Index = () => {
         onClose={() => setChatOpen(false)}
         onSendMessage={handleChatMessage}
         isDark={isDark}
+        tempMessages={tempMessages}
+        onTempMessageAdd={addTempMessage}
+        onTempMessageDelete={deleteTempMessage}
       />
     </div>
   );

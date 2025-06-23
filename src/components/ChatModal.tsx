@@ -9,17 +9,21 @@ interface ChatModalProps {
   onClose: () => void;
   onSendMessage: (message: string) => void;
   isDark: boolean;
+  tempMessages: string[];
+  onTempMessageAdd: (message: string) => void;
+  onTempMessageDelete: (index: number) => void;
 }
 
 const ChatModal: React.FC<ChatModalProps> = ({
   isOpen,
   onClose,
   onSendMessage,
-  isDark
+  isDark,
+  tempMessages,
+  onTempMessageAdd,
+  onTempMessageDelete
 }) => {
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<{text: string, isUser: boolean}[]>([]);
-  const [tempStoredMessages, setTempStoredMessages] = useState<string[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,12 +31,8 @@ const ChatModal: React.FC<ChatModalProps> = ({
 
     const userMessage = chatInput.trim();
     // Store in temporary storage instead of sending immediately
-    setTempStoredMessages(prev => [...prev, userMessage]);
+    onTempMessageAdd(userMessage);
     setChatInput('');
-  };
-
-  const handleDeleteTempMessage = (index: number) => {
-    setTempStoredMessages(prev => prev.filter((_, idx) => idx !== index));
   };
 
   if (!isOpen) return null;
@@ -54,11 +54,11 @@ const ChatModal: React.FC<ChatModalProps> = ({
         </div>
         
         {/* Temporary storage area */}
-        {tempStoredMessages.length > 0 && (
+        {tempMessages.length > 0 && (
           <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
             <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">임시저장</h4>
             <div className="space-y-2">
-              {tempStoredMessages.map((message, idx) => (
+              {tempMessages.map((message, idx) => (
                 <div
                   key={idx}
                   className={`flex justify-between items-center p-2 rounded text-sm ${
@@ -67,7 +67,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
                 >
                   <span className="flex-1 truncate">{message}</span>
                   <Button
-                    onClick={() => handleDeleteTempMessage(idx)}
+                    onClick={() => onTempMessageDelete(idx)}
                     variant="ghost"
                     size="sm"
                     className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
@@ -80,20 +80,11 @@ const ChatModal: React.FC<ChatModalProps> = ({
           </div>
         )}
         
-        {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {chatMessages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`max-w-[70%] p-3 rounded-xl text-sm ${
-                msg.isUser
-                  ? 'ml-auto bg-blue-600 text-white'
-                  : `mr-auto ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`
-              }`}
-            >
-              {msg.text}
-            </div>
-          ))}
+        {/* Messages area - removed as we're only using temporary storage */}
+        <div className="flex-1 overflow-y-auto p-3">
+          <div className="text-center text-gray-500 text-sm">
+            메시지를 입력하고 전송 버튼을 클릭하면 임시저장됩니다.
+          </div>
         </div>
         
         {/* Input form */}

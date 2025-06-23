@@ -17,6 +17,7 @@ export const useAppState = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [tempMessages, setTempMessages] = useState<string[]>([]);
   
   const { toast } = useToast();
 
@@ -46,6 +47,18 @@ export const useAppState = () => {
   const handleClass1Change = (value: string) => {
     setClass1(value);
     resetSelections(1);
+  };
+
+  const addTempMessage = (message: string) => {
+    setTempMessages(prev => [...prev, message]);
+  };
+
+  const deleteTempMessage = (index: number) => {
+    setTempMessages(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const clearTempMessages = () => {
+    setTempMessages([]);
   };
 
   const addLogEntry = (tag: string, content: string, isResponse = false) => {
@@ -95,6 +108,7 @@ export const useAppState = () => {
     logs,
     chatOpen,
     isProcessing,
+    tempMessages,
     
     // Actions
     toggleTheme,
@@ -106,6 +120,9 @@ export const useAppState = () => {
     setSavedReadings,
     setLogs,
     setChatOpen,
+    addTempMessage,
+    deleteTempMessage,
+    clearTempMessages,
     addLogEntry,
     sendWebhook,
     toast
