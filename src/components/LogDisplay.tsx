@@ -37,19 +37,34 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
   };
 
   const isHtmlContent = (content: string) => {
-    return content.trim().startsWith('<!DOCTYPE html') || content.trim().startsWith('<html');
+    // HTML 태그가 포함되어 있는지 더 정확하게 확인
+    return /<[^>]*>/g.test(content.trim());
   };
 
   const renderContent = (content: string) => {
     if (isHtmlContent(content)) {
       return (
         <div 
-          className="prose prose-sm max-w-none"
+          className={`prose prose-sm max-w-none ${isDark ? 'prose-invert' : ''}`}
           dangerouslySetInnerHTML={{ __html: content }}
+          style={{
+            lineHeight: '1.6',
+            color: isDark ? '#ffffff' : '#000000'
+          }}
         />
       );
     } else {
-      return <pre className="whitespace-pre-wrap text-sm">{content}</pre>;
+      return (
+        <pre 
+          className="whitespace-pre-wrap text-sm font-mono"
+          style={{
+            lineHeight: '1.6',
+            color: isDark ? '#ffffff' : '#000000'
+          }}
+        >
+          {content}
+        </pre>
+      );
     }
   };
 
@@ -58,12 +73,12 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
       {responseLogs.map((log) => (
         <div
           key={log.id}
-          className={`p-3 rounded-lg text-sm border-l-4 border-blue-500 ${
-            isDark ? 'bg-gray-800' : 'bg-white'
+          className={`p-4 rounded-lg border-l-4 border-blue-500 ${
+            isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
           } shadow-sm`}
         >
-          <div className="flex justify-between items-center mb-2">
-            <div className="font-medium">기술검토 및 진단 결과입니다.</div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="font-medium text-lg">기술검토 및 진단 결과입니다.</div>
             <div className="flex gap-2">
               <Button
                 onClick={() => handleDownload(log.content)}
@@ -85,7 +100,9 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
               </Button>
             </div>
           </div>
-          {renderContent(log.content)}
+          <div className="mt-3">
+            {renderContent(log.content)}
+          </div>
         </div>
       ))}
     </div>
