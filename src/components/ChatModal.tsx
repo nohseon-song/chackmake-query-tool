@@ -30,7 +30,9 @@ const ChatModal: React.FC<ChatModalProps> = ({
     if (!chatInput.trim()) return;
 
     const userMessage = chatInput.trim();
-    // 임시저장 영역에만 저장
+    console.log('Adding message to temp storage:', userMessage);
+    
+    // 임시저장 영역에만 추가
     onTempMessageAdd(userMessage);
     setChatInput('');
   };
@@ -54,9 +56,9 @@ const ChatModal: React.FC<ChatModalProps> = ({
         </div>
         
         {/* 임시저장 영역 */}
-        {tempMessages.length > 0 && (
-          <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'} max-h-60 overflow-y-auto`}>
-            <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">임시저장</h4>
+        <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'} max-h-60 overflow-y-auto`}>
+          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">임시저장</h4>
+          {tempMessages.length > 0 ? (
             <div className="space-y-2">
               {tempMessages.map((message, idx) => (
                 <div
@@ -77,8 +79,12 @@ const ChatModal: React.FC<ChatModalProps> = ({
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center text-gray-500 text-sm py-4">
+              임시저장된 메시지가 없습니다.
+            </div>
+          )}
+        </div>
         
         {/* 메인 콘텐츠 영역 */}
         <div className="flex-1 overflow-y-auto p-3">
