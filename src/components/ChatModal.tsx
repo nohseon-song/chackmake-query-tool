@@ -30,7 +30,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
     if (!chatInput.trim()) return;
 
     const userMessage = chatInput.trim();
-    // Store in temporary storage instead of sending immediately
+    // 임시저장 영역에만 저장
     onTempMessageAdd(userMessage);
     setChatInput('');
   };
@@ -53,9 +53,9 @@ const ChatModal: React.FC<ChatModalProps> = ({
           </Button>
         </div>
         
-        {/* Temporary storage area */}
+        {/* 임시저장 영역 */}
         {tempMessages.length > 0 && (
-          <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
+          <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'} max-h-60 overflow-y-auto`}>
             <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">임시저장</h4>
             <div className="space-y-2">
               {tempMessages.map((message, idx) => (
@@ -65,12 +65,12 @@ const ChatModal: React.FC<ChatModalProps> = ({
                     isDark ? 'bg-gray-600' : 'bg-white'
                   } border`}
                 >
-                  <span className="flex-1 truncate">{message}</span>
+                  <span className="flex-1 break-words pr-2">{message}</span>
                   <Button
                     onClick={() => onTempMessageDelete(idx)}
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700 flex-shrink-0"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -80,10 +80,12 @@ const ChatModal: React.FC<ChatModalProps> = ({
           </div>
         )}
         
-        {/* Messages area - removed as we're only using temporary storage */}
+        {/* 메인 콘텐츠 영역 */}
         <div className="flex-1 overflow-y-auto p-3">
           <div className="text-center text-gray-500 text-sm">
             메시지를 입력하고 전송 버튼을 클릭하면 임시저장됩니다.
+            <br />
+            임시저장된 메시지는 '전문 기술검토 및 진단 받기' 버튼을 클릭할 때 함께 전송됩니다.
           </div>
         </div>
         
