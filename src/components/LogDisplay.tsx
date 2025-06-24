@@ -1,7 +1,7 @@
 
 import React, { useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 // html2pdf.js CDN 자동 로딩
 const loadHtml2Pdf = () =>
@@ -19,6 +19,11 @@ interface LogEntry {
   content: string;
   isResponse?: boolean;
   timestamp: number;
+  // 새로운 JSON 필드들
+  diagnosis_summary_html?: string;
+  complementary_summary_html?: string;
+  precision_verification_html?: string;
+  final_summary_html?: string;
 }
 
 interface LogDisplayProps {
@@ -28,7 +33,7 @@ interface LogDisplayProps {
   onDownloadPdf?: (content: string) => void;
 }
 
-const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDownloadPdf }) => {
+const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) => {
   const logRef = useRef<HTMLDivElement>(null);
   
   // 응답 로그만 필터링
@@ -63,35 +68,16 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
     }
   };
 
-  const isHtmlContent = (content: string) => {
-    return /<[^>]*>/g.test(content.trim());
-  };
-
-  const renderContent = (content: string) => {
-    if (isHtmlContent(content)) {
-      return (
-        <div 
-          className={`prose prose-sm max-w-none ${isDark ? 'prose-invert' : ''}`}
-          dangerouslySetInnerHTML={{ __html: content }}
-          style={{
-            lineHeight: '1.6',
-            color: isDark ? '#ffffff' : '#000000'
-          }}
-        />
-      );
-    } else {
-      return (
-        <pre 
-          className="whitespace-pre-wrap text-sm font-mono"
-          style={{
-            lineHeight: '1.6',
-            color: isDark ? '#ffffff' : '#000000'
-          }}
-        >
-          {content}
-        </pre>
-      );
-    }
+  // JSON 필드들을 HTML로 결합
+  const getCombinedHtml = (log: LogEntry) => {
+    const parts = [
+      log.diagnosis_summary_html || '',
+      log.complementary_summary_html || '',
+      log.precision_verification_html || '',
+      log.final_summary_html || ''
+    ].filter(part => part.trim() !== '');
+    
+    return parts.length > 0 ? parts.join('') : log.content;
   };
 
   return (
@@ -123,7 +109,6 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
                 variant="outline"
                 className="flex items-center gap-1 text-red-600 hover:text-red-700"
               >
-                <Trash className="w-3 h-3" />
                 삭제
               </Button>
             ))}
@@ -132,9 +117,11 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
         
         {/* HTML 콘텐츠 렌더링 */}
         {responseLogs.map((log) => (
-          <div key={log.id} className="mt-3">
-            {renderContent(log.content)}
-          </div>
+          <div 
+            key={log.id} 
+            className="mt-3"
+            dangerouslySetInnerHTML={{ __html: getCombinedHtml(log) }}
+          />
         ))}
       </div>
     </div>
