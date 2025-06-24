@@ -43,20 +43,11 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
   };
 
   // PDF 다운로드 함수
-  const handlePdfDownload = async (content: string) => {
+  const handlePdfDownload = async () => {
+    if (!logRef.current) return;
+    
     try {
       const html2pdf = await loadHtml2Pdf();
-      
-      // 임시 div 생성하여 내용 렌더링
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = content;
-      tempDiv.style.padding = '20px';
-      tempDiv.style.fontFamily = 'Arial, sans-serif';
-      tempDiv.style.lineHeight = '1.6';
-      tempDiv.style.color = '#000';
-      tempDiv.style.background = '#fff';
-      
-      document.body.appendChild(tempDiv);
       
       await (html2pdf as any)()
         .set({
@@ -64,17 +55,15 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
           html2canvas: { scale: 2 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         })
-        .from(tempDiv)
+        .from(logRef.current)
         .save();
         
-      document.body.removeChild(tempDiv);
     } catch (error) {
       console.error('PDF 다운로드 중 오류:', error);
     }
   };
 
   const isHtmlContent = (content: string) => {
-    // HTML 태그가 포함되어 있는지 더 정확하게 확인
     return /<[^>]*>/g.test(content.trim());
   };
 
@@ -107,28 +96,28 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
 
   return (
     <div className="mt-4 space-y-2">
-      {responseLogs.map((log) => (
-        <div
-          key={log.id}
-          ref={logRef}
-          id="chat-log"
-          className={`p-4 rounded-lg border-l-4 border-blue-500 ${
-            isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
-          } shadow-sm`}
-        >
-          <div className="flex justify-between items-center mb-3">
-            <div className="font-medium text-lg">기술검토 및 진단 결과입니다.</div>
-            <div className="flex gap-2">
+      <div
+        id="chat-log"
+        ref={logRef}
+        className={`p-4 rounded-lg border-l-4 border-blue-500 ${
+          isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
+        } shadow-sm`}
+      >
+        <div className="flex justify-between items-center mb-3">
+          <div className="font-medium text-lg">기술검토 및 진단 결과입니다.</div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handlePdfDownload}
+              size="sm"
+              variant="outline"
+              className="flex items-center gap-1"
+            >
+              <Download className="w-3 h-3" />
+              PDF 다운로드
+            </Button>
+            {responseLogs.map((log) => (
               <Button
-                onClick={() => handlePdfDownload(log.content)}
-                size="sm"
-                variant="outline"
-                className="flex items-center gap-1"
-              >
-                <Download className="w-3 h-3" />
-                PDF 다운로드
-              </Button>
-              <Button
+                key={log.id}
                 onClick={() => handleDelete(log.id)}
                 size="sm"
                 variant="outline"
@@ -137,13 +126,17 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onDo
                 <Trash className="w-3 h-3" />
                 삭제
               </Button>
-            </div>
-          </div>
-          <div className="mt-3">
-            {renderContent(log.content)}
+            ))}
           </div>
         </div>
-      ))}
+        
+        {/* HTML 콘텐츠 렌더링 */}
+        {responseLogs.map((log) => (
+          <div key={log.id} className="mt-3">
+            {renderContent(log.content)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
