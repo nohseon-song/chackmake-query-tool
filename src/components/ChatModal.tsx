@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Edit3, Check, X as XIcon } from 'lucide-react';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface ChatModalProps {
   isDark: boolean;
   tempMessages: string[];
   onTempMessageAdd: (message: string) => void;
+  onTempMessageUpdate?: (index: number, newMessage: string) => void;
   onTempMessageDelete: (index: number) => void;
 }
 
@@ -21,9 +22,12 @@ const ChatModal: React.FC<ChatModalProps> = ({
   isDark,
   tempMessages,
   onTempMessageAdd,
+  onTempMessageUpdate,
   onTempMessageDelete
 }) => {
   const [chatInput, setChatInput] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +39,27 @@ const ChatModal: React.FC<ChatModalProps> = ({
     // 임시저장 영역에만 추가
     onTempMessageAdd(userMessage);
     setChatInput('');
+  };
+
+  const handleEditStart = (index: number, currentMessage: string) => {
+    setEditingIndex(index);
+    setEditingText(currentMessage);
+  };
+
+  const handleEditSave = (index: number) => {
+    if (!editingText.trim()) return;
+    
+    if (onTempMessageUpdate) {
+      onTempMessageUpdate(index, editingText.trim());
+    }
+    
+    setEditingIndex(null);
+    setEditingText('');
+  };
+
+  const handleEditCancel = () => {
+    setEditingIndex(null);
+    setEditingText('');
   };
 
   if (!isOpen) return null;
@@ -63,19 +88,63 @@ const ChatModal: React.FC<ChatModalProps> = ({
               {tempMessages.map((message, idx) => (
                 <div
                   key={idx}
-                  className={`flex justify-between items-center p-2 rounded text-sm ${
+                  className={`flex items-center gap-2 p-2 rounded text-sm ${
                     isDark ? 'bg-gray-600' : 'bg-white'
                   } border`}
                 >
-                  <span className="flex-1 break-words pr-2">{message}</span>
-                  <Button
-                    onClick={() => onTempMessageDelete(idx)}
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700 flex-shrink-0"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  {editingIndex === idx ? (
+                    <>
+                      <Input
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        className="flex-1 text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleEditSave(idx);
+                          } else if (e.key === 'Escape') {
+                            handleEditCancel();
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button
+                        onClick={() => handleEditSave(idx)}
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-green-600 hover:text-green-700 flex-shrink-0"
+                      >
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        onClick={handleEditCancel}
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-gray-600 hover:text-gray-700 flex-shrink-0"
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 break-words pr-2">{message}</span>
+                      <Button
+                        onClick={() => handleEditStart(idx, message)}
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 flex-shrink-0"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        onClick={() => onTempMessageDelete(idx)}
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-red-600 hover:text-red-700 flex-shrink-0"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -90,6 +159,8 @@ const ChatModal: React.FC<ChatModalProps> = ({
         <div className="flex-1 overflow-y-auto p-3">
           <div className="text-center text-gray-500 text-sm">
             메시지를 입력하고 전송 버튼을 클릭하면 임시저장됩니다.
+            <br />
+            임시저장된 메시지는 편집 버튼을 클릭하여 수정할 수 있습니다.
             <br />
             임시저장된 메시지는 '전문 기술검토 및 진단 받기' 버튼을 클릭할 때 함께 전송됩니다.
           </div>

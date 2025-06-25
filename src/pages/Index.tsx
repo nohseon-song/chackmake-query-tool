@@ -29,6 +29,7 @@ const Index = () => {
     setLogs,
     setChatOpen,
     addTempMessage,
+    updateTempMessage,
     deleteTempMessage,
     clearTempMessages,
     addLogEntry,
@@ -130,6 +131,7 @@ const Index = () => {
         isDark={isDark}
         tempMessages={tempMessages}
         onTempMessageAdd={addTempMessage}
+        onTempMessageUpdate={updateTempMessage}
         onTempMessageDelete={deleteTempMessage}
       />
     </div>

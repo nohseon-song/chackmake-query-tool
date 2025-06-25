@@ -53,6 +53,10 @@ export const useAppState = () => {
     setTempMessages(prev => [...prev, message]);
   };
 
+  const updateTempMessage = (index: number, newMessage: string) => {
+    setTempMessages(prev => prev.map((msg, idx) => idx === index ? newMessage : msg));
+  };
+
   const deleteTempMessage = (index: number) => {
     setTempMessages(prev => prev.filter((_, idx) => idx !== index));
   };
@@ -121,6 +125,7 @@ export const useAppState = () => {
     setLogs,
     setChatOpen,
     addTempMessage,
+    updateTempMessage,
     deleteTempMessage,
     clearTempMessages,
     addLogEntry,
