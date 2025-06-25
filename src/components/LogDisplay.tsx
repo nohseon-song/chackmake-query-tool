@@ -130,7 +130,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
         ))}
       </div>
       
-      <style jsx>{`
+      <style>{`
         .report-content h1 {
           font-size: 1.875rem;
           font-weight: 700;
