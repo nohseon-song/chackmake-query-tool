@@ -21,7 +21,7 @@ interface EquipmentSelectionProps {
 }
 
 const EQUIPMENT_ITEMS = [
-  "냉동기(일반/압축식)", "냉동기(흡수식)", "냉각탑",
+  "냉동기(압축식)", "냉동기(흡수식)", "냉각탑",
   "축열조", "보일러", "열교환기",
   "펌프", "공기조화기", "환기설비",
   "현열교환기", "전열교환기", "팬코일유니트",
@@ -67,7 +67,7 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
           >
             <CardContent className="p-3 flex items-center justify-center space-x-2">
               <MessageSquare className="w-5 h-5 text-blue-600" />
-              <span className="text-sm font-medium">Chatbot AI</span>
+              <span className="text-sm font-medium">Chat_bot </span>
             </CardContent>
           </Card>
         </div>
