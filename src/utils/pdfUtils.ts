@@ -18,8 +18,24 @@ export const downloadPdf = async (element: HTMLElement) => {
     await (html2pdf as any)()
       .set({
         filename: 'report.pdf',
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          allowTaint: true
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait',
+          compress: true
+        },
+        margin: {
+          top: 5,
+          right: 10,
+          bottom: 10,
+          left: 10
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
       })
       .from(element)
       .save();

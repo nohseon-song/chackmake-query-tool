@@ -51,12 +51,14 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
       <div
         id="chat-log"
         ref={logRef}
-        className={`p-6 rounded-lg border-l-4 border-blue-500 ${
+        className={`p-4 rounded-lg border-l-4 border-blue-500 ${
           isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
         } shadow-sm`}
         style={{
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          lineHeight: '1.6'
+          lineHeight: '1.6',
+          margin: 0,
+          padding: '16px'
         }}
       >
         <ReportHeader 
