@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import ReportHeader from './ReportHeader';
 import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
@@ -26,6 +26,7 @@ interface LogDisplayProps {
 
 const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) => {
   const logRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // 응답 로그만 필터링
   const responseLogs = logs.filter(log => log.isResponse);
@@ -33,8 +34,21 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
   if (responseLogs.length === 0) return null;
 
   const handlePdfDownload = async () => {
-    if (logRef.current) {
-      await downloadPdf(logRef.current);
+    if (!logRef.current || isDownloading) return;
+    
+    try {
+      setIsDownloading(true);
+      console.log('PDF 다운로드 버튼 클릭됨');
+      
+      // 약간의 지연을 주어 UI 업데이트가 반영되도록 함
+      setTimeout(async () => {
+        await downloadPdf(logRef.current!);
+        setIsDownloading(false);
+      }, 100);
+      
+    } catch (error) {
+      console.error('PDF 다운로드 핸들러 오류:', error);
+      setIsDownloading(false);
     }
   };
 
@@ -64,6 +78,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
         <ReportHeader 
           onPdfDownload={handlePdfDownload}
           onDeleteAll={handleDeleteAll}
+          isDownloading={isDownloading}
         />
         
         <ReportContent logs={responseLogs} />
