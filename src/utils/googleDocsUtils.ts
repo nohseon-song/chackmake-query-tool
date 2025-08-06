@@ -4,6 +4,30 @@ import { getCombinedHtml } from './htmlUtils';
 const GOOGLE_DOCS_API_URL = 'https://docs.googleapis.com/v1/documents';
 const GOOGLE_DOCS_SCOPE = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
 
+// Supabase 함수를 통해 Client ID 가져오기
+const getGoogleClientId = async (): Promise<string> => {
+  try {
+    const response = await fetch('/functions/v1/google-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'getClientId' })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Client ID를 가져올 수 없습니다.');
+    }
+
+    const data = await response.json();
+    return data.clientId;
+  } catch (error) {
+    console.error('Client ID 가져오기 실패:', error);
+    throw new Error('Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.');
+  }
+};
+
 export interface GoogleAuthState {
   isAuthenticated: boolean;
   accessToken: string | null;
@@ -22,53 +46,58 @@ const htmlToPlainText = (html: string): string => {
 
 // Google 인증 함수
 export const authenticateGoogle = (): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    // Google OAuth 2.0 인증을 위한 팝업 창 열기
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    
-    if (!clientId) {
-      reject(new Error('Google Client ID가 설정되지 않았습니다.'));
-      return;
-    }
-
-    const redirectUri = encodeURIComponent(window.location.origin);
-    const scope = encodeURIComponent(GOOGLE_DOCS_SCOPE);
-    
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${redirectUri}&` +
-      `response_type=token&` +
-      `scope=${scope}&` +
-      `include_granted_scopes=true&` +
-      `state=state_parameter_passthrough_value`;
-
-    const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
-    
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        reject(new Error('사용자가 인증을 취소했습니다.'));
-      }
-    }, 1000);
-
-    // 메시지 리스너로 토큰 받기
-    const messageListener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Supabase 함수를 통해 Client ID 가져오기
+      const clientId = await getGoogleClientId();
       
-      if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-        clearInterval(checkClosed);
-        window.removeEventListener('message', messageListener);
-        popup?.close();
-        resolve(event.data.accessToken);
-      } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
-        clearInterval(checkClosed);
-        window.removeEventListener('message', messageListener);
-        popup?.close();
-        reject(new Error(event.data.error));
+      if (!clientId) {
+        reject(new Error('Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.'));
+        return;
       }
-    };
 
-    window.addEventListener('message', messageListener);
+      const redirectUri = encodeURIComponent(window.location.origin);
+      const scope = encodeURIComponent(GOOGLE_DOCS_SCOPE);
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}&` +
+        `redirect_uri=${redirectUri}&` +
+        `response_type=token&` +
+        `scope=${scope}&` +
+        `include_granted_scopes=true&` +
+        `state=state_parameter_passthrough_value`;
+
+      const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
+      
+      const checkClosed = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(checkClosed);
+          reject(new Error('사용자가 인증을 취소했습니다.'));
+        }
+      }, 1000);
+
+      // 메시지 리스너로 토큰 받기
+      const messageListener = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', messageListener);
+          popup?.close();
+          resolve(event.data.accessToken);
+        } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', messageListener);
+          popup?.close();
+          reject(new Error(event.data.error));
+        }
+      };
+
+      window.addEventListener('message', messageListener);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.';
+      reject(new Error(errorMessage));
+    }
   });
 };
 
