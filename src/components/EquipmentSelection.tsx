@@ -67,7 +67,7 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
           >
             <CardContent className="p-3 flex items-center justify-center space-x-2">
               <MessageSquare className="w-5 h-5 text-blue-600" />
-              <span className="text-sm font-medium">Chat_bot </span>
+              <span className="text-sm font-medium">Agent Team </span>
             </CardContent>
           </Card>
         </div>
