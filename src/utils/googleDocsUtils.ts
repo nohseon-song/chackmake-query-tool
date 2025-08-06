@@ -1,140 +1,108 @@
-import { getCombinedHtml } from './htmlUtils';
-
-// Google API 설정
-const GOOGLE_DOCS_API_URL = 'https://docs.googleapis.com/v1/documents';
-const GOOGLE_DOCS_SCOPE = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
-
-// Supabase 함수를 통해 Client ID 가져오기
-const getGoogleClientId = async (): Promise<string> => {
-  try {
-    const response = await fetch('/functions/v1/google-auth', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'getClientId' })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Client ID를 가져올 수 없습니다.');
-    }
-
-    const data = await response.json();
-    return data.clientId;
-  } catch (error) {
-    console.error('Client ID 가져오기 실패:', error);
-    throw new Error('Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.');
-  }
-};
+import { gapi } from 'gapi-script';
 
 export interface GoogleAuthState {
   isAuthenticated: boolean;
   accessToken: string | null;
 }
 
-// HTML을 플레인 텍스트로 변환하는 함수
-const htmlToPlainText = (html: string): string => {
-  // 임시 DOM 요소를 사용하여 HTML 태그 제거
-  const temp = document.createElement('div');
-  temp.innerHTML = html;
-  
-  // 줄바꿈 처리
-  const text = temp.textContent || temp.innerText || '';
-  return text.replace(/\s+/g, ' ').trim();
-};
+// Google Client ID - 공개적으로 노출되어도 안전한 값입니다
+const GOOGLE_CLIENT_ID = '1031344058476-aep6m2skmm3njmc6oe6m7a7mfnfg18kl.apps.googleusercontent.com';
+const DISCOVERY_DOC = 'https://docs.googleapis.com/$discovery/rest?version=v1';
+const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
 
-// Google 인증 함수
-export const authenticateGoogle = (): Promise<string> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      // Supabase 함수를 통해 Client ID 가져오기
-      const clientId = await getGoogleClientId();
-      
-      if (!clientId) {
-        reject(new Error('Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.'));
-        return;
-      }
+let gapiInitialized = false;
 
-      const redirectUri = encodeURIComponent(window.location.origin);
-      const scope = encodeURIComponent(GOOGLE_DOCS_SCOPE);
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}&` +
-        `redirect_uri=${redirectUri}&` +
-        `response_type=token&` +
-        `scope=${scope}&` +
-        `include_granted_scopes=true&` +
-        `state=state_parameter_passthrough_value`;
+// GAPI 초기화
+export const initializeGapi = async (): Promise<void> => {
+  if (gapiInitialized) return;
 
-      const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
-      
-      const checkClosed = setInterval(() => {
-        if (popup?.closed) {
-          clearInterval(checkClosed);
-          reject(new Error('사용자가 인증을 취소했습니다.'));
-        }
-      }, 1000);
-
-      // 메시지 리스너로 토큰 받기
-      const messageListener = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        
-        if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', messageListener);
-          popup?.close();
-          resolve(event.data.accessToken);
-        } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', messageListener);
-          popup?.close();
-          reject(new Error(event.data.error));
-        }
-      };
-
-      window.addEventListener('message', messageListener);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Google Client ID를 찾을 수 없습니다. Lovable AI의 Supabase 연동 설정을 확인해주세요.';
-      reject(new Error(errorMessage));
-    }
-  });
-};
-
-// Google Docs 문서 생성 함수
-export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
   try {
-    const plainText = htmlToPlainText(htmlContent);
-    const currentDate = new Date().toLocaleDateString('ko-KR');
-    const title = `기술검토진단결과_${currentDate}`;
-
-    // 1. 빈 문서 생성
-    const createResponse = await fetch(GOOGLE_DOCS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: title
-      })
+    await new Promise<void>((resolve) => {
+      gapi.load('auth2:client', resolve);
     });
 
-    if (!createResponse.ok) {
-      throw new Error(`문서 생성 실패: ${createResponse.statusText}`);
+    await gapi.client.init({
+      clientId: GOOGLE_CLIENT_ID,
+      scope: SCOPES,
+      discoveryDocs: [DISCOVERY_DOC]
+    });
+
+    gapiInitialized = true;
+    console.log('GAPI 초기화 완료');
+  } catch (error) {
+    console.error('GAPI 초기화 실패:', error);
+    throw new Error('Google API 초기화에 실패했습니다.');
+  }
+};
+
+// Google 인증
+export const authenticateGoogle = async (): Promise<string> => {
+  try {
+    await initializeGapi();
+
+    const authInstance = gapi.auth2.getAuthInstance();
+    
+    if (!authInstance.isSignedIn.get()) {
+      const authResult = await authInstance.signIn();
+      const accessToken = authResult.getAuthResponse().access_token;
+      console.log('Google 인증 성공');
+      return accessToken;
+    } else {
+      const accessToken = authInstance.currentUser.get().getAuthResponse().access_token;
+      return accessToken;
     }
+  } catch (error) {
+    console.error('Google 인증 실패:', error);
+    throw new Error('Google 인증에 실패했습니다. 팝업 차단을 해제하거나 다시 시도해주세요.');
+  }
+};
 
-    const docData = await createResponse.json();
-    const documentId = docData.documentId;
+// 토큰 유효성 검증
+export const validateGoogleToken = async (accessToken: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
 
-    // 2. 문서에 내용 추가
-    const batchUpdateResponse = await fetch(`${GOOGLE_DOCS_API_URL}/${documentId}:batchUpdate`, {
+// HTML을 플레인 텍스트로 변환
+export const htmlToPlainText = (html: string): string => {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  return tempDiv.textContent || tempDiv.innerText || '';
+};
+
+// Google Docs 생성
+export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
+  try {
+    await initializeGapi();
+
+    // 새 문서 생성
+    const createResponse = await gapi.client.request({
+      path: 'https://docs.googleapis.com/v1/documents',
       method: 'POST',
+      body: {
+        title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
+      },
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const documentId = createResponse.result.documentId;
+    console.log('Google Docs 생성 완료:', documentId);
+
+    // HTML 콘텐츠를 플레인 텍스트로 변환
+    const plainText = htmlToPlainText(htmlContent);
+
+    // 문서에 콘텐츠 추가
+    await gapi.client.request({
+      path: `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+      method: 'POST',
+      body: {
         requests: [
           {
             insertText: {
@@ -145,28 +113,19 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
             }
           }
         ]
-      })
+      },
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
     });
 
-    if (!batchUpdateResponse.ok) {
-      throw new Error(`문서 내용 추가 실패: ${batchUpdateResponse.statusText}`);
-    }
-
-    // 3. 문서 URL 반환
-    return `https://docs.google.com/document/d/${documentId}/edit`;
-
+    const documentUrl = `https://docs.google.com/document/d/${documentId}/edit`;
+    console.log('Google Docs 업데이트 완료');
+    
+    return documentUrl;
   } catch (error) {
-    console.error('Google Docs 생성 오류:', error);
-    throw error;
-  }
-};
-
-// 간단한 토큰 검증 함수
-export const validateGoogleToken = async (accessToken: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
-    return response.ok;
-  } catch {
-    return false;
+    console.error('Google Docs 생성 실패:', error);
+    throw new Error('Google Docs 생성에 실패했습니다.');
   }
 };
