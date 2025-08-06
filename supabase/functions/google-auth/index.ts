@@ -11,7 +11,11 @@ serve(async (req) => {
     const { action } = await req.json()
 
     if (action === 'getClientId') {
-      const clientId = Deno.env.get('VITE_GOOGLE_CLIENT_ID')
+      // Supabase Edge Functions에서는 VITE_ 접두사 없이 Vault secrets에 접근
+      const clientId = Deno.env.get('GOOGLE_CLIENT_ID') || Deno.env.get('VITE_GOOGLE_CLIENT_ID')
+      
+      console.log('Available env vars:', Object.keys(Deno.env.toObject()))
+      console.log('GOOGLE_CLIENT_ID:', clientId ? 'found' : 'not found')
       
       if (!clientId) {
         return new Response(
