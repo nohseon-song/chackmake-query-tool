@@ -5,8 +5,25 @@ export interface GoogleAuthState {
   accessToken: string | null;
 }
 
-// Lovable 플랫폼용 Google Client ID
-const GOOGLE_CLIENT_ID = '1095724815842-d4k49i95r5oaqnbf2csd3gm6oii5vpd4.apps.googleusercontent.com';
+// Google Client ID - 동적으로 설정 가능
+let GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+// Client ID 설정 함수
+export const setGoogleClientId = (clientId: string) => {
+  GOOGLE_CLIENT_ID = clientId;
+};
+
+// Client ID 가져오기 함수
+export const getGoogleClientId = (): string => {
+  // localStorage에서 우선 확인
+  if (typeof window !== 'undefined') {
+    const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
+    if (storedClientId) {
+      GOOGLE_CLIENT_ID = storedClientId;
+    }
+  }
+  return GOOGLE_CLIENT_ID;
+};
 const DISCOVERY_DOC = 'https://docs.googleapis.com/$discovery/rest?version=v1';
 const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
 
@@ -17,12 +34,19 @@ export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
 
   try {
+    const clientId = getGoogleClientId();
+    console.log('사용중인 Google Client ID:', clientId);
+    
+    if (!clientId || clientId === '') {
+      throw new Error('Google Client ID가 설정되지 않았습니다.');
+    }
+
     await new Promise<void>((resolve) => {
       gapi.load('auth2:client', resolve);
     });
 
     await gapi.client.init({
-      clientId: GOOGLE_CLIENT_ID,
+      clientId: clientId,
       scope: SCOPES,
       discoveryDocs: [DISCOVERY_DOC]
     });
@@ -31,7 +55,7 @@ export const initializeGapi = async (): Promise<void> => {
     console.log('GAPI 초기화 완료');
   } catch (error) {
     console.error('GAPI 초기화 실패:', error);
-    throw new Error('Google API 초기화에 실패했습니다.');
+    throw new Error(`Google API 초기화에 실패했습니다: ${error}`);
   }
 };
 
