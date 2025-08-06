@@ -11,7 +11,7 @@ let GOOGLE_CLIENT_ID = '';
 // Supabase에서 Google Client ID 가져오기
 export const fetchGoogleClientId = async (): Promise<string> => {
   try {
-    const response = await fetch('/api/get-google-config', {
+    const response = await fetch('https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/get-google-config', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
