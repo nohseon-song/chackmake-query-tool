@@ -5,8 +5,8 @@ export interface GoogleAuthState {
   accessToken: string | null;
 }
 
-// Google Client ID - 공개적으로 노출되어도 안전한 값입니다
-const GOOGLE_CLIENT_ID = '1031344058476-aep6m2skmm3njmc6oe6m7a7mfnfg18kl.apps.googleusercontent.com';
+// Lovable 플랫폼용 Google Client ID
+const GOOGLE_CLIENT_ID = '1095724815842-d4k49i95r5oaqnbf2csd3gm6oii5vpd4.apps.googleusercontent.com';
 const DISCOVERY_DOC = 'https://docs.googleapis.com/$discovery/rest?version=v1';
 const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
 
