@@ -109,15 +109,7 @@ export const useAppState = () => {
 
   const handleGoogleAuth = async (): Promise<string> => {
     try {
-      // Client ID 확인
-      if (typeof window !== 'undefined') {
-        const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
-        if (!storedClientId) {
-          throw new Error('Google Client ID가 설정되지 않았습니다. 설정을 먼저 완료해주세요.');
-        }
-      }
-      
-      // GAPI 초기화
+      // GAPI 초기화 (Supabase에서 Client ID 자동 가져옴)
       await initializeGapi();
       
       // 기존 토큰이 있다면 검증

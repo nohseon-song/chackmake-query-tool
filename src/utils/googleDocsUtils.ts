@@ -6,7 +6,42 @@ export interface GoogleAuthState {
 }
 
 // Google Client ID - 동적으로 설정 가능
-let GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+let GOOGLE_CLIENT_ID = '';
+
+// Supabase에서 Google Client ID 가져오기
+export const fetchGoogleClientId = async (): Promise<string> => {
+  try {
+    const response = await fetch('/api/get-google-config', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Google Client ID from Supabase');
+    }
+
+    const data = await response.json();
+    if (data.success && data.clientId) {
+      GOOGLE_CLIENT_ID = data.clientId;
+      return data.clientId;
+    } else {
+      throw new Error('Google Client ID not found in response');
+    }
+  } catch (error) {
+    console.error('Error fetching Google Client ID:', error);
+    // localStorage에서 fallback 확인
+    if (typeof window !== 'undefined') {
+      const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
+      if (storedClientId) {
+        GOOGLE_CLIENT_ID = storedClientId;
+        return storedClientId;
+      }
+    }
+    throw new Error('Google Client ID를 가져올 수 없습니다. Supabase Vault에 GOOGLE_CLIENT_ID가 설정되어 있는지 확인해주세요.');
+  }
+};
 
 // Client ID 설정 함수
 export const setGoogleClientId = (clientId: string) => {
@@ -15,13 +50,6 @@ export const setGoogleClientId = (clientId: string) => {
 
 // Client ID 가져오기 함수
 export const getGoogleClientId = (): string => {
-  // localStorage에서 우선 확인
-  if (typeof window !== 'undefined') {
-    const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
-    if (storedClientId) {
-      GOOGLE_CLIENT_ID = storedClientId;
-    }
-  }
   return GOOGLE_CLIENT_ID;
 };
 const DISCOVERY_DOC = 'https://docs.googleapis.com/$discovery/rest?version=v1';
@@ -34,7 +62,13 @@ export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
 
   try {
-    const clientId = getGoogleClientId();
+    // Supabase에서 Google Client ID 가져오기
+    let clientId = getGoogleClientId();
+    
+    if (!clientId || clientId === '') {
+      clientId = await fetchGoogleClientId();
+    }
+    
     console.log('사용중인 Google Client ID:', clientId);
     
     if (!clientId || clientId === '') {
