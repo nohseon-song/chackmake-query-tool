@@ -34,6 +34,7 @@ const Index = () => {
     clearTempMessages,
     addLogEntry,
     sendWebhook,
+    handleGoogleAuth,
     toast
   } = useAppState();
 
@@ -112,6 +113,7 @@ const Index = () => {
         onSubmit={handleSubmit}
         onDeleteLog={(id) => handleDeleteLog(id, setLogs)}
         onDownloadPdf={handleDownloadPdf}
+        onGoogleAuth={handleGoogleAuth}
         onChatOpen={() => setChatOpen(true)}
         onAddLogEntry={addLogEntry}
       />

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
+import { GoogleAuthState, authenticateGoogle, validateGoogleToken } from '@/utils/googleDocsUtils';
 
 export const useAppState = () => {
   const [isDark, setIsDark] = useState(() => {
@@ -18,6 +19,10 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [tempMessages, setTempMessages] = useState<string[]>([]);
+  const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>({
+    isAuthenticated: false,
+    accessToken: null
+  });
   
   const { toast } = useToast();
 
@@ -102,6 +107,42 @@ export const useAppState = () => {
     }
   };
 
+  const handleGoogleAuth = async (): Promise<string> => {
+    try {
+      // 기존 토큰이 있다면 검증
+      if (googleAuth.accessToken) {
+        const isValid = await validateGoogleToken(googleAuth.accessToken);
+        if (isValid) {
+          return googleAuth.accessToken;
+        }
+      }
+
+      // 새로운 인증 진행
+      const accessToken = await authenticateGoogle();
+      setGoogleAuth({
+        isAuthenticated: true,
+        accessToken
+      });
+
+      toast({
+        title: "Google 인증 완료",
+        description: "Google Docs 연동이 완료되었습니다.",
+      });
+
+      return accessToken;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Google 인증에 실패했습니다.';
+      
+      toast({
+        title: "Google 인증 실패",
+        description: errorMessage,
+        variant: "destructive",
+      });
+
+      throw error;
+    }
+  };
+
   return {
     // State
     isDark,
@@ -113,6 +154,7 @@ export const useAppState = () => {
     chatOpen,
     isProcessing,
     tempMessages,
+    googleAuth,
     
     // Actions
     toggleTheme,
@@ -130,6 +172,7 @@ export const useAppState = () => {
     clearTempMessages,
     addLogEntry,
     sendWebhook,
+    handleGoogleAuth,
     toast
   };
 };

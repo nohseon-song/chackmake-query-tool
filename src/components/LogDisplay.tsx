@@ -4,6 +4,9 @@ import ReportHeader from './ReportHeader';
 import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
 import { getReportStyles } from '@/styles/reportStyles';
+import { getCombinedHtml } from '@/utils/htmlUtils';
+import { createGoogleDoc } from '@/utils/googleDocsUtils';
+import { useToast } from '@/hooks/use-toast';
 
 interface LogEntry {
   id: string;
@@ -22,11 +25,14 @@ interface LogDisplayProps {
   isDark: boolean;
   onDeleteLog?: (id: string) => void;
   onDownloadPdf?: (content: string) => void;
+  onGoogleAuth?: () => Promise<string>;
 }
 
-const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) => {
+const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onGoogleAuth }) => {
   const logRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isGoogleDocsDownloading, setIsGoogleDocsDownloading] = useState(false);
+  const { toast } = useToast();
   
   // 응답 로그만 필터링
   const responseLogs = logs.filter(log => log.isResponse);
@@ -49,6 +55,48 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
     } catch (error) {
       console.error('PDF 다운로드 핸들러 오류:', error);
       setIsDownloading(false);
+    }
+  };
+
+  const handleGoogleDocsDownload = async () => {
+    if (isGoogleDocsDownloading || !onGoogleAuth) return;
+    
+    try {
+      setIsGoogleDocsDownloading(true);
+      console.log('Google Docs 다운로드 버튼 클릭됨');
+      
+      // Google 인증 처리
+      const accessToken = await onGoogleAuth();
+      
+      // HTML 콘텐츠 가져오기
+      const combinedHtml = responseLogs.map(log => getCombinedHtml(log)).join('\n\n');
+      
+      if (!combinedHtml.trim()) {
+        throw new Error('내보낼 콘텐츠가 없습니다.');
+      }
+      
+      // Google Docs 문서 생성
+      const documentUrl = await createGoogleDoc(combinedHtml, accessToken);
+      
+      toast({
+        title: "Google Docs 문서가 생성되었습니다",
+        description: "새 탭에서 문서를 확인하세요.",
+      });
+      
+      // 새 탭에서 문서 열기
+      window.open(documentUrl, '_blank');
+      
+    } catch (error) {
+      console.error('Google Docs 생성 오류:', error);
+      const errorMessage = error instanceof Error ? error.message : '문서 생성에 실패했습니다.';
+      
+      toast({
+        title: "문서 생성 실패",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGoogleDocsDownloading(false);
     }
   };
 
@@ -77,8 +125,10 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog }) =>
       >
         <ReportHeader 
           onPdfDownload={handlePdfDownload}
+          onGoogleDocsDownload={handleGoogleDocsDownload}
           onDeleteAll={handleDeleteAll}
           isDownloading={isDownloading}
+          isGoogleDocsDownloading={isGoogleDocsDownloading}
         />
         
         <ReportContent logs={responseLogs} />

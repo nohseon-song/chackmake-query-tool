@@ -41,6 +41,7 @@ interface MainContentProps {
   onSubmit: () => void;
   onDeleteLog: (id: string) => void;
   onDownloadPdf: (content: string) => void;
+  onGoogleAuth?: () => Promise<string>;
   onChatOpen: () => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
@@ -64,6 +65,7 @@ const MainContent: React.FC<MainContentProps> = ({
   onSubmit,
   onDeleteLog,
   onDownloadPdf,
+  onGoogleAuth,
   onChatOpen,
   onAddLogEntry
 }) => {
@@ -117,6 +119,7 @@ const MainContent: React.FC<MainContentProps> = ({
         isDark={isDark} 
         onDeleteLog={onDeleteLog}
         onDownloadPdf={onDownloadPdf}
+        onGoogleAuth={onGoogleAuth}
       />
     </main>
   );
