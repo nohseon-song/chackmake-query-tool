@@ -137,7 +137,7 @@ export const initializeGapi = async (): Promise<void> => {
   return initializationPromise;
 };
 
-// Google 인증 (재시도 로직 포함)
+// Google 인증 (향상된 버전)
 export const authenticateGoogle = async (retryCount = 0): Promise<string> => {
   const MAX_RETRIES = 2;
   
@@ -154,8 +154,6 @@ export const authenticateGoogle = async (retryCount = 0): Promise<string> => {
     const isSignedIn = authInstance.isSignedIn.get();
     console.log('현재 Google 로그인 상태:', isSignedIn);
     
-    let accessToken: string | null = null;
-    
     if (isSignedIn) {
       const currentUser = authInstance.currentUser.get();
       const authResponse = currentUser.getAuthResponse();
@@ -168,20 +166,66 @@ export const authenticateGoogle = async (retryCount = 0): Promise<string> => {
           return authResponse.access_token;
         } else {
           console.log('기존 토큰이 만료됨, 재인증 필요');
-          await authInstance.signOut();
+          try {
+            await authInstance.signOut();
+          } catch (signOutError) {
+            console.warn('로그아웃 중 오류 (무시):', signOutError);
+          }
         }
       }
     }
     
     console.log('새로운 Google 로그인 시작...');
     
-    // 새로운 로그인 시도
-    const authResult = await authInstance.signIn({
-      prompt: 'select_account',
-      scope: SCOPES,
-      response_type: 'token',
-      include_granted_scopes: true
-    });
+    // 팝업 차단 감지 및 처리
+    let authResult;
+    try {
+      // 먼저 조용한 인증 시도 (팝업 없이)
+      if (retryCount === 0) {
+        try {
+          authResult = await authInstance.signIn({
+            prompt: 'none',
+            scope: SCOPES
+          });
+          console.log('조용한 인증 성공');
+        } catch (silentError) {
+          console.log('조용한 인증 실패, 팝업 인증으로 전환');
+          throw silentError; // 다음 단계로 진행
+        }
+      }
+      
+      // 팝업 인증이 필요한 경우
+      if (!authResult) {
+        // 사용자에게 팝업 허용 안내
+        console.log('팝업 인증 시작 - 팝업을 허용해주세요');
+        
+        authResult = await authInstance.signIn({
+          prompt: 'select_account',
+          scope: SCOPES,
+          response_type: 'token',
+          include_granted_scopes: true,
+          ux_mode: 'popup'
+        });
+      }
+    } catch (authError: any) {
+      // 팝업 차단 특별 처리
+      if (authError.error === 'popup_blocked_by_browser' || 
+          authError.error === 'popup_closed_by_user') {
+        throw new Error('브라우저에서 팝업이 차단되었습니다. 주소창 오른쪽의 팝업 차단 아이콘을 클릭하여 팝업을 허용한 후 다시 시도해주세요.');
+      }
+      
+      // server_error 특별 처리
+      if (authError.error === 'server_error' || authError.type === 'tokenFailed') {
+        if (retryCount < MAX_RETRIES) {
+          console.log(`Google 서버 오류, ${2000 * (retryCount + 1)}ms 후 재시도...`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+          return authenticateGoogle(retryCount + 1);
+        }
+        throw new Error('Google 서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      }
+      
+      throw authError;
+    }
     
     if (!authResult) {
       throw new Error('Google 로그인이 취소되었습니다.');
