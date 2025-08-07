@@ -184,8 +184,17 @@ export const htmlToPlainText = (html: string): string => {
   return tempDiv.textContent || tempDiv.innerText || '';
 };
 
-// 파일명 생성 함수 import
-import { generateReportFileName } from './reportGenerator';
+const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
+
+// 파일명 생성 함수
+const generateReportFileName = (): string => {
+  const currentDate = new Date();
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+  const day = String(currentDate.getDate()).padStart(2, '0');
+  
+  return `기술진단내역작성_ultra_${year}.${month}.${day}`;
+};
 
 // Google Docs 생성 (완전 새로운 방식)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
@@ -207,7 +216,7 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
       throw new Error('변환할 콘텐츠가 없습니다.');
     }
 
-    // Google Docs 문서 생성
+    // Google Docs 문서 생성 (parents 필드 제거)
     console.log('📄 Google Docs 문서 생성...');
     const createResponse = await fetch('https://docs.googleapis.com/v1/documents', {
       method: 'POST',
@@ -216,8 +225,7 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        title: generateReportFileName(),
-        parents: ['1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'] // 지정된 폴더 ID
+        title: generateReportFileName()
       })
     });
 
@@ -235,6 +243,20 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
     }
     
     console.log('✅ 문서 생성 완료:', documentId);
+
+    // 문서를 지정된 폴더로 이동
+    console.log('📁 문서 폴더 이동 중...');
+    await fetch(`https://www.googleapis.com/drive/v3/files/${documentId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        addParents: FOLDER_ID,
+        removeParents: 'root'
+      })
+    });
 
     // 문서에 콘텐츠 추가
     console.log('📝 콘텐츠 추가 중...');

@@ -5,8 +5,6 @@ import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
-import ReportGenerator from '@/components/ReportGenerator';
-
 interface Reading {
   equipment: string;
   class1: string;
@@ -123,10 +121,6 @@ const MainContent: React.FC<MainContentProps> = ({
         onGoogleAuth={onGoogleAuth}
       />
 
-      <ReportGenerator 
-        onGoogleAuth={onGoogleAuth}
-        isDark={isDark}
-      />
     </main>
   );
 };
