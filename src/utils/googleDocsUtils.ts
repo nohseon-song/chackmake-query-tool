@@ -177,7 +177,7 @@ export const validateGoogleToken = async (accessToken: string): Promise<boolean>
   }
 };
 
-// HTML을 Google Docs 요청 형식으로 변환 (전체 내용 보존)
+// HTML을 Google Docs 요청 형식으로 변환 (전체 내용 보존 및 서식 개선)
 const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   console.log('🔄 HTML을 Google Docs 형식으로 변환 시작');
   console.log('📄 원본 HTML 길이:', html.length);
@@ -188,181 +188,233 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const requests: any[] = [];
   let currentIndex = 1;
   
-  // HTML에서 모든 텍스트 노드 추출 (구조 보존)
-  const extractAllContent = (element: Element): string => {
-    let content = '';
+  // 구조화된 콘텐츠 추출 함수 (제목, 섹션, 문단 구분)
+  const extractStructuredContent = (element: Element): { type: string; content: string; level: number }[] => {
+    const sections: { type: string; content: string; level: number }[] = [];
     
-    for (const node of element.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent?.trim();
-        if (text) {
-          content += text + '\n\n';
-        }
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
+    // 각 노드를 순회하며 구조화된 데이터 추출
+    const traverseNodes = (node: Node, parentLevel: number = 0) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node as Element;
         const tagName = el.tagName.toLowerCase();
         
-        // 제목 태그들은 헤딩으로 처리
+        // 제목 태그 처리
         if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
           const headingText = el.textContent?.trim();
-          if (headingText) {
-            content += `\n${headingText}\n\n`;
+          if (headingText && headingText.length > 0) {
+            const level = parseInt(tagName.charAt(1));
+            sections.push({
+              type: 'heading',
+              content: headingText,
+              level: level
+            });
           }
         }
-        // 문단, div, section 등은 내용 추출
-        else if (['p', 'div', 'section', 'article', 'span'].includes(tagName)) {
-          const text = el.textContent?.trim();
-          if (text) {
-            content += text + '\n\n';
+        // 섹션, 아티클 등의 구조적 요소
+        else if (['section', 'article'].includes(tagName)) {
+          // 자식 노드들을 재귀적으로 처리
+          el.childNodes.forEach(child => traverseNodes(child, parentLevel + 1));
+        }
+        // 문단 요소들
+        else if (['p', 'div'].includes(tagName)) {
+          const paragraphText = el.textContent?.trim();
+          if (paragraphText && paragraphText.length > 0) {
+            // 긴 문단을 적절한 길이로 분할
+            const maxParagraphLength = 300;
+            if (paragraphText.length > maxParagraphLength) {
+              // 문장 단위로 분할
+              const sentences = paragraphText.split(/[.!?]\s+/);
+              let currentParagraph = '';
+              
+              sentences.forEach((sentence, index) => {
+                if (currentParagraph.length + sentence.length < maxParagraphLength) {
+                  currentParagraph += sentence + (index < sentences.length - 1 ? '. ' : '');
+                } else {
+                  if (currentParagraph.trim()) {
+                    sections.push({
+                      type: 'paragraph',
+                      content: currentParagraph.trim(),
+                      level: 0
+                    });
+                  }
+                  currentParagraph = sentence + (index < sentences.length - 1 ? '. ' : '');
+                }
+              });
+              
+              if (currentParagraph.trim()) {
+                sections.push({
+                  type: 'paragraph',
+                  content: currentParagraph.trim(),
+                  level: 0
+                });
+              }
+            } else {
+              sections.push({
+                type: 'paragraph',
+                content: paragraphText,
+                level: 0
+              });
+            }
           }
         }
-        // 리스트 항목들
-        else if (['li'].includes(tagName)) {
-          const text = el.textContent?.trim();
-          if (text) {
-            content += '• ' + text + '\n\n';
+        // 리스트 아이템
+        else if (tagName === 'li') {
+          const listText = el.textContent?.trim();
+          if (listText && listText.length > 0) {
+            sections.push({
+              type: 'list',
+              content: '• ' + listText,
+              level: 0
+            });
           }
         }
-        // 기타 요소들도 재귀적으로 처리
+        // 기타 요소들의 자식 노드 처리
         else {
-          content += extractAllContent(el);
+          el.childNodes.forEach(child => traverseNodes(child, parentLevel));
+        }
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.trim();
+        if (text && text.length > 0 && text.length > 10) { // 의미있는 텍스트만 추가
+          sections.push({
+            type: 'text',
+            content: text,
+            level: 0
+          });
         }
       }
-    }
+    };
     
-    return content;
+    element.childNodes.forEach(child => traverseNodes(child));
+    return sections;
   };
   
-  // 전체 내용 추출
-  let fullContent = extractAllContent(tempDiv);
+  // 구조화된 콘텐츠 추출
+  let structuredSections = extractStructuredContent(tempDiv);
   
-  // 만약 구조화된 추출에서 내용이 부족하면 전체 텍스트 사용
-  if (fullContent.length < 500) {
-    console.log('⚠️ 구조화된 추출 결과가 짧음, 전체 텍스트 사용');
-    fullContent = tempDiv.textContent || tempDiv.innerText || '';
+  // 만약 구조화된 추출 결과가 부족하면 전체 텍스트를 문단으로 분할
+  if (structuredSections.length === 0 || structuredSections.reduce((total, section) => total + section.content.length, 0) < 500) {
+    console.log('⚠️ 구조화된 추출 결과가 부족함, 전체 텍스트를 문단으로 분할');
+    const fullText = tempDiv.textContent || tempDiv.innerText || '';
+    
+    // 전체 텍스트를 문단으로 분할 (더블 줄바꿈 기준)
+    const paragraphs = fullText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    structuredSections = paragraphs.map(paragraph => ({
+      type: 'paragraph',
+      content: paragraph.trim(),
+      level: 0
+    }));
   }
   
-  // 문서 헤더
-  const mainTitle = "기술진단 및 진단 보고서";
-  const subTitle = "기계설비 성능점검 및 유지관리자 업무 Troubleshooting";
-  const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}`;
+  // 문서 헤더 구성
+  const headerSections = [
+    { type: 'heading', content: '기술진단 및 진단 보고서', level: 1 },
+    { type: 'heading', content: '기계설비 성능점검 및 유지관리자 업무 Troubleshooting', level: 2 },
+    { 
+      type: 'paragraph', 
+      content: `작성일: ${new Date().toLocaleDateString('ko-KR', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      }).replace(/\. /g, '-').replace('.', '')}`, 
+      level: 0 
+    },
+    { type: 'paragraph', content: '', level: 0 } // 빈 줄 추가
+  ];
   
-  // 최종 문서 구성
-  let structuredContent = '';
-  structuredContent += mainTitle + '\n\n';
-  structuredContent += subTitle + '\n\n';
-  structuredContent += date + '\n\n\n';
+  // 헤더와 본문 콘텐츠 결합
+  const allSections = [...headerSections, ...structuredSections];
   
-  // 원본 HTML의 모든 내용 추가 (생략 없이)
-  structuredContent += fullContent;
+  console.log(`📑 총 ${allSections.length}개의 섹션 추출:`, allSections.map(s => ({ type: s.type, length: s.content.length })));
   
-  console.log('📝 최종 문서 길이:', structuredContent.length);
-  console.log('🔍 최종 문서 미리보기 (처음 500자):', structuredContent.substring(0, 500));
-  
-  // 텍스트가 너무 길면 여러 번에 나눠서 삽입
-  const maxChunkSize = 50000; // Google Docs API 제한 고려
-  const chunks = [];
-  
-  if (structuredContent.length > maxChunkSize) {
-    console.log('📑 긴 문서를 청크로 분할');
-    for (let i = 0; i < structuredContent.length; i += maxChunkSize) {
-      chunks.push(structuredContent.substring(i, i + maxChunkSize));
+  // 각 섹션을 Google Docs 요청으로 변환
+  allSections.forEach((section, sectionIndex) => {
+    if (!section.content.trim()) {
+      // 빈 줄 추가
+      requests.push({
+        insertText: {
+          location: { index: currentIndex },
+          text: '\n'
+        }
+      });
+      currentIndex += 1;
+      return;
     }
-  } else {
-    chunks.push(structuredContent);
-  }
-  
-  // 각 청크를 순차적으로 삽입
-  chunks.forEach((chunk, index) => {
-    console.log(`📄 청크 ${index + 1}/${chunks.length} 추가 (길이: ${chunk.length})`);
+    
+    // 텍스트 삽입
+    const textWithNewline = section.content + '\n\n';
     requests.push({
       insertText: {
         location: { index: currentIndex },
-        text: chunk
+        text: textWithNewline
       }
     });
-    currentIndex += chunk.length;
-  });
-  
-  // 스타일링 적용
-  let styleIndex = 1;
-  
-  // 메인 제목 스타일링
-  requests.push({
-    updateParagraphStyle: {
-      range: {
-        startIndex: styleIndex,
-        endIndex: styleIndex + mainTitle.length
-      },
-      paragraphStyle: {
-        namedStyleType: 'HEADING_1'
-      },
-      fields: 'namedStyleType'
-    }
-  });
-  styleIndex += mainTitle.length + 2;
-  
-  // 부제목 스타일링
-  requests.push({
-    updateParagraphStyle: {
-      range: {
-        startIndex: styleIndex,
-        endIndex: styleIndex + subTitle.length
-      },
-      paragraphStyle: {
-        namedStyleType: 'HEADING_2'
-      },
-      fields: 'namedStyleType'
-    }
-  });
-  styleIndex += subTitle.length + 2;
-  
-  // 날짜 볼드 처리
-  requests.push({
-    updateTextStyle: {
-      range: {
-        startIndex: styleIndex,
-        endIndex: styleIndex + date.length
-      },
-      textStyle: {
-        bold: true
-      },
-      fields: 'bold'
-    }
-  });
-  
-  // 주요 키워드들에 대한 볼드 처리
-  const keywordsToBold = [
-    '종합 결론', '핵심 문제', '제안된 개선 방향', '결론 및 권고',
-    '기술검토 및 진단 전문가', '기술 보완 전문가', '기술 검증 전문가',
-    '압력 감소', '캐비테이션', 'kgf/cm²', '56%', '감소',
-    '개선 방안', '점검', '유지보수'
-  ];
-  
-  keywordsToBold.forEach(keyword => {
-    let searchIndex = 0;
-    while (true) {
-      const foundIndex = structuredContent.indexOf(keyword, searchIndex);
-      if (foundIndex === -1) break;
+    
+    const startIndex = currentIndex;
+    const endIndex = currentIndex + section.content.length;
+    
+    // 스타일 적용
+    if (section.type === 'heading') {
+      let styleType = 'HEADING_3'; // 기본값
+      
+      if (section.level === 1) {
+        styleType = 'HEADING_1';
+      } else if (section.level === 2) {
+        styleType = 'HEADING_2';
+      } else if (section.level === 3) {
+        styleType = 'HEADING_3';
+      }
       
       requests.push({
-        updateTextStyle: {
-          range: {
-            startIndex: foundIndex + 1,
-            endIndex: foundIndex + keyword.length + 1
-          },
-          textStyle: {
-            bold: true
-          },
-          fields: 'bold'
+        updateParagraphStyle: {
+          range: { startIndex, endIndex },
+          paragraphStyle: { namedStyleType: styleType },
+          fields: 'namedStyleType'
         }
       });
-      
-      searchIndex = foundIndex + keyword.length;
     }
+    
+    // 특정 키워드 볼드 처리
+    const boldKeywords = [
+      '종합 결론', '핵심 문제', '제안된 개선 방향', '결론 및 권고', '작성일:',
+      '기술검토 및 진단 전문가', '기술 보완 전문가', '기술 검증 전문가',
+      '역할:', '전문분야:', '참여영역:', '배경:',
+      '압력 감소', '캐비테이션', 'kgf/cm²', '㎏f/㎠', '%', '감소', '증가',
+      '개선 방안', '점검', '유지보수', '권고', '진단', '측정값:', '설계값:', '편차:',
+      '최종 요약:', '핵심 진단 요약', '정밀 검증', '최종 종합 의견', '마무리:',
+      '계산 검증', '단위 검증', '논리 검증', '종합 평가'
+    ];
+    
+    boldKeywords.forEach(keyword => {
+      let searchPos = 0;
+      while (true) {
+        const foundPos = section.content.indexOf(keyword, searchPos);
+        if (foundPos === -1) break;
+        
+        const keywordStart = startIndex + foundPos;
+        const keywordEnd = keywordStart + keyword.length;
+        
+        requests.push({
+          updateTextStyle: {
+            range: { startIndex: keywordStart, endIndex: keywordEnd },
+            textStyle: { bold: true },
+            fields: 'bold'
+          }
+        });
+        
+        searchPos = foundPos + keyword.length;
+      }
+    });
+    
+    currentIndex += textWithNewline.length;
   });
   
   console.log(`✅ 총 ${requests.length}개의 Google Docs 요청 생성 완료`);
+  console.log('📋 요청 타입별 분포:', {
+    insertText: requests.filter(r => r.insertText).length,
+    updateParagraphStyle: requests.filter(r => r.updateParagraphStyle).length,
+    updateTextStyle: requests.filter(r => r.updateTextStyle).length
+  });
+  
   return requests;
 };
 
@@ -375,11 +427,18 @@ const generateReportFileName = (equipmentName?: string): string => {
   const month = String(currentDate.getMonth() + 1).padStart(2, '0');
   const day = String(currentDate.getDate()).padStart(2, '0');
   
-  // equipmentName이 제공되지 않거나 비어있으면 기본값 사용하지 않고 빈 문자열 처리
-  const equipment = equipmentName && equipmentName.trim() && equipmentName !== 'ultra' 
-    ? equipmentName.trim() 
-    : '설비';
+  // equipmentName 처리 로직 개선
+  let equipment = '설비'; // 기본값
   
+  if (equipmentName && equipmentName.trim()) {
+    const trimmedName = equipmentName.trim();
+    // 'ultra'나 빈 문자열이 아닌 경우 사용
+    if (trimmedName !== 'ultra' && trimmedName !== '설비' && trimmedName.length > 0) {
+      equipment = trimmedName;
+    }
+  }
+  
+  console.log('🏷️ 파일명 생성:', { equipmentName, equipment });
   return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
 };
 
