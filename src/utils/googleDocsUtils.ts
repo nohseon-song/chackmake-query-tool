@@ -137,177 +137,94 @@ export const initializeGapi = async (): Promise<void> => {
   return initializationPromise;
 };
 
-// Google 인증 (안정성 강화 버전)
-export const authenticateGoogle = async (isRetry = false): Promise<string> => {
+// 인증 상태 관리
+let authenticationInProgress = false;
+
+// Google 인증 (근본적 문제 해결 버전)
+export const authenticateGoogle = async (): Promise<string> => {
+  // 중복 인증 방지
+  if (authenticationInProgress) {
+    throw new Error('이미 인증이 진행 중입니다. 잠시 후 다시 시도해주세요.');
+  }
+
   try {
+    authenticationInProgress = true;
+    console.log('🚀 Google OAuth 인증 시작');
+    
     await initializeGapi();
 
     const authInstance = gapi.auth2.getAuthInstance();
     
     if (!authInstance) {
-      throw new Error('Google Auth2 인스턴스를 가져올 수 없습니다.');
+      throw new Error('Google Auth2 인스턴스 초기화에 실패했습니다.');
     }
     
-    // 현재 로그인 상태 확인
-    const isSignedIn = authInstance.isSignedIn.get();
-    console.log('🔍 현재 Google 로그인 상태:', isSignedIn);
-    
-    if (isSignedIn) {
-      const currentUser = authInstance.currentUser.get();
-      const authResponse = currentUser.getAuthResponse();
-      
-      if (authResponse && authResponse.access_token) {
-        // 기존 토큰 유효성 확인
-        console.log('🔍 기존 토큰 유효성 검증 중...');
-        const isTokenValid = await validateGoogleToken(authResponse.access_token);
-        if (isTokenValid) {
-          console.log('✅ 기존 유효한 토큰 사용');
-          return authResponse.access_token;
-        } else {
-          console.log('⚠️ 기존 토큰이 만료됨, 로그아웃 후 재인증');
-          try {
-            await authInstance.signOut();
-          } catch (signOutError) {
-            console.warn('로그아웃 중 오류 (무시):', signOutError);
-          }
-        }
+    // 기존 세션 정리 (문제 방지를 위해)
+    try {
+      if (authInstance.isSignedIn.get()) {
+        console.log('🔄 기존 세션 정리 중...');
+        await authInstance.signOut();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
       }
+    } catch (signOutError) {
+      console.warn('기존 세션 정리 중 오류 (무시):', signOutError);
     }
     
-    console.log('🚀 새로운 Google 로그인 시작...');
+    console.log('🪟 Google 계정 선택 팝업 시작');
     
-    let authResult;
-    
-    // 1단계: 조용한 인증 시도 (재시도가 아닌 경우에만)
-    if (!isRetry) {
-      try {
-        console.log('🔇 조용한 인증 시도 중...');
-        authResult = await authInstance.signIn({
-          prompt: 'none',
-          scope: SCOPES
-        });
-        console.log('✅ 조용한 인증 성공');
-      } catch (silentError: any) {
-        console.log('⚠️ 조용한 인증 실패:', silentError.error || 'unknown');
-        // 조용한 인증 실패는 정상적인 경우, 팝업으로 진행
-      }
-    }
-    
-    // 2단계: 팝업 인증 (조용한 인증이 실패했거나 재시도인 경우)
-    if (!authResult) {
-      try {
-        console.log('🪟 팝업 인증 시작 - 팝업을 허용해주세요');
-        
-        // 단순화된 팝업 인증 (재시도 시 문제를 줄이기 위해)
-        authResult = await authInstance.signIn({
-          prompt: isRetry ? 'consent' : 'select_account',
-          scope: SCOPES
-        });
-        
-        console.log('✅ 팝업 인증 성공');
-      } catch (popupError: any) {
-        console.error('❌ 팝업 인증 실패:', popupError);
-        
-        // 팝업 차단 처리
-        if (popupError.error === 'popup_blocked_by_browser' || 
-            popupError.error === 'popup_closed_by_user') {
-          throw new Error('브라우저에서 팝업이 차단되었습니다. 주소창 오른쪽의 팝업 차단 아이콘을 클릭하여 팝업을 허용한 후 다시 시도해주세요.');
-        }
-        
-        // 사용자 취소 처리
-        if (popupError.error === 'access_denied') {
-          throw new Error('Google 계정 접근이 거부되었습니다. 권한을 허용해주세요.');
-        }
-        
-        // 서버 오류 처리 (재시도 없음 - 무한 루프 방지)
-        if (popupError.error === 'server_error' || popupError.type === 'tokenFailed') {
-          if (!isRetry) {
-            console.log('🔄 Google 서버 오류, 한 번만 재시도...');
-            await new Promise(resolve => setTimeout(resolve, 3000)); // 3초 대기
-            return authenticateGoogle(true); // 재시도 플래그와 함께 한 번만 재시도
-          } else {
-            throw new Error('Google OAuth 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도하거나 다른 브라우저를 사용해보세요.');
-          }
-        }
-        
-        // OAuth 클라이언트 설정 문제
-        if (popupError.error === 'unauthorized_client') {
-          throw new Error('OAuth 클라이언트 설정에 문제가 있습니다. Google Cloud Console에서 OAuth 동의 화면 설정을 확인해주세요.');
-        }
-        
-        throw popupError;
-      }
-    }
+    // 직접 인증 (retry 로직 제거로 팝업 반복 방지)
+    const authResult = await authInstance.signIn({
+      prompt: 'select_account',
+      scope: SCOPES
+    });
     
     if (!authResult) {
-      throw new Error('Google 로그인이 취소되었습니다.');
+      throw new Error('Google 인증이 취소되었습니다.');
     }
     
     // 인증 결과 검증
     const authResponse = authResult.getAuthResponse();
-    if (!authResponse) {
-      throw new Error('Google 인증 응답을 받지 못했습니다.');
+    if (!authResponse?.access_token) {
+      throw new Error('유효한 액세스 토큰을 받지 못했습니다.');
     }
     
-    if (!authResponse.access_token) {
-      throw new Error('Google 액세스 토큰을 받지 못했습니다.');
-    }
-    
-    // 토큰 유효성 검증
-    console.log('🔍 토큰 유효성 최종 검증 중...');
+    // 토큰 유효성 최종 검증
+    console.log('🔍 토큰 유효성 검증 중...');
     const isValid = await validateGoogleToken(authResponse.access_token);
     if (!isValid) {
-      if (!isRetry) {
-        console.log('⚠️ 토큰 검증 실패, 한 번만 재시도...');
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
-        return authenticateGoogle(true);
-      }
-      throw new Error('토큰 검증에 실패했습니다. Google Cloud Console 설정을 확인해주세요.');
+      throw new Error('토큰 검증에 실패했습니다. OAuth 설정을 확인해주세요.');
     }
     
-    console.log('✅ Google 인증 성공 및 토큰 검증 완료');
+    console.log('✅ Google 인증 완료');
     return authResponse.access_token;
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Google 인증 실패:', error);
     
-    // 에러 타입별 처리
-    if (error && typeof error === 'object') {
-      const errorObj = error as any;
-      
-      if (errorObj.error === 'popup_closed_by_user') {
-        throw new Error('팝업이 사용자에 의해 닫혔습니다. 다시 시도해주세요.');
-      }
-      
-      if (errorObj.error === 'access_denied') {
-        throw new Error('Google 계정 접근이 거부되었습니다. 권한을 허용해주세요.');
-      }
-      
-      if (errorObj.error === 'server_error') {
-        throw new Error('Google 서버 일시적 오류입니다. 잠시 후 다시 시도해주세요.');
-      }
-      
-      if (errorObj.type === 'tokenFailed') {
-        throw new Error('Google OAuth 설정에 문제가 있습니다. Google Cloud Console에서 OAuth 클라이언트 설정을 확인해주세요.');
-      }
-      
-      if (errorObj.error === 'unauthorized_client') {
-        throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console에서 OAuth 동의 화면을 "프로덕션 환경"으로 설정하거나 테스트 사용자에 추가해주세요.');
-      }
+    // 구체적인 오류 메시지 처리
+    if (error?.error === 'popup_closed_by_user') {
+      throw new Error('팝업이 사용자에 의해 닫혔습니다.');
+    }
+    
+    if (error?.error === 'access_denied') {
+      throw new Error('Google 계정 접근이 거부되었습니다.');
+    }
+    
+    if (error?.type === 'tokenFailed' || error?.error === 'server_error') {
+      throw new Error('Google OAuth 클라이언트 설정에 문제가 있습니다.\n\n해결방법:\n1. Google Cloud Console에서 OAuth 동의 화면을 "프로덕션 환경"으로 발행\n2. 또는 OAuth 테스트 사용자에 현재 계정 추가\n3. Authorized JavaScript origins에 현재 도메인 추가');
+    }
+    
+    if (error?.error === 'unauthorized_client') {
+      throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console 설정을 확인해주세요.');
     }
     
     if (error instanceof Error) {
-      if (error.message.includes('popup')) {
-        throw new Error('팝업이 차단되었습니다. 브라우저의 팝업 차단을 해제하고 다시 시도해주세요.');
-      } else if (error.message.includes('cancelled') || error.message.includes('취소')) {
-        throw new Error('Google 로그인이 취소되었습니다.');
-      } else if (error.message.includes('Client ID')) {
-        throw new Error('Google Client ID 설정에 문제가 있습니다. Supabase Edge Function 설정을 확인해주세요.');
-      }
       throw error;
     }
     
-    throw new Error('Google 인증에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.');
+    throw new Error('Google 인증에 실패했습니다.');
+  } finally {
+    authenticationInProgress = false;
   }
 };
 
