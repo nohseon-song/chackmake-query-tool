@@ -60,7 +60,7 @@ const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis
 let gapiInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
-// GAPI 초기화 (올바른 auth2 초기화 포함)
+// GAPI 초기화 (근본적 문제 해결 - 단순화)
 export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
   
@@ -85,39 +85,32 @@ export const initializeGapi = async (): Promise<void> => {
       
       console.log('🔑 Client ID 확인 완료');
 
-      // GAPI 로드 (client와 auth2 모두 로드)
-      console.log('📚 GAPI 라이브러리 로드 중...');
+      // GAPI 로드 (auth2만 로드)
+      console.log('📚 GAPI Auth2 라이브러리 로드 중...');
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('GAPI 로드 타임아웃'));
-        }, 15000);
+        }, 10000);
 
-        gapi.load('client:auth2', {
+        gapi.load('auth2', {
           callback: () => {
             clearTimeout(timeout);
-            console.log('✅ GAPI 라이브러리 로드 완료');
+            console.log('✅ GAPI Auth2 로드 완료');
             resolve();
           },
           onerror: () => {
             clearTimeout(timeout);
-            reject(new Error('GAPI 로드 실패'));
+            reject(new Error('GAPI Auth2 로드 실패'));
           }
         });
       });
 
-      // 클라이언트와 Auth2 동시 초기화
-      console.log('🔧 GAPI 클라이언트 및 Auth2 초기화 중...');
-      await Promise.all([
-        gapi.client.init({
-          clientId: clientId,
-          scope: SCOPES,
-          discoveryDocs: [DISCOVERY_DOC]
-        }),
-        gapi.auth2.init({
-          client_id: clientId,
-          scope: SCOPES
-        })
-      ]);
+      // Auth2만 초기화 (단순화)
+      console.log('🔧 GAPI Auth2 초기화 중...');
+      await gapi.auth2.init({
+        client_id: clientId,
+        scope: SCOPES
+      });
 
       gapiInitialized = true;
       console.log('✅ GAPI 초기화 완료');
@@ -164,12 +157,10 @@ export const authenticateGoogle = async (): Promise<string> => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    console.log('🪟 새로운 인증 시도');
+    console.log('🪟 새로운 인증 시도 - 단순화된 방식');
     
-    // 명시적이고 단순한 인증
-    const authResult = await authInstance.signIn({
-      prompt: 'consent'  // select_account 대신 consent 사용
-    });
+    // 가장 단순한 인증 방식
+    const authResult = await authInstance.signIn();
     
     if (!authResult) {
       throw new Error('인증이 취소되었습니다.');
@@ -263,18 +254,10 @@ export const htmlToPlainText = (html: string): string => {
   return tempDiv.textContent || tempDiv.innerText || '';
 };
 
-// Google Docs 생성 (안정적 버전)
+// Google Docs 생성 (완전 단순화 버전)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
   try {
     console.log('🚀 Google Docs 생성 시작');
-    
-    // GAPI 초기화
-    await initializeGapi();
-    console.log('✅ GAPI 초기화 완료');
-
-    // Google Docs API 명시적 로드
-    console.log('📚 Google Docs API 로드...');
-    await gapi.client.load('docs', 'v1');
     
     console.log('🔍 토큰 유효성 검증...');
     const isTokenValid = await validateGoogleToken(accessToken);
