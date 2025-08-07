@@ -177,73 +177,122 @@ export const validateGoogleToken = async (accessToken: string): Promise<boolean>
   }
 };
 
-// HTML을 Google Docs 요청 형식으로 변환 (PDF 형식과 동일하게)
+// HTML을 Google Docs 요청 형식으로 변환 (전체 내용 보존)
 const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
+  console.log('🔄 HTML을 Google Docs 형식으로 변환 시작');
+  console.log('📄 원본 HTML 길이:', html.length);
+  
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = html;
   
   const requests: any[] = [];
   let currentIndex = 1;
   
+  // HTML에서 모든 텍스트 노드 추출 (구조 보존)
+  const extractAllContent = (element: Element): string => {
+    let content = '';
+    
+    for (const node of element.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.trim();
+        if (text) {
+          content += text + '\n\n';
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        const tagName = el.tagName.toLowerCase();
+        
+        // 제목 태그들은 헤딩으로 처리
+        if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
+          const headingText = el.textContent?.trim();
+          if (headingText) {
+            content += `\n${headingText}\n\n`;
+          }
+        }
+        // 문단, div, section 등은 내용 추출
+        else if (['p', 'div', 'section', 'article', 'span'].includes(tagName)) {
+          const text = el.textContent?.trim();
+          if (text) {
+            content += text + '\n\n';
+          }
+        }
+        // 리스트 항목들
+        else if (['li'].includes(tagName)) {
+          const text = el.textContent?.trim();
+          if (text) {
+            content += '• ' + text + '\n\n';
+          }
+        }
+        // 기타 요소들도 재귀적으로 처리
+        else {
+          content += extractAllContent(el);
+        }
+      }
+    }
+    
+    return content;
+  };
+  
+  // 전체 내용 추출
+  let fullContent = extractAllContent(tempDiv);
+  
+  // 만약 구조화된 추출에서 내용이 부족하면 전체 텍스트 사용
+  if (fullContent.length < 500) {
+    console.log('⚠️ 구조화된 추출 결과가 짧음, 전체 텍스트 사용');
+    fullContent = tempDiv.textContent || tempDiv.innerText || '';
+  }
+  
   // 문서 헤더
   const mainTitle = "기술진단 및 진단 보고서";
   const subTitle = "기계설비 성능점검 및 유지관리자 업무 Troubleshooting";
   const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}`;
   
-  const content = tempDiv.textContent || tempDiv.innerText || '';
-  
-  // PDF와 동일한 구조로 섹션 구분
+  // 최종 문서 구성
   let structuredContent = '';
-  
-  // 헤더 부분
   structuredContent += mainTitle + '\n\n';
   structuredContent += subTitle + '\n\n';
   structuredContent += date + '\n\n\n';
   
-  // 종합 결론 섹션
-  structuredContent += '종합 결론\n\n';
+  // 원본 HTML의 모든 내용 추가 (생략 없이)
+  structuredContent += fullContent;
   
-  // 압력 관련 정보 추출
-  const pressureMatch = content.match(/(\d+\.?\d*)\s*kgf\/cm²/);
-  const pressure = pressureMatch ? pressureMatch[1] : '2.5';
+  console.log('📝 최종 문서 길이:', structuredContent.length);
+  console.log('🔍 최종 문서 미리보기 (처음 500자):', structuredContent.substring(0, 500));
   
-  structuredContent += `펌프의 흡입 압력이 설계값 ${pressure} kgf/cm² 대비 1.1 kgf/cm²로 56% 감소한 상태로 확인되었습니다. 이는 펌프 성능 저하와 캐비테이션 발생 가능성을 높여, 장기적으로 설비 손상을 초래할 수 있는 심각한 문제입니다.\n\n`;
+  // 텍스트가 너무 길면 여러 번에 나눠서 삽입
+  const maxChunkSize = 50000; // Google Docs API 제한 고려
+  const chunks = [];
   
-  // 핵심 문제 섹션
-  structuredContent += '핵심 문제\n\n';
-  structuredContent += '• 흡입 압력 감소로 인한 펌프 내부의 증기압 상승 및 캐비테이션 발생 가능성 확인\n\n';
-  structuredContent += '• 펌프 효율 저하 및 부품 손상 위험\n\n';
-  structuredContent += '• 흡입 배관의 막힘, 누설, 공기 혼입 등 외부 요인의 영향 가능성\n\n';
-  
-  // 제안된 개선 방향 섹션
-  structuredContent += '제안된 개선 방향\n\n';
-  structuredContent += '• 흡입 배관 점검: 배관 내 막힘, 누설, 공기 혼입 여부를 점차히 확인\n\n';
-  structuredContent += '• 설치 조건 최적화: 펌프 설치 높이를 조정하고 흡입 탱크의 수위를 유지\n\n';
-  structuredContent += '• 캐비테이션 방지: NPSH (Net Positive Suction Head) 조건을 재검토하고 필요 시 설비 업그레이드\n\n';
-  structuredContent += '• 정기 유지보수: 펌프와 관련된 모든 부품의 정기적인 점검 및 유지보수 수행\n\n';
-  
-  // 결론 및 권고 섹션
-  structuredContent += '결론 및 권고\n\n';
-  structuredContent += '흡입 압력 감소는 펌프 성능 저하와 캐비테이션 위험을 명확히 나타내며, 이에 따른 점검 및 개선 조치가 시급합니다. 보고서의 추천 계획과 단위 사용을 정확하게, 공학적 진단과 권고 사항의 타당성을 더욱 강화된 권고점이다. 현재 점검과 개선 조치를 통해 펌프의 효율을 회복하고 설비 수명을 연장할 수 있습니다.\n\n';
-  structuredContent += '요약: 펌프 흡입 압력이 설계값 대비 56% 감소하여 성능 저하와 캐비테이션 위험이 확인되었습니다. 흡입 배관 점검 및 설치 조건 최적화가 필요합니다.\n\n';
-  
-  // 텍스트 삽입
-  requests.push({
-    insertText: {
-      location: { index: currentIndex },
-      text: structuredContent
+  if (structuredContent.length > maxChunkSize) {
+    console.log('📑 긴 문서를 청크로 분할');
+    for (let i = 0; i < structuredContent.length; i += maxChunkSize) {
+      chunks.push(structuredContent.substring(i, i + maxChunkSize));
     }
+  } else {
+    chunks.push(structuredContent);
+  }
+  
+  // 각 청크를 순차적으로 삽입
+  chunks.forEach((chunk, index) => {
+    console.log(`📄 청크 ${index + 1}/${chunks.length} 추가 (길이: ${chunk.length})`);
+    requests.push({
+      insertText: {
+        location: { index: currentIndex },
+        text: chunk
+      }
+    });
+    currentIndex += chunk.length;
   });
   
   // 스타일링 적용
-  let textIndex = currentIndex;
+  let styleIndex = 1;
   
   // 메인 제목 스타일링
   requests.push({
     updateParagraphStyle: {
       range: {
-        startIndex: textIndex,
-        endIndex: textIndex + mainTitle.length
+        startIndex: styleIndex,
+        endIndex: styleIndex + mainTitle.length
       },
       paragraphStyle: {
         namedStyleType: 'HEADING_1'
@@ -251,14 +300,14 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'namedStyleType'
     }
   });
-  textIndex += mainTitle.length + 2;
+  styleIndex += mainTitle.length + 2;
   
   // 부제목 스타일링
   requests.push({
     updateParagraphStyle: {
       range: {
-        startIndex: textIndex,
-        endIndex: textIndex + subTitle.length
+        startIndex: styleIndex,
+        endIndex: styleIndex + subTitle.length
       },
       paragraphStyle: {
         namedStyleType: 'HEADING_2'
@@ -266,14 +315,14 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'namedStyleType'
     }
   });
-  textIndex += subTitle.length + 2;
+  styleIndex += subTitle.length + 2;
   
   // 날짜 볼드 처리
   requests.push({
     updateTextStyle: {
       range: {
-        startIndex: textIndex,
-        endIndex: textIndex + date.length
+        startIndex: styleIndex,
+        endIndex: styleIndex + date.length
       },
       textStyle: {
         bold: true
@@ -281,29 +330,39 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'bold'
     }
   });
-  textIndex += date.length + 3;
   
-  // 주요 섹션 헤딩 스타일링
-  const sections = ['종합 결론', '핵심 문제', '제안된 개선 방향', '결론 및 권고'];
+  // 주요 키워드들에 대한 볼드 처리
+  const keywordsToBold = [
+    '종합 결론', '핵심 문제', '제안된 개선 방향', '결론 및 권고',
+    '기술검토 및 진단 전문가', '기술 보완 전문가', '기술 검증 전문가',
+    '압력 감소', '캐비테이션', 'kgf/cm²', '56%', '감소',
+    '개선 방안', '점검', '유지보수'
+  ];
   
-  sections.forEach(section => {
-    const sectionIndex = structuredContent.indexOf(section, textIndex - currentIndex);
-    if (sectionIndex !== -1) {
+  keywordsToBold.forEach(keyword => {
+    let searchIndex = 0;
+    while (true) {
+      const foundIndex = structuredContent.indexOf(keyword, searchIndex);
+      if (foundIndex === -1) break;
+      
       requests.push({
-        updateParagraphStyle: {
+        updateTextStyle: {
           range: {
-            startIndex: currentIndex + sectionIndex,
-            endIndex: currentIndex + sectionIndex + section.length
+            startIndex: foundIndex + 1,
+            endIndex: foundIndex + keyword.length + 1
           },
-          paragraphStyle: {
-            namedStyleType: 'HEADING_2'
+          textStyle: {
+            bold: true
           },
-          fields: 'namedStyleType'
+          fields: 'bold'
         }
       });
+      
+      searchIndex = foundIndex + keyword.length;
     }
   });
   
+  console.log(`✅ 총 ${requests.length}개의 Google Docs 요청 생성 완료`);
   return requests;
 };
 
