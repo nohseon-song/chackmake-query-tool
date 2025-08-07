@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
-import { GoogleAuthState, authenticateGoogle, validateGoogleToken, fetchGoogleClientId } from '@/utils/googleDocsUtils';
+import { GoogleAuthState, authenticateGoogle, validateGoogleToken, fetchGoogleClientId, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 
 export const useAppState = () => {
   const [isDark, setIsDark] = useState(() => {
@@ -148,36 +148,20 @@ export const useAppState = () => {
       const code = await authenticateGoogle();
 
       // 4. authorization code를 access token과 refresh token으로 교환
-      const clientId = await fetchGoogleClientId();
-      const response = await fetch('https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/google-token-exchange', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
-          'apikey': `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
-        },
-        body: JSON.stringify({ code, clientId }),
-      });
+      const { accessToken, refreshToken: newRefreshToken } = await exchangeCodeForToken(code);
 
-      if (!response.ok) {
-        throw new Error('코드를 토큰으로 교환하는 데 실패했습니다.');
-      }
-
-      const data = await response.json();
-      const { access_token, refresh_token } = data;
-
-      if (refresh_token) {
-        localStorage.setItem('googleRefreshToken', refresh_token);
+      if (newRefreshToken) {
+        localStorage.setItem('googleRefreshToken', newRefreshToken);
       }
       
-      setGoogleAuth({ isAuthenticated: true, accessToken: access_token });
+      setGoogleAuth({ isAuthenticated: true, accessToken });
 
       toast({
         title: "Google 인증 완료",
         description: "Google Docs 연동이 완료되었습니다.",
       });
 
-      return access_token;
+      return accessToken;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Google 인증에 실패했습니다.';
       
