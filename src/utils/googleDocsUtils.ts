@@ -60,77 +60,66 @@ const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis
 let gapiInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
-// GAPI 초기화 (개선된 로드 방식)
+// GAPI 초기화 (단순화된 안정적 버전)
 export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
   
-  // 이미 초기화 중인 경우 해당 Promise를 반환
   if (initializationPromise) {
     return initializationPromise;
   }
 
   initializationPromise = (async () => {
     try {
-      // Supabase에서 Google Client ID 가져오기
-      let clientId = getGoogleClientId();
+      console.log('🚀 GAPI 초기화 시작');
       
-      if (!clientId || clientId === '') {
-        console.log('Client ID가 없어서 Supabase에서 가져오는 중...');
+      // Client ID 확인
+      let clientId = getGoogleClientId();
+      if (!clientId) {
+        console.log('📡 Supabase에서 Client ID 가져오는 중...');
         clientId = await fetchGoogleClientId();
       }
       
-      console.log('사용중인 Google Client ID:', clientId);
-      
-      if (!clientId || clientId === '') {
-        throw new Error('Google Client ID가 설정되지 않았습니다.');
+      if (!clientId) {
+        throw new Error('Google Client ID를 가져올 수 없습니다.');
       }
+      
+      console.log('🔑 Client ID 확인 완료');
 
-      // GAPI 기본 로드 (단계별 로드)
-      console.log('GAPI 기본 라이브러리 로드 중...');
+      // GAPI 로드 (단순화)
+      console.log('📚 GAPI 라이브러리 로드 중...');
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('GAPI 기본 로드 시간 초과 (30초)'));
-        }, 30000); // 30초로 연장
+          reject(new Error('GAPI 로드 타임아웃'));
+        }, 15000);
 
-        gapi.load('client:auth2', () => {
-          clearTimeout(timeout);
-          console.log('GAPI 기본 라이브러리 로드 완료');
-          resolve();
+        gapi.load('client:auth2', {
+          callback: () => {
+            clearTimeout(timeout);
+            console.log('✅ GAPI 라이브러리 로드 완료');
+            resolve();
+          },
+          onerror: () => {
+            clearTimeout(timeout);
+            reject(new Error('GAPI 로드 실패'));
+          }
         });
       });
 
-      // 클라이언트 초기화
-      console.log('GAPI 클라이언트 초기화 중...');
+      // 클라이언트 초기화 (단순화)
+      console.log('🔧 GAPI 클라이언트 초기화 중...');
       await gapi.client.init({
         clientId: clientId,
-        scope: SCOPES,
-        discoveryDocs: [DISCOVERY_DOC]
+        scope: SCOPES
       });
 
-      // 추가 API 로드 (순차적)
-      console.log('Google Docs API 로드 중...');
-      await gapi.client.load('docs', 'v1');
-      
-      console.log('Google Drive API 로드 중...');
-      await gapi.client.load('drive', 'v3');
-
       gapiInitialized = true;
-      console.log('GAPI 초기화 완료');
+      console.log('✅ GAPI 초기화 완료');
+      
     } catch (error) {
       gapiInitialized = false;
       initializationPromise = null;
-      console.error('GAPI 초기화 실패:', error);
-      
-      // 더 구체적인 오류 메시지 제공
-      if (error instanceof Error) {
-        if (error.message.includes('시간 초과')) {
-          throw new Error('Google API 로드가 지연되고 있습니다. 네트워크 연결을 확인하고 다시 시도해주세요.');
-        } else if (error.message.includes('Client ID')) {
-          throw new Error('Google Client ID 설정에 문제가 있습니다. 관리자에게 문의해주세요.');
-        }
-      }
-      
-      throw new Error(`Google API 초기화에 실패했습니다: ${error}`);
+      console.error('❌ GAPI 초기화 실패:', error);
+      throw new Error(`Google API 초기화 실패: ${error}`);
     }
   })();
 
@@ -140,7 +129,7 @@ export const initializeGapi = async (): Promise<void> => {
 // 인증 상태 관리
 let authenticationInProgress = false;
 
-// Google 인증 (OAuth 설정 문제 해결)
+// Google 인증 (근본적 문제 해결 버전)
 export const authenticateGoogle = async (): Promise<string> => {
   if (authenticationInProgress) {
     throw new Error('이미 인증이 진행 중입니다. 잠시 후 다시 시도해주세요.');
@@ -155,82 +144,65 @@ export const authenticateGoogle = async (): Promise<string> => {
     const authInstance = gapi.auth2.getAuthInstance();
     
     if (!authInstance) {
-      throw new Error('Google Auth2 인스턴스를 가져올 수 없습니다. GAPI 초기화를 확인해주세요.');
+      throw new Error('Auth2 인스턴스 생성 실패');
     }
     
-    // 기존 세션 정리
+    console.log('🔍 현재 인증 상태:', authInstance.isSignedIn.get());
+    
+    // 완전한 세션 정리
     if (authInstance.isSignedIn.get()) {
-      console.log('🔄 기존 세션 정리 중...');
+      console.log('🔄 기존 세션 완전 정리...');
       await authInstance.signOut();
+      // 추가 정리 시간
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    console.log('🪟 Google 계정 선택 팝업 시작');
+    console.log('🪟 새로운 인증 시도');
     
-    // 단일 인증 시도
+    // 명시적이고 단순한 인증
     const authResult = await authInstance.signIn({
-      prompt: 'select_account',
-      scope: SCOPES
+      prompt: 'consent'  // select_account 대신 consent 사용
     });
     
     if (!authResult) {
-      throw new Error('Google 인증이 취소되었습니다.');
+      throw new Error('인증이 취소되었습니다.');
     }
     
     const authResponse = authResult.getAuthResponse();
     if (!authResponse?.access_token) {
-      throw new Error('유효한 액세스 토큰을 받지 못했습니다.');
+      throw new Error('액세스 토큰을 받지 못했습니다.');
     }
     
-    console.log('✅ Google 인증 완료');
+    console.log('✅ 인증 성공, 토큰 길이:', authResponse.access_token.length);
+    
+    // 즉시 토큰 검증
+    const tokenValid = await validateGoogleToken(authResponse.access_token);
+    if (!tokenValid) {
+      throw new Error('받은 토큰이 유효하지 않습니다.');
+    }
+    
     return authResponse.access_token;
     
   } catch (error: any) {
-    console.error('❌ Google 인증 실패:', error);
+    console.error('❌ 인증 실패 상세:', error);
     
-    // 구체적인 OAuth 설정 오류 처리
-    if (error?.type === 'tokenFailed' && error?.error === 'server_error') {
-      const currentDomain = window.location.origin;
-      throw new Error(`🚨 Google Cloud Console OAuth 설정 오류
-
-현재 도메인: ${currentDomain}
-
-필수 해결사항:
-
-1️⃣ Google Cloud Console (console.cloud.google.com) 접속
-2️⃣ 프로젝트 선택 → API 및 서비스 → OAuth 동의 화면
-3️⃣ 다음 중 하나 선택:
-
-옵션 A) 프로덕션 환경으로 발행
-   - "앱 발행" 버튼 클릭
-   - 검토 제출 (승인까지 1-2주 소요)
-
-옵션 B) 테스트 사용자 추가 (즉시 해결)
-   - OAuth 동의 화면 → "테스트 사용자" 섹션
-   - 현재 Google 계정 이메일 추가
-
-4️⃣ 사용자 인증 정보 → OAuth 2.0 클라이언트 ID
-   - "승인된 자바스크립트 원본"에 다음 추가:
-     ${currentDomain}
-
-5️⃣ 변경사항 저장 후 5분 대기
-
-이 설정이 완료되면 오류가 해결됩니다.`);
+    // 실제 오류 원인 분석
+    if (error?.details) {
+      console.error('오류 세부사항:', error.details);
     }
     
+    // 기본적인 오류만 처리
     if (error?.error === 'popup_closed_by_user') {
-      throw new Error('팝업이 사용자에 의해 닫혔습니다. 팝업 차단기를 해제하고 다시 시도해주세요.');
+      throw new Error('팝업이 닫혔습니다. 다시 시도해주세요.');
     }
     
     if (error?.error === 'access_denied') {
-      throw new Error('Google 계정 접근이 거부되었습니다. 권한을 허용하고 다시 시도해주세요.');
+      throw new Error('권한이 거부되었습니다. 다시 시도해주세요.');
     }
     
-    if (error?.error === 'unauthorized_client') {
-      throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console에서 클라이언트 ID 설정을 확인해주세요.');
-    }
-    
+    // 일반 오류
     if (error instanceof Error) {
-      throw error;
+      throw new Error(`인증 오류: ${error.message}`);
     }
     
     throw new Error('Google 인증에 실패했습니다.');
