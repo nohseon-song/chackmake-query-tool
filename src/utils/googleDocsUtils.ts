@@ -310,13 +310,18 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
 // 파일명 생성 함수
-const generateReportFileName = (equipmentName: string = 'ultra'): string => {
+const generateReportFileName = (equipmentName?: string): string => {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
   const month = String(currentDate.getMonth() + 1).padStart(2, '0');
   const day = String(currentDate.getDate()).padStart(2, '0');
   
-  return `기술진단내역작성_${equipmentName}_${year}.${month}.${day}`;
+  // equipmentName이 제공되지 않거나 비어있으면 기본값 사용하지 않고 빈 문자열 처리
+  const equipment = equipmentName && equipmentName.trim() && equipmentName !== 'ultra' 
+    ? equipmentName.trim() 
+    : '설비';
+  
+  return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
 };
 
 // Google Docs 생성 (간소화 버전)
