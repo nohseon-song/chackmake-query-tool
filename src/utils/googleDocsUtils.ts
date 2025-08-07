@@ -60,7 +60,7 @@ const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis
 let gapiInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
-// GAPI 초기화 (단순화된 안정적 버전)
+// GAPI 초기화 (올바른 auth2 초기화 포함)
 export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
   
@@ -85,7 +85,7 @@ export const initializeGapi = async (): Promise<void> => {
       
       console.log('🔑 Client ID 확인 완료');
 
-      // GAPI 로드 (단순화)
+      // GAPI 로드 (client와 auth2 모두 로드)
       console.log('📚 GAPI 라이브러리 로드 중...');
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -105,12 +105,19 @@ export const initializeGapi = async (): Promise<void> => {
         });
       });
 
-      // 클라이언트 초기화 (단순화)
-      console.log('🔧 GAPI 클라이언트 초기화 중...');
-      await gapi.client.init({
-        clientId: clientId,
-        scope: SCOPES
-      });
+      // 클라이언트와 Auth2 동시 초기화
+      console.log('🔧 GAPI 클라이언트 및 Auth2 초기화 중...');
+      await Promise.all([
+        gapi.client.init({
+          clientId: clientId,
+          scope: SCOPES,
+          discoveryDocs: [DISCOVERY_DOC]
+        }),
+        gapi.auth2.init({
+          client_id: clientId,
+          scope: SCOPES
+        })
+      ]);
 
       gapiInitialized = true;
       console.log('✅ GAPI 초기화 완료');
