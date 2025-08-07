@@ -185,24 +185,37 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const requests: any[] = [];
   let currentIndex = 1;
   
-  // 문서 제목 추가
-  const title = "기술진단 및 진단 보고서\n기계설비 성능점검 및 유지관리자 업무 Troubleshooting\n";
-  const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}\n\n`;
+  // 전체 콘텐츠 구성
+  const mainTitle = "기술진단 및 진단 보고서";
+  const subTitle = "기계설비 성능점검 및 유지관리자 업무 Troubleshooting";
+  const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}`;
   
-  // 제목 삽입
+  const content = tempDiv.textContent || tempDiv.innerText || '';
+  const paragraphs = content.split('\n').filter(p => p.trim() !== '');
+  
+  // 전체 텍스트를 한 번에 삽입
+  let fullText = mainTitle + '\n' + subTitle + '\n\n' + date + '\n\n';
+  paragraphs.forEach(paragraph => {
+    fullText += paragraph.trim() + '\n\n';
+  });
+  
+  // 텍스트 삽입
   requests.push({
     insertText: {
       location: { index: currentIndex },
-      text: title
+      text: fullText
     }
   });
   
-  // 제목을 Heading 1로 설정
+  // 인덱스 추적 변수
+  let indexTracker = currentIndex;
+  
+  // 메인 제목을 Heading 1로 설정
   requests.push({
     updateParagraphStyle: {
       range: {
-        startIndex: currentIndex,
-        endIndex: currentIndex + title.split('\n')[0].length
+        startIndex: indexTracker,
+        endIndex: indexTracker + mainTitle.length
       },
       paragraphStyle: {
         namedStyleType: 'HEADING_1'
@@ -210,16 +223,14 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'namedStyleType'
     }
   });
-  
-  currentIndex += title.length;
+  indexTracker += mainTitle.length + 1; // +1 for newline
   
   // 부제목을 Heading 2로 설정
-  const subtitleStart = currentIndex - title.split('\n')[1].length - 1;
   requests.push({
     updateParagraphStyle: {
       range: {
-        startIndex: subtitleStart,
-        endIndex: subtitleStart + title.split('\n')[1].length
+        startIndex: indexTracker,
+        endIndex: indexTracker + subTitle.length
       },
       paragraphStyle: {
         namedStyleType: 'HEADING_2'
@@ -227,42 +238,36 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'namedStyleType'
     }
   });
+  indexTracker += subTitle.length + 2; // +2 for newlines
   
-  // 날짜 삽입
+  // 날짜 스타일링 (볼드)
   requests.push({
-    insertText: {
-      location: { index: currentIndex },
-      text: date
+    updateTextStyle: {
+      range: {
+        startIndex: indexTracker,
+        endIndex: indexTracker + date.length
+      },
+      textStyle: {
+        bold: true
+      },
+      fields: 'bold'
     }
   });
+  indexTracker += date.length + 2; // +2 for newlines
   
-  currentIndex += date.length;
-  
-  // HTML 콘텐츠 처리
-  const content = tempDiv.textContent || tempDiv.innerText || '';
-  
-  // 콘텐츠를 문단별로 나누고 포맷팅 적용
-  const paragraphs = content.split('\n').filter(p => p.trim() !== '');
-  
-  paragraphs.forEach((paragraph, index) => {
-    // 각 문단에 줄바꿈 추가
-    const paragraphText = paragraph.trim() + '\n\n';
-    
-    requests.push({
-      insertText: {
-        location: { index: currentIndex },
-        text: paragraphText
-      }
-    });
+  // 각 문단에 볼드 처리 적용
+  paragraphs.forEach((paragraph) => {
+    const trimmedParagraph = paragraph.trim();
     
     // 숫자가 포함된 문장이나 중요한 키워드가 있는 경우 볼드 처리
-    if (paragraph.includes('진단') || paragraph.includes('점검') || paragraph.includes('결과') || 
-        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW)/.test(paragraph)) {
+    if (trimmedParagraph.includes('진단') || trimmedParagraph.includes('점검') || 
+        trimmedParagraph.includes('결과') || trimmedParagraph.includes('측정') ||
+        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω)/.test(trimmedParagraph)) {
       requests.push({
         updateTextStyle: {
           range: {
-            startIndex: currentIndex,
-            endIndex: currentIndex + paragraph.length
+            startIndex: indexTracker,
+            endIndex: indexTracker + trimmedParagraph.length
           },
           textStyle: {
             bold: true
@@ -272,7 +277,7 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       });
     }
     
-    currentIndex += paragraphText.length;
+    indexTracker += trimmedParagraph.length + 2; // +2 for newlines
   });
   
   return requests;
