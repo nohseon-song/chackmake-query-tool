@@ -23,12 +23,13 @@ interface LogEntry {
 interface LogDisplayProps {
   logs: LogEntry[];
   isDark: boolean;
+  equipment?: string;
   onDeleteLog?: (id: string) => void;
   onDownloadPdf?: (content: string) => void;
   onGoogleAuth?: () => Promise<string>;
 }
 
-const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onGoogleAuth }) => {
+const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDeleteLog, onGoogleAuth }) => {
   const logRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGoogleDocsDownloading, setIsGoogleDocsDownloading] = useState(false);
@@ -76,7 +77,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, onDeleteLog, onGo
       }
       
       // Google Docs 문서 생성
-      const documentUrl = await createGoogleDoc(combinedHtml, accessToken);
+      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipment);
       
       toast({
         title: "Google Docs 문서가 생성되었습니다",

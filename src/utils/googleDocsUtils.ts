@@ -193,18 +193,39 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const content = tempDiv.textContent || tempDiv.innerText || '';
   const lines = content.split('\n').filter(p => p.trim() !== '');
   
-  // 전체 텍스트 구성 - 구조화된 형태로
+  // 전체 텍스트 구성 - 개선된 구조화
   let fullText = mainTitle + '\n\n' + subTitle + '\n\n' + date + '\n\n\n';
   
-  // 각 라인을 분석하여 구조화
+  // 각 라인을 분석하여 구조화하고 줄바꿈 개선
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
     if (trimmedLine) {
-      // 숫자로 시작하는 주요 항목은 앞에 줄바꿈 추가
+      // 주요 항목 (숫자로 시작): "1. 점검 대상 설비"
       if (/^\d+\.\s/.test(trimmedLine)) {
+        fullText += '\n══════════════════════════════════\n\n' + trimmedLine + '\n\n';
+      }
+      // 세부 항목 (한글 가나다 또는 영문으로 시작하는 하위 항목): "가. 설비 정보", "1) 펌프 성능"
+      else if (/^[가-힣]\.\s|^\d+\)\s|^[a-zA-Z]\)\s/.test(trimmedLine)) {
         fullText += '\n' + trimmedLine + '\n\n';
-      } else {
-        fullText += trimmedLine + '\n\n';
+      }
+      // 일반 텍스트 - 문장별로 줄바꿈 처리
+      else {
+        // 긴 문장은 의미 단위로 나누어 줄바꿈
+        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
+        if (sentences.length > 1) {
+          sentences.forEach((sentence, i) => {
+            if (sentence.trim()) {
+              fullText += sentence.trim();
+              if (i < sentences.length - 1) {
+                fullText += '.\n';
+              } else {
+                fullText += sentences[sentences.length - 1].includes('.') ? '\n\n' : '.\n\n';
+              }
+            }
+          });
+        } else {
+          fullText += trimmedLine + '\n\n';
+        }
       }
     }
   });
@@ -265,16 +286,16 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   });
   indexTracker += date.length + 3; // +3 for newlines
   
-  // 각 라인에 스타일 적용
+  // 각 라인에 스타일 적용 - 개선된 처리
   lines.forEach((line) => {
     const trimmedLine = line.trim();
     if (!trimmedLine) return;
     
-    // 숫자로 시작하는 주요 항목은 앞에 줄바꿈이 있으므로 +1
+    // 주요 항목 (숫자로 시작): Heading 2 적용
     if (/^\d+\.\s/.test(trimmedLine)) {
-      indexTracker += 1; // 앞의 줄바꿈
+      // 구분선과 줄바꿈 건너뛰기
+      indexTracker += 37; // "══════════════════════════════════\n\n" 길이
       
-      // 주요 항목을 Heading 2로 설정
       requests.push({
         updateParagraphStyle: {
           range: {
@@ -287,30 +308,90 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
           fields: 'namedStyleType'
         }
       });
+      indexTracker += trimmedLine.length + 2; // +2 for newlines
     }
-    
-    // 중요한 키워드나 수치가 포함된 경우 볼드 처리
-    if (trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
-        trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
-        trimmedLine.includes('역할') || trimmedLine.includes('전문분야') ||
-        trimmedLine.includes('참여역할') || trimmedLine.includes('핵심') ||
-        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%)/.test(trimmedLine)) {
+    // 세부 항목: Heading 3 적용
+    else if (/^[가-힣]\.\s|^\d+\)\s|^[a-zA-Z]\)\s/.test(trimmedLine)) {
+      indexTracker += 1; // 앞의 줄바꿈
+      
       requests.push({
-        updateTextStyle: {
+        updateParagraphStyle: {
           range: {
             startIndex: indexTracker,
             endIndex: indexTracker + trimmedLine.length
           },
-          textStyle: {
-            bold: true
+          paragraphStyle: {
+            namedStyleType: 'HEADING_3'
           },
-          fields: 'bold'
+          fields: 'namedStyleType'
         }
       });
+      indexTracker += trimmedLine.length + 2; // +2 for newlines
     }
-    
-    // 인덱스 업데이트
-    indexTracker += trimmedLine.length + 2; // +2 for newlines
+    // 일반 텍스트 처리
+    else {
+      // 중요한 키워드나 수치가 포함된 경우 볼드 처리
+      if (trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
+          trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
+          trimmedLine.includes('역할') || trimmedLine.includes('전문분야') ||
+          trimmedLine.includes('참여역할') || trimmedLine.includes('핵심') ||
+          trimmedLine.includes('성능') || trimmedLine.includes('상태') ||
+          trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
+          trimmedLine.includes('유량') || trimmedLine.includes('진동') ||
+          /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine)) {
+        
+        // 문장이 나뉘어 있는 경우 각각 처리
+        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
+        if (sentences.length > 1) {
+          sentences.forEach((sentence, i) => {
+            if (sentence.trim()) {
+              const sentenceLength = sentence.trim().length + (i < sentences.length - 1 ? 2 : 1); // 마침표와 줄바꿈 포함
+              
+              requests.push({
+                updateTextStyle: {
+                  range: {
+                    startIndex: indexTracker,
+                    endIndex: indexTracker + sentenceLength - 1
+                  },
+                  textStyle: {
+                    bold: true
+                  },
+                  fields: 'bold'
+                }
+              });
+              indexTracker += sentenceLength;
+            }
+          });
+          indexTracker += 1; // 마지막 줄바꿈
+        } else {
+          requests.push({
+            updateTextStyle: {
+              range: {
+                startIndex: indexTracker,
+                endIndex: indexTracker + trimmedLine.length
+              },
+              textStyle: {
+                bold: true
+              },
+              fields: 'bold'
+            }
+          });
+          indexTracker += trimmedLine.length + 2; // +2 for newlines
+        }
+      } else {
+        // 일반 텍스트 인덱스 업데이트
+        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
+        if (sentences.length > 1) {
+          sentences.forEach((sentence, i) => {
+            const sentenceLength = sentence.trim().length + (i < sentences.length - 1 ? 2 : 1);
+            indexTracker += sentenceLength;
+          });
+          indexTracker += 1; // 마지막 줄바꿈
+        } else {
+          indexTracker += trimmedLine.length + 2; // +2 for newlines
+        }
+      }
+    }
   });
   
   return requests;
@@ -319,17 +400,17 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
 // 파일명 생성 함수
-const generateReportFileName = (): string => {
+const generateReportFileName = (equipmentName: string = 'ultra'): string => {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
   const month = String(currentDate.getMonth() + 1).padStart(2, '0');
   const day = String(currentDate.getDate()).padStart(2, '0');
   
-  return `기술진단내역작성_ultra_${year}.${month}.${day}`;
+  return `기술진단내역작성_${equipmentName}_${year}.${month}.${day}`;
 };
 
 // Google Docs 생성 (완전 새로운 방식)
-export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
+export const createGoogleDoc = async (htmlContent: string, accessToken: string, equipmentName?: string): Promise<string> => {
   try {
     console.log('🚀 Google Docs 생성 시작');
     
@@ -357,7 +438,7 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        title: generateReportFileName()
+        title: generateReportFileName(equipmentName)
       })
     });
 

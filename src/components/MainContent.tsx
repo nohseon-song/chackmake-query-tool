@@ -116,6 +116,7 @@ const MainContent: React.FC<MainContentProps> = ({
       <LogDisplay 
         logs={logs} 
         isDark={isDark} 
+        equipment={equipment}
         onDeleteLog={onDeleteLog}
         onDownloadPdf={onDownloadPdf}
         onGoogleAuth={onGoogleAuth}
