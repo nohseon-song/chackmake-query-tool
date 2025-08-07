@@ -355,27 +355,30 @@ export const htmlToPlainText = (html: string): string => {
   return tempDiv.textContent || tempDiv.innerText || '';
 };
 
-// Google Docs 생성 (완전한 오류 처리 포함)
+// Google Docs 생성 (타임아웃 및 진행상황 로그 개선)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
   try {
+    console.log('🚀 Google Docs 생성 프로세스 시작');
     await initializeGapi();
 
-    console.log('Google Docs 생성 시작, 액세스 토큰 길이:', accessToken.length);
+    console.log('✅ GAPI 초기화 완료, 액세스 토큰 길이:', accessToken.length);
 
     // 토큰 유효성 재검증
+    console.log('🔍 토큰 유효성 검증 중...');
     const isTokenValid = await validateGoogleToken(accessToken);
     if (!isTokenValid) {
       throw new Error('액세스 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
     }
+    console.log('✅ 토큰 유효성 검증 완료');
 
     // Google Docs API가 로드되었는지 확인 및 재로드
     if (!gapi.client.docs) {
-      console.log('Google Docs API 로드 중...');
+      console.log('📚 Google Docs API 로드 중...');
       try {
         await gapi.client.load('docs', 'v1');
-        console.log('Google Docs API 로드 완료');
+        console.log('✅ Google Docs API 로드 완료');
       } catch (loadError) {
-        console.error('Google Docs API 로드 실패:', loadError);
+        console.error('❌ Google Docs API 로드 실패:', loadError);
         throw new Error('Google Docs API를 로드할 수 없습니다. 네트워크 연결을 확인해주세요.');
       }
     }
@@ -383,57 +386,80 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
     let documentId: string;
     
     try {
-      // 새 문서 생성
-      const createResponse = await gapi.client.docs.documents.create({
+      console.log('📄 새 문서 생성 중...');
+      // 타임아웃 설정 (30초)
+      const createPromise = gapi.client.docs.documents.create({
         title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('문서 생성 타임아웃 (30초)')), 30000);
+      });
+
+      const createResponse = await Promise.race([createPromise, timeoutPromise]) as any;
 
       documentId = createResponse.result.documentId;
       if (!documentId) {
         throw new Error('문서 ID를 받지 못했습니다.');
       }
       
-      console.log('Google Docs 생성 완료:', documentId);
+      console.log('✅ Google Docs 생성 완료:', documentId);
     } catch (createError) {
-      console.error('문서 생성 중 오류:', createError);
+      console.error('❌ GAPI 문서 생성 중 오류:', createError);
       
       // Fallback: 직접 HTTP 요청으로 문서 생성
-      const createResponse = await fetch('https://docs.googleapis.com/v1/documents', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
-        })
-      });
-
-      if (!createResponse.ok) {
-        const errorText = await createResponse.text();
-        throw new Error(`문서 생성 실패: ${createResponse.status} ${errorText}`);
-      }
-
-      const createResult = await createResponse.json();
-      documentId = createResult.documentId;
+      console.log('🔄 Fallback 방식으로 문서 생성 시도...');
       
-      if (!documentId) {
-        throw new Error('Fallback 방식으로도 문서 ID를 받지 못했습니다.');
-      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      console.log('Fallback으로 Google Docs 생성 완료:', documentId);
+      try {
+        const createResponse = await fetch('https://docs.googleapis.com/v1/documents', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!createResponse.ok) {
+          const errorText = await createResponse.text();
+          throw new Error(`문서 생성 실패: ${createResponse.status} ${errorText}`);
+        }
+
+        const createResult = await createResponse.json();
+        documentId = createResult.documentId;
+        
+        if (!documentId) {
+          throw new Error('Fallback 방식으로도 문서 ID를 받지 못했습니다.');
+        }
+        
+        console.log('✅ Fallback으로 Google Docs 생성 완료:', documentId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
+      }
     }
 
     // HTML 콘텐츠를 플레인 텍스트로 변환
+    console.log('📝 콘텐츠 변환 중...');
     const plainText = htmlToPlainText(htmlContent);
     
     if (!plainText || plainText.trim().length === 0) {
       throw new Error('변환할 콘텐츠가 없습니다.');
     }
+    console.log('✅ 콘텐츠 변환 완료, 길이:', plainText.length);
 
     try {
-      // 문서에 콘텐츠 추가
-      await gapi.client.docs.documents.batchUpdate({
+      console.log('📝 문서에 콘텐츠 추가 중...');
+      // 타임아웃 설정 (30초)
+      const updatePromise = gapi.client.docs.documents.batchUpdate({
         documentId: documentId,
         requests: [
           {
@@ -446,42 +472,61 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
           }
         ]
       });
-      
-      console.log('GAPI로 문서 업데이트 완료');
-    } catch (updateError) {
-      console.error('GAPI 업데이트 중 오류:', updateError);
-      
-      // Fallback: 직접 HTTP 요청으로 문서 업데이트
-      const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              insertText: {
-                location: {
-                  index: 1
-                },
-                text: plainText
-              }
-            }
-          ]
-        })
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('문서 업데이트 타임아웃 (30초)')), 30000);
       });
 
-      if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        throw new Error(`문서 업데이트 실패: ${updateResponse.status} ${errorText}`);
-      }
+      await Promise.race([updatePromise, timeoutPromise]);
       
-      console.log('Fallback으로 문서 업데이트 완료');
+      console.log('✅ GAPI로 문서 업데이트 완료');
+    } catch (updateError) {
+      console.error('❌ GAPI 업데이트 중 오류:', updateError);
+      
+      // Fallback: 직접 HTTP 요청으로 문서 업데이트
+      console.log('🔄 Fallback 방식으로 문서 업데이트 시도...');
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      try {
+        const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [
+              {
+                insertText: {
+                  location: {
+                    index: 1
+                  },
+                  text: plainText
+                }
+              }
+            ]
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          throw new Error(`문서 업데이트 실패: ${updateResponse.status} ${errorText}`);
+        }
+        
+        console.log('✅ Fallback으로 문서 업데이트 완료');
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError;
+      }
     }
 
     const documentUrl = `https://docs.google.com/document/d/${documentId}/edit`;
-    console.log('Google Docs 생성 및 업데이트 완료:', documentUrl);
+    console.log('🎉 Google Docs 생성 및 업데이트 완료:', documentUrl);
     
     return documentUrl;
   } catch (error) {
