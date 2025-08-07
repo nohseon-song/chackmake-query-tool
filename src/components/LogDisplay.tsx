@@ -76,25 +76,13 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
         throw new Error('내보낼 콘텐츠가 없습니다.');
       }
       
-      // Google Docs 문서 생성 - 설비명 확실히 전달
+      // Google Docs 문서 생성
       console.log('📱 LogDisplay에서 createGoogleDoc 호출', {
-        equipment: equipment,
-        equipmentType: typeof equipment,
-        equipmentLength: equipment?.length || 0,
-        hasEquipment: !!equipment,
-        equipmentValue: `"${equipment}"`
+        equipment: equipment || '',
+        hasEquipment: !!equipment
       });
       
-      // equipment가 빈 문자열이면 HTML에서 설비명 추출 시도
-      const finalEquipmentName = equipment && equipment.trim() ? equipment.trim() : undefined;
-      
-      console.log('🔧 최종 설비명 확인:', {
-        originalEquipment: equipment,
-        finalEquipmentName: finalEquipmentName,
-        willUseEquipmentName: !!finalEquipmentName
-      });
-      
-      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, finalEquipmentName);
+      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipment || undefined);
       
       toast({
         title: "Google Docs 문서가 생성되었습니다",
