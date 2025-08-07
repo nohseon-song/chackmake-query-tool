@@ -191,12 +191,22 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}`;
   
   const content = tempDiv.textContent || tempDiv.innerText || '';
-  const paragraphs = content.split('\n').filter(p => p.trim() !== '');
+  const lines = content.split('\n').filter(p => p.trim() !== '');
   
-  // 전체 텍스트를 한 번에 삽입
-  let fullText = mainTitle + '\n' + subTitle + '\n\n' + date + '\n\n';
-  paragraphs.forEach(paragraph => {
-    fullText += paragraph.trim() + '\n\n';
+  // 전체 텍스트 구성 - 구조화된 형태로
+  let fullText = mainTitle + '\n\n' + subTitle + '\n\n' + date + '\n\n\n';
+  
+  // 각 라인을 분석하여 구조화
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+    if (trimmedLine) {
+      // 숫자로 시작하는 주요 항목은 앞에 줄바꿈 추가
+      if (/^\d+\.\s/.test(trimmedLine)) {
+        fullText += '\n' + trimmedLine + '\n\n';
+      } else {
+        fullText += trimmedLine + '\n\n';
+      }
+    }
   });
   
   // 텍스트 삽입
@@ -223,7 +233,7 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'namedStyleType'
     }
   });
-  indexTracker += mainTitle.length + 1; // +1 for newline
+  indexTracker += mainTitle.length + 2; // +2 for newlines
   
   // 부제목을 Heading 2로 설정
   requests.push({
@@ -253,21 +263,43 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       fields: 'bold'
     }
   });
-  indexTracker += date.length + 2; // +2 for newlines
+  indexTracker += date.length + 3; // +3 for newlines
   
-  // 각 문단에 볼드 처리 적용
-  paragraphs.forEach((paragraph) => {
-    const trimmedParagraph = paragraph.trim();
+  // 각 라인에 스타일 적용
+  lines.forEach((line) => {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) return;
     
-    // 숫자가 포함된 문장이나 중요한 키워드가 있는 경우 볼드 처리
-    if (trimmedParagraph.includes('진단') || trimmedParagraph.includes('점검') || 
-        trimmedParagraph.includes('결과') || trimmedParagraph.includes('측정') ||
-        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω)/.test(trimmedParagraph)) {
+    // 숫자로 시작하는 주요 항목은 앞에 줄바꿈이 있으므로 +1
+    if (/^\d+\.\s/.test(trimmedLine)) {
+      indexTracker += 1; // 앞의 줄바꿈
+      
+      // 주요 항목을 Heading 2로 설정
+      requests.push({
+        updateParagraphStyle: {
+          range: {
+            startIndex: indexTracker,
+            endIndex: indexTracker + trimmedLine.length
+          },
+          paragraphStyle: {
+            namedStyleType: 'HEADING_2'
+          },
+          fields: 'namedStyleType'
+        }
+      });
+    }
+    
+    // 중요한 키워드나 수치가 포함된 경우 볼드 처리
+    if (trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
+        trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
+        trimmedLine.includes('역할') || trimmedLine.includes('전문분야') ||
+        trimmedLine.includes('참여역할') || trimmedLine.includes('핵심') ||
+        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%)/.test(trimmedLine)) {
       requests.push({
         updateTextStyle: {
           range: {
             startIndex: indexTracker,
-            endIndex: indexTracker + trimmedParagraph.length
+            endIndex: indexTracker + trimmedLine.length
           },
           textStyle: {
             bold: true
@@ -277,7 +309,8 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       });
     }
     
-    indexTracker += trimmedParagraph.length + 2; // +2 for newlines
+    // 인덱스 업데이트
+    indexTracker += trimmedLine.length + 2; // +2 for newlines
   });
   
   return requests;
@@ -345,17 +378,22 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
 
     // 문서를 지정된 폴더로 이동
     console.log('📁 문서 폴더 이동 중...');
-    await fetch(`https://www.googleapis.com/drive/v3/files/${documentId}`, {
+    const moveResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        addParents: FOLDER_ID,
-        removeParents: 'root'
-      })
+      }
     });
+
+    if (!moveResponse.ok) {
+      const errorText = await moveResponse.text();
+      console.error('폴더 이동 오류:', moveResponse.status, errorText);
+      // 폴더 이동 실패해도 문서 생성은 계속 진행
+      console.log('⚠️ 폴더 이동에 실패했지만 문서 생성은 계속 진행합니다.');
+    } else {
+      console.log('✅ 폴더 이동 완료');
+    }
 
     // 문서에 포맷팅된 콘텐츠 추가
     console.log('📝 포맷팅된 콘텐츠 추가 중...');
