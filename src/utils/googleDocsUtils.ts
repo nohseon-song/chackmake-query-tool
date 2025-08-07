@@ -184,6 +184,9 @@ export const htmlToPlainText = (html: string): string => {
   return tempDiv.textContent || tempDiv.innerText || '';
 };
 
+// 파일명 생성 함수 import
+import { generateReportFileName } from './reportGenerator';
+
 // Google Docs 생성 (완전 새로운 방식)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string): Promise<string> => {
   try {
@@ -213,7 +216,8 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
+        title: generateReportFileName(),
+        parents: ['1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'] // 지정된 폴더 ID
       })
     });
 

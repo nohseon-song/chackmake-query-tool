@@ -5,6 +5,7 @@ import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
+import ReportGenerator from '@/components/ReportGenerator';
 
 interface Reading {
   equipment: string;
@@ -120,6 +121,11 @@ const MainContent: React.FC<MainContentProps> = ({
         onDeleteLog={onDeleteLog}
         onDownloadPdf={onDownloadPdf}
         onGoogleAuth={onGoogleAuth}
+      />
+
+      <ReportGenerator 
+        onGoogleAuth={onGoogleAuth}
+        isDark={isDark}
       />
     </main>
   );
