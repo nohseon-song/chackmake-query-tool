@@ -73,7 +73,8 @@ export const authenticateGoogle = async (): Promise<string> => {
     // OAuth 2.0 파라미터 설정
     const scope = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
     const redirectUri = `${window.location.protocol}//${window.location.host}`;
-    const responseType = 'token';
+    const responseType = 'code'; // 'token'에서 'code'로 변경
+    const accessType = 'offline'; // refresh token을 받기 위해 추가
     const state = Math.random().toString(36).substring(2, 15);
     
     // OAuth URL 생성
@@ -84,7 +85,7 @@ export const authenticateGoogle = async (): Promise<string> => {
     authUrl.searchParams.append('scope', scope);
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('include_granted_scopes', 'true');
-    authUrl.searchParams.append('prompt', 'consent');
+    authUrl.searchParams.append('access_type', accessType); // access_type 추가
 
     console.log('🪟 OAuth 팝업 열기');
     
@@ -117,7 +118,7 @@ export const authenticateGoogle = async (): Promise<string> => {
           window.removeEventListener('message', messageListener);
           popup.close();
           console.log('✅ 인증 성공');
-          resolve(event.data.accessToken);
+          resolve(event.data.code); // code를 반환하도록 수정
         } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
           clearInterval(checkClosed);
           window.removeEventListener('message', messageListener);
@@ -133,19 +134,16 @@ export const authenticateGoogle = async (): Promise<string> => {
         try {
           if (popup.location.href.includes(redirectUri)) {
             const url = new URL(popup.location.href);
-            const fragment = url.hash.substring(1);
-            const params = new URLSearchParams(fragment);
+            const code = url.searchParams.get('code');
+            const error = url.searchParams.get('error');
             
-            const accessToken = params.get('access_token');
-            const error = params.get('error');
-            
-            if (accessToken) {
+            if (code) {
               clearInterval(checkUrl);
               clearInterval(checkClosed);
               window.removeEventListener('message', messageListener);
               popup.close();
-              console.log('✅ 토큰 획득 성공');
-              resolve(accessToken);
+              console.log('✅ 코드 획득 성공');
+              resolve(code);
             } else if (error) {
               clearInterval(checkUrl);
               clearInterval(checkClosed);
@@ -467,7 +465,40 @@ const generateReportFileName = (equipmentName?: string, htmlContent?: string): s
   return fileName;
 };
 
-// Google Docs 생성 (간소화 버전)
+// Authorization Code를 Access Token으로 교환
+export const exchangeCodeForToken = async (code: string): Promise<{ accessToken: string; refreshToken?: string }> => {
+  try {
+    const clientId = getGoogleClientId();
+    if (!clientId) {
+      throw new Error('Google Client ID가 설정되지 않았습니다.');
+    }
+
+    const response = await fetch('https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/google-token-exchange', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
+        'apikey': `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
+      },
+      body: JSON.stringify({ code, clientId })
+    });
+
+    if (!response.ok) {
+      throw new Error('토큰 교환에 실패했습니다.');
+    }
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token
+    };
+  } catch (error) {
+    console.error('토큰 교환 오류:', error);
+    throw new Error('토큰 교환에 실패했습니다.');
+  }
+};
+
+// Google Docs 생성 (개선된 버전)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string, equipmentName?: string): Promise<string> => {
   try {
     console.log('🚀 Google Docs 생성 시작', { equipmentName });

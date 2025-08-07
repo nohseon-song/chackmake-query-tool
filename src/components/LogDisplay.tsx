@@ -5,7 +5,7 @@ import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
 import { getReportStyles } from '@/styles/reportStyles';
 import { getCombinedHtml } from '@/utils/htmlUtils';
-import { createGoogleDoc } from '@/utils/googleDocsUtils';
+import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { useToast } from '@/hooks/use-toast';
 
 interface LogEntry {
@@ -60,14 +60,19 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
   };
 
   const handleGoogleDocsDownload = async () => {
-    if (isGoogleDocsDownloading || !onGoogleAuth) return;
+    if (isGoogleDocsDownloading) return;
     
     try {
       setIsGoogleDocsDownloading(true);
-      console.log('Google Docs 다운로드 버튼 클릭됨');
+      console.log('🚀 Google Docs 다운로드 시작 (Authorization Code Flow)');
       
-      // Google 인증 처리
-      const accessToken = await onGoogleAuth();
+      // Google 인증 (Authorization Code Flow)
+      const code = await authenticateGoogle();
+      console.log('✅ 인증 코드 획득 성공');
+      
+      // 코드를 액세스 토큰으로 교환
+      const { accessToken } = await exchangeCodeForToken(code);
+      console.log('✅ 토큰 교환 성공');
       
       // HTML 콘텐츠 가져오기
       const combinedHtml = responseLogs.map(log => getCombinedHtml(log)).join('\n\n');
