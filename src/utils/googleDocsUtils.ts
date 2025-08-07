@@ -196,7 +196,7 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   // 전체 텍스트 구성 - 극대화된 가독성을 위한 구조화
   let fullText = mainTitle + '\n\n' + subTitle + '\n\n' + date + '\n\n\n';
   
-  // 각 라인을 분석하여 구조화하고 줄바꿈 극대화
+  // 각 라인을 분석하여 구조화하고 극대화된 가독성 적용
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
     if (trimmedLine) {
@@ -213,46 +213,77 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
                trimmedLine.includes('기대 효과') || trimmedLine.includes('종합 결론')) {
         fullText += trimmedLine + '\n\n';
       }
-      // 일반 텍스트 - 문장을 짧게 분리하여 가독성 극대화
+      // 일반 텍스트 - 최대 4줄 문단 제한으로 극대화된 가독성
       else {
-        // 문장을 더 짧게 분리 (40자 이상이면 분리)
-        if (trimmedLine.length > 40) {
-          // 쉼표나 접속어를 기준으로 분리
-          const parts = trimmedLine.split(/,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s/).filter(p => p.trim());
+        // 긴 문장을 짧게 분리 (30자 이상이면 무조건 분리)
+        if (trimmedLine.length > 30) {
+          // 구두점과 접속어를 기준으로 더 세밀하게 분리
+          const separators = /,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s|이에\s|즉\s|특히\s|결과적으로\s|반면에\s|한편\s|또는\s|및\s|등의\s/;
+          const parts = trimmedLine.split(separators).filter(p => p.trim());
+          
           if (parts.length > 1) {
+            // 4줄 이내 문단으로 분리
+            let currentParagraph = '';
+            let lineCount = 0;
+            
             parts.forEach((part, i) => {
-              if (part.trim()) {
-                if (i === 0) {
-                  fullText += part.trim();
-                  if (!part.trim().endsWith('.') && !part.trim().endsWith(',')) {
-                    fullText += ',';
+              const cleanPart = part.trim();
+              if (cleanPart) {
+                if (lineCount < 3) { // 최대 3줄까지만
+                  currentParagraph += cleanPart;
+                  if (i < parts.length - 1 && !cleanPart.endsWith('.')) {
+                    currentParagraph += ',';
                   }
-                  fullText += '\n';
-                } else if (i === parts.length - 1) {
-                  fullText += part.trim();
-                  if (!part.trim().endsWith('.')) {
-                    fullText += '.';
-                  }
-                  fullText += '\n\n';
+                  currentParagraph += '\n';
+                  lineCount++;
                 } else {
-                  fullText += part.trim() + '\n';
+                  // 4번째 줄이면 문단 완료하고 새 문단 시작
+                  if (!currentParagraph.endsWith('.')) {
+                    currentParagraph = currentParagraph.trim() + '.';
+                  }
+                  fullText += currentParagraph + '\n';
+                  
+                  // 새 문단 시작
+                  currentParagraph = cleanPart;
+                  if (i < parts.length - 1 && !cleanPart.endsWith('.')) {
+                    currentParagraph += ',';
+                  }
+                  currentParagraph += '\n';
+                  lineCount = 1;
                 }
               }
             });
+            
+            // 마지막 문단 처리
+            if (currentParagraph.trim()) {
+              if (!currentParagraph.endsWith('.')) {
+                currentParagraph = currentParagraph.trim() + '.';
+              }
+              fullText += currentParagraph + '\n';
+            }
           } else {
-            // 마침표로 분리
-            const sentences = trimmedLine.split(/\.\s/).filter(s => s.trim());
+            // 마침표로 한번 더 분리 시도
+            const sentences = trimmedLine.split(/\.\s+/).filter(s => s.trim());
             if (sentences.length > 1) {
+              let sentenceCount = 0;
               sentences.forEach((sentence, i) => {
                 if (sentence.trim()) {
                   fullText += sentence.trim();
                   if (i < sentences.length - 1) {
                     fullText += '.\n';
                   } else {
-                    fullText += trimmedLine.endsWith('.') ? '.\n\n' : '.\n\n';
+                    fullText += trimmedLine.endsWith('.') ? '.\n' : '.\n';
+                  }
+                  sentenceCount++;
+                  
+                  // 3문장마다 문단 분리
+                  if (sentenceCount >= 3 && i < sentences.length - 1) {
+                    fullText += '\n';
+                    sentenceCount = 0;
                   }
                 }
               });
+              fullText += '\n';
             } else {
               fullText += trimmedLine + '\n\n';
             }
@@ -364,41 +395,68 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       }
       // 일반 텍스트
       else {
-        // 40자 이상인 경우 분리된 텍스트 처리
-        if (trimmedLine.length > 40) {
-          const parts = trimmedLine.split(/,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s/).filter(p => p.trim());
+        // 30자 이상인 경우 분리된 텍스트 처리 (4줄 문단 제한)
+        if (trimmedLine.length > 30) {
+          const separators = /,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s|이에\s|즉\s|특히\s|결과적으로\s|반면에\s|한편\s|또는\s|및\s|등의\s/;
+          const parts = trimmedLine.split(separators).filter(p => p.trim());
+          
           if (parts.length > 1) {
+            let lineCount = 0;
             parts.forEach((part, i) => {
               if (part.trim()) {
                 let partText = part.trim();
-                if (i === 0 && !partText.endsWith('.') && !partText.endsWith(',')) {
-                  partText += ',';
-                } else if (i === parts.length - 1 && !partText.endsWith('.')) {
-                  partText += '.';
+                
+                if (lineCount < 3) { // 최대 3줄까지만
+                  if (i < parts.length - 1 && !partText.endsWith('.')) {
+                    partText += ',';
+                  } else if (i === parts.length - 1 && !partText.endsWith('.')) {
+                    partText += '.';
+                  }
+                  
+                  // 선택적 강조 - 핵심 키워드와 수치만
+                  const hasKeyword = partText.includes('핵심') || partText.includes('원인') || 
+                                   partText.includes('개선') || partText.includes('권고') ||
+                                   partText.includes('진단') || partText.includes('결과');
+                  const hasNumeric = /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(partText);
+                  
+                  textParts.push({
+                    text: partText,
+                    style: (hasKeyword || hasNumeric) ? 'BOLD' : 'NORMAL',
+                    startIndex: currentPos,
+                    endIndex: currentPos + partText.length
+                  });
+                  currentPos += partText.length + 1; // +1 for newline
+                  lineCount++;
+                } else {
+                  // 4번째 줄이면 문단 분리
+                  currentPos += 1; // 추가 줄바꿈
+                  
+                  if (!partText.endsWith('.')) {
+                    partText += '.';
+                  }
+                  
+                  const hasKeyword = partText.includes('핵심') || partText.includes('원인') || 
+                                   partText.includes('개선') || partText.includes('권고') ||
+                                   partText.includes('진단') || partText.includes('결과');
+                  const hasNumeric = /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(partText);
+                  
+                  textParts.push({
+                    text: partText,
+                    style: (hasKeyword || hasNumeric) ? 'BOLD' : 'NORMAL',
+                    startIndex: currentPos,
+                    endIndex: currentPos + partText.length
+                  });
+                  currentPos += partText.length + 1;
+                  lineCount = 1; // 새 문단 시작
                 }
-                
-                // 수치나 핵심 키워드 포함 여부 확인
-                const shouldBold = partText.includes('진단') || partText.includes('점검') || 
-                                 partText.includes('결과') || partText.includes('측정') ||
-                                 partText.includes('핵심') || partText.includes('원인') ||
-                                 partText.includes('압력') || partText.includes('온도') ||
-                                 partText.includes('개선') || partText.includes('권고') ||
-                                 /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(partText);
-                
-                textParts.push({
-                  text: partText,
-                  style: shouldBold ? 'BOLD' : 'NORMAL',
-                  startIndex: currentPos,
-                  endIndex: currentPos + partText.length
-                });
-                currentPos += partText.length + 1; // +1 for newline
               }
             });
-            currentPos += 1; // 마지막 줄바꿈
+            currentPos += 1; // 문단 끝 줄바꿈
           } else {
-            // 마침표로 분리
-            const sentences = trimmedLine.split(/\.\s/).filter(s => s.trim());
+            // 마침표로 분리 시도
+            const sentences = trimmedLine.split(/\.\s+/).filter(s => s.trim());
             if (sentences.length > 1) {
+              let sentenceCount = 0;
               sentences.forEach((sentence, i) => {
                 if (sentence.trim()) {
                   let sentenceText = sentence.trim();
@@ -408,34 +466,37 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
                     sentenceText += trimmedLine.endsWith('.') ? '.' : '.';
                   }
                   
-                  const shouldBold = sentenceText.includes('진단') || sentenceText.includes('점검') || 
-                                   sentenceText.includes('결과') || sentenceText.includes('측정') ||
-                                   sentenceText.includes('핵심') || sentenceText.includes('원인') ||
-                                   sentenceText.includes('압력') || sentenceText.includes('온도') ||
+                  const hasKeyword = sentenceText.includes('핵심') || sentenceText.includes('원인') || 
                                    sentenceText.includes('개선') || sentenceText.includes('권고') ||
-                                   /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(sentenceText);
+                                   sentenceText.includes('진단') || sentenceText.includes('결과');
+                  const hasNumeric = /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(sentenceText);
                   
                   textParts.push({
                     text: sentenceText,
-                    style: shouldBold ? 'BOLD' : 'NORMAL',
+                    style: (hasKeyword || hasNumeric) ? 'BOLD' : 'NORMAL',
                     startIndex: currentPos,
                     endIndex: currentPos + sentenceText.length
                   });
                   currentPos += sentenceText.length + 1; // +1 for newline
+                  sentenceCount++;
+                  
+                  // 3문장마다 문단 분리
+                  if (sentenceCount >= 3 && i < sentences.length - 1) {
+                    currentPos += 1; // 추가 줄바꿈
+                    sentenceCount = 0;
+                  }
                 }
               });
-              currentPos += 1; // 마지막 줄바꿈
+              currentPos += 1; // 문단 끝
             } else {
-              const shouldBold = trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
-                               trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
-                               trimmedLine.includes('핵심') || trimmedLine.includes('원인') ||
-                               trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
+              const hasKeyword = trimmedLine.includes('핵심') || trimmedLine.includes('원인') || 
                                trimmedLine.includes('개선') || trimmedLine.includes('권고') ||
-                               /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
+                               trimmedLine.includes('진단') || trimmedLine.includes('결과');
+              const hasNumeric = /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
               
               textParts.push({
                 text: trimmedLine,
-                style: shouldBold ? 'BOLD' : 'NORMAL',
+                style: (hasKeyword || hasNumeric) ? 'BOLD' : 'NORMAL',
                 startIndex: currentPos,
                 endIndex: currentPos + trimmedLine.length
               });
@@ -443,16 +504,14 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
             }
           }
         } else {
-          const shouldBold = trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
-                           trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
-                           trimmedLine.includes('핵심') || trimmedLine.includes('원인') ||
-                           trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
+          const hasKeyword = trimmedLine.includes('핵심') || trimmedLine.includes('원인') || 
                            trimmedLine.includes('개선') || trimmedLine.includes('권고') ||
-                           /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
+                           trimmedLine.includes('진단') || trimmedLine.includes('결과');
+          const hasNumeric = /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
           
           textParts.push({
             text: trimmedLine,
-            style: shouldBold ? 'BOLD' : 'NORMAL',
+            style: (hasKeyword || hasNumeric) ? 'BOLD' : 'NORMAL',
             startIndex: currentPos,
             endIndex: currentPos + trimmedLine.length
           });
