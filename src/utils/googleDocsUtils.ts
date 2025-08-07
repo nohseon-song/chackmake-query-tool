@@ -177,11 +177,105 @@ export const validateGoogleToken = async (accessToken: string): Promise<boolean>
   }
 };
 
-// HTML을 플레인 텍스트로 변환
-export const htmlToPlainText = (html: string): string => {
+// HTML을 Google Docs 요청 형식으로 변환
+const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = html;
-  return tempDiv.textContent || tempDiv.innerText || '';
+  
+  const requests: any[] = [];
+  let currentIndex = 1;
+  
+  // 문서 제목 추가
+  const title = "기술진단 및 진단 보고서\n기계설비 성능점검 및 유지관리자 업무 Troubleshooting\n";
+  const date = `작성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '')}\n\n`;
+  
+  // 제목 삽입
+  requests.push({
+    insertText: {
+      location: { index: currentIndex },
+      text: title
+    }
+  });
+  
+  // 제목을 Heading 1로 설정
+  requests.push({
+    updateParagraphStyle: {
+      range: {
+        startIndex: currentIndex,
+        endIndex: currentIndex + title.split('\n')[0].length
+      },
+      paragraphStyle: {
+        namedStyleType: 'HEADING_1'
+      },
+      fields: 'namedStyleType'
+    }
+  });
+  
+  currentIndex += title.length;
+  
+  // 부제목을 Heading 2로 설정
+  const subtitleStart = currentIndex - title.split('\n')[1].length - 1;
+  requests.push({
+    updateParagraphStyle: {
+      range: {
+        startIndex: subtitleStart,
+        endIndex: subtitleStart + title.split('\n')[1].length
+      },
+      paragraphStyle: {
+        namedStyleType: 'HEADING_2'
+      },
+      fields: 'namedStyleType'
+    }
+  });
+  
+  // 날짜 삽입
+  requests.push({
+    insertText: {
+      location: { index: currentIndex },
+      text: date
+    }
+  });
+  
+  currentIndex += date.length;
+  
+  // HTML 콘텐츠 처리
+  const content = tempDiv.textContent || tempDiv.innerText || '';
+  
+  // 콘텐츠를 문단별로 나누고 포맷팅 적용
+  const paragraphs = content.split('\n').filter(p => p.trim() !== '');
+  
+  paragraphs.forEach((paragraph, index) => {
+    // 각 문단에 줄바꿈 추가
+    const paragraphText = paragraph.trim() + '\n\n';
+    
+    requests.push({
+      insertText: {
+        location: { index: currentIndex },
+        text: paragraphText
+      }
+    });
+    
+    // 숫자가 포함된 문장이나 중요한 키워드가 있는 경우 볼드 처리
+    if (paragraph.includes('진단') || paragraph.includes('점검') || paragraph.includes('결과') || 
+        /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW)/.test(paragraph)) {
+      requests.push({
+        updateTextStyle: {
+          range: {
+            startIndex: currentIndex,
+            endIndex: currentIndex + paragraph.length
+          },
+          textStyle: {
+            bold: true
+          },
+          fields: 'bold'
+        }
+      });
+    }
+    
+    currentIndex += paragraphText.length;
+  });
+  
+  return requests;
 };
 
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
@@ -208,11 +302,11 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
       throw new Error('토큰이 유효하지 않습니다.');
     }
 
-    // HTML을 플레인 텍스트로 변환
+    // HTML을 Google Docs 요청으로 변환
     console.log('📝 HTML 변환 중...');
-    const plainText = htmlToPlainText(htmlContent);
+    const formattingRequests = convertHtmlToGoogleDocsRequests(htmlContent);
     
-    if (!plainText.trim()) {
+    if (formattingRequests.length === 0) {
       throw new Error('변환할 콘텐츠가 없습니다.');
     }
 
@@ -258,8 +352,8 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
       })
     });
 
-    // 문서에 콘텐츠 추가
-    console.log('📝 콘텐츠 추가 중...');
+    // 문서에 포맷팅된 콘텐츠 추가
+    console.log('📝 포맷팅된 콘텐츠 추가 중...');
     const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
       method: 'POST',
       headers: {
@@ -267,14 +361,7 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        requests: [
-          {
-            insertText: {
-              location: { index: 1 },
-              text: plainText
-            }
-          }
-        ]
+        requests: formattingRequests
       })
     });
 
