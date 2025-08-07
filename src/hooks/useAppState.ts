@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
-import { GoogleAuthState, authenticateGoogle, validateGoogleToken, initializeGapi } from '@/utils/googleDocsUtils';
+import { GoogleAuthState, authenticateGoogle, validateGoogleToken } from '@/utils/googleDocsUtils';
 
 export const useAppState = () => {
   const [isDark, setIsDark] = useState(() => {
@@ -109,8 +109,6 @@ export const useAppState = () => {
 
   const handleGoogleAuth = async (): Promise<string> => {
     try {
-      // GAPI 초기화 (Supabase에서 Client ID 자동 가져옴)
-      await initializeGapi();
       
       // 기존 토큰이 있다면 검증
       if (googleAuth.accessToken) {
