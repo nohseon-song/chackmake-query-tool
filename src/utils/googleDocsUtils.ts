@@ -106,56 +106,79 @@ export const authenticateGoogle = async (): Promise<string> => {
       throw new Error('Google Auth2 인스턴스를 가져올 수 없습니다.');
     }
     
-    // 현재 로그인 상태 확인
-    const isSignedIn = authInstance.isSignedIn.get();
-    console.log('현재 Google 로그인 상태:', isSignedIn);
-    
-    if (!isSignedIn) {
-      console.log('Google 로그인 시작...');
-      const authResult = await authInstance.signIn({
-        prompt: 'select_account'
-      });
-      
-      if (!authResult) {
-        throw new Error('Google 로그인이 취소되었습니다.');
-      }
-      
-      const authResponse = authResult.getAuthResponse();
-      if (!authResponse || !authResponse.access_token) {
-        throw new Error('Google 액세스 토큰을 가져올 수 없습니다.');
-      }
-      
-      console.log('Google 인증 성공');
-      return authResponse.access_token;
-    } else {
-      const currentUser = authInstance.currentUser.get();
-      const authResponse = currentUser.getAuthResponse();
-      
-      if (!authResponse || !authResponse.access_token) {
-        // 토큰이 없으면 다시 로그인
-        await authInstance.signOut();
-        return await authenticateGoogle();
-      }
-      
-      console.log('기존 Google 토큰 사용');
-      return authResponse.access_token;
+    // 기존 로그인 상태 확인 및 로그아웃
+    if (authInstance.isSignedIn.get()) {
+      console.log('기존 세션 정리 중...');
+      await authInstance.signOut();
     }
+    
+    console.log('새로운 Google 로그인 시작...');
+    
+    // 새로운 로그인 시도
+    const authResult = await authInstance.signIn({
+      prompt: 'select_account',
+      scope: SCOPES
+    });
+    
+    if (!authResult) {
+      throw new Error('Google 로그인이 취소되었습니다.');
+    }
+    
+    // 인증 결과 검증
+    const authResponse = authResult.getAuthResponse();
+    if (!authResponse) {
+      throw new Error('Google 인증 응답을 받지 못했습니다.');
+    }
+    
+    if (!authResponse.access_token) {
+      throw new Error('Google 액세스 토큰을 받지 못했습니다.');
+    }
+    
+    // 토큰 유효성 검증
+    const isValid = await validateGoogleToken(authResponse.access_token);
+    if (!isValid) {
+      throw new Error('받은 액세스 토큰이 유효하지 않습니다.');
+    }
+    
+    console.log('Google 인증 성공 및 토큰 검증 완료');
+    return authResponse.access_token;
+    
   } catch (error) {
     console.error('Google 인증 실패:', error);
     
-    // 구체적인 오류 메시지 제공
+    // 에러 타입별 처리
+    if (error && typeof error === 'object') {
+      const errorObj = error as any;
+      
+      if (errorObj.error === 'popup_closed_by_user') {
+        throw new Error('팝업이 사용자에 의해 닫혔습니다. 다시 시도해주세요.');
+      }
+      
+      if (errorObj.error === 'access_denied') {
+        throw new Error('Google 계정 접근이 거부되었습니다. 권한을 허용해주세요.');
+      }
+      
+      if (errorObj.error === 'server_error') {
+        throw new Error('Google 서버 오류가 발생했습니다. Google Cloud Console에서 OAuth 설정을 확인해주세요.');
+      }
+      
+      if (errorObj.type === 'tokenFailed') {
+        throw new Error('토큰 발급에 실패했습니다. OAuth 클라이언트 설정을 확인해주세요.');
+      }
+    }
+    
     if (error instanceof Error) {
       if (error.message.includes('popup')) {
         throw new Error('팝업이 차단되었습니다. 브라우저의 팝업 차단을 해제하고 다시 시도해주세요.');
       } else if (error.message.includes('cancelled') || error.message.includes('취소')) {
         throw new Error('Google 로그인이 취소되었습니다.');
       } else if (error.message.includes('unauthorized_client')) {
-        throw new Error('Google Client ID 설정을 확인해주세요.');
+        throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console 설정을 확인해주세요.');
       }
       throw error;
     }
     
-    throw new Error('Google 인증에 실패했습니다. 다시 시도해주세요.');
+    throw new Error('Google 인증에 실패했습니다. OAuth 설정을 확인하고 다시 시도해주세요.');
   }
 };
 
