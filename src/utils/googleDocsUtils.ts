@@ -55,7 +55,7 @@ export const getGoogleClientId = (): string => {
   return GOOGLE_CLIENT_ID;
 };
 const DISCOVERY_DOC = 'https://docs.googleapis.com/$discovery/rest?version=v1';
-const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive';
 
 let gapiInitialized = false;
 
@@ -84,7 +84,8 @@ export const initializeGapi = async (): Promise<void> => {
     await gapi.client.init({
       clientId: clientId,
       scope: SCOPES,
-      discoveryDocs: [DISCOVERY_DOC]
+      discoveryDocs: [DISCOVERY_DOC],
+      immediate: false
     });
 
     gapiInitialized = true;
@@ -114,10 +115,12 @@ export const authenticateGoogle = async (): Promise<string> => {
     
     console.log('새로운 Google 로그인 시작...');
     
-    // 새로운 로그인 시도
+    // 새로운 로그인 시도 (OAuth 2.0 옵션 추가)
     const authResult = await authInstance.signIn({
       prompt: 'select_account',
-      scope: SCOPES
+      scope: SCOPES,
+      response_type: 'token',
+      include_granted_scopes: true
     });
     
     if (!authResult) {
@@ -204,45 +207,42 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
   try {
     await initializeGapi();
 
-    // 새 문서 생성
-    const createResponse = await gapi.client.request({
-      path: 'https://docs.googleapis.com/v1/documents',
-      method: 'POST',
-      body: {
-        title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
-      },
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
+    console.log('Google Docs 생성 시작, 액세스 토큰 길이:', accessToken.length);
+
+    // 토큰 유효성 재검증
+    const isTokenValid = await validateGoogleToken(accessToken);
+    if (!isTokenValid) {
+      throw new Error('액세스 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
+    }
+
+    // 새 문서 생성 (gapi.client.docs 사용)
+    const createResponse = await gapi.client.docs.documents.create({
+      title: `기술검토 보고서 - ${new Date().toLocaleDateString('ko-KR')}`
     });
 
     const documentId = createResponse.result.documentId;
+    if (!documentId) {
+      throw new Error('문서 ID를 받지 못했습니다.');
+    }
+    
     console.log('Google Docs 생성 완료:', documentId);
 
     // HTML 콘텐츠를 플레인 텍스트로 변환
     const plainText = htmlToPlainText(htmlContent);
 
-    // 문서에 콘텐츠 추가
-    await gapi.client.request({
-      path: `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
-      method: 'POST',
-      body: {
-        requests: [
-          {
-            insertText: {
-              location: {
-                index: 1
-              },
-              text: plainText
-            }
+    // 문서에 콘텐츠 추가 (gapi.client.docs 사용)
+    await gapi.client.docs.documents.batchUpdate({
+      documentId: documentId,
+      requests: [
+        {
+          insertText: {
+            location: {
+              index: 1
+            },
+            text: plainText
           }
-        ]
-      },
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
+        }
+      ]
     });
 
     const documentUrl = `https://docs.google.com/document/d/${documentId}/edit`;
