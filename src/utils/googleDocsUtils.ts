@@ -427,18 +427,22 @@ const generateReportFileName = (equipmentName?: string): string => {
   const month = String(currentDate.getMonth() + 1).padStart(2, '0');
   const day = String(currentDate.getDate()).padStart(2, '0');
   
-  // equipmentName 처리 로직 개선
+  // equipmentName 처리 로직 - 실제 선택된 설비명 사용
   let equipment = '설비'; // 기본값
   
   if (equipmentName && equipmentName.trim()) {
     const trimmedName = equipmentName.trim();
-    // 'ultra'나 빈 문자열이 아닌 경우 사용
-    if (trimmedName !== 'ultra' && trimmedName !== '설비' && trimmedName.length > 0) {
+    // 비어있지 않은 모든 설비명 사용 (ultra, 설비 등 필터링 제거)
+    if (trimmedName.length > 0) {
       equipment = trimmedName;
     }
   }
   
-  console.log('🏷️ 파일명 생성:', { equipmentName, equipment });
+  console.log('🏷️ 파일명 생성:', { 
+    originalEquipmentName: equipmentName, 
+    finalEquipment: equipment,
+    생성된파일명: `기술진단내역작성_${equipment}_${year}.${month}.${day}`
+  });
   return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
 };
 
