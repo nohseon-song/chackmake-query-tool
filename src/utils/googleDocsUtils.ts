@@ -60,7 +60,7 @@ const SCOPES = 'https://www.googleapis.com/auth/documents https://www.googleapis
 let gapiInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
-// GAPI 초기화 (중복 초기화 방지)
+// GAPI 초기화 (개선된 로드 방식)
 export const initializeGapi = async (): Promise<void> => {
   if (gapiInitialized) return;
   
@@ -85,25 +85,34 @@ export const initializeGapi = async (): Promise<void> => {
         throw new Error('Google Client ID가 설정되지 않았습니다.');
       }
 
-      // GAPI 로드 및 초기화
+      // GAPI 기본 로드 (단계별 로드)
+      console.log('GAPI 기본 라이브러리 로드 중...');
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('GAPI 로드 시간 초과'));
-        }, 10000);
+          reject(new Error('GAPI 기본 로드 시간 초과 (30초)'));
+        }, 30000); // 30초로 연장
 
-        gapi.load('auth2:client:docs:drive', () => {
+        gapi.load('client:auth2', () => {
           clearTimeout(timeout);
+          console.log('GAPI 기본 라이브러리 로드 완료');
           resolve();
         });
       });
 
       // 클라이언트 초기화
+      console.log('GAPI 클라이언트 초기화 중...');
       await gapi.client.init({
         clientId: clientId,
         scope: SCOPES,
-        discoveryDocs: [DISCOVERY_DOC],
-        immediate: false
+        discoveryDocs: [DISCOVERY_DOC]
       });
+
+      // 추가 API 로드 (순차적)
+      console.log('Google Docs API 로드 중...');
+      await gapi.client.load('docs', 'v1');
+      
+      console.log('Google Drive API 로드 중...');
+      await gapi.client.load('drive', 'v3');
 
       gapiInitialized = true;
       console.log('GAPI 초기화 완료');
@@ -111,6 +120,16 @@ export const initializeGapi = async (): Promise<void> => {
       gapiInitialized = false;
       initializationPromise = null;
       console.error('GAPI 초기화 실패:', error);
+      
+      // 더 구체적인 오류 메시지 제공
+      if (error instanceof Error) {
+        if (error.message.includes('시간 초과')) {
+          throw new Error('Google API 로드가 지연되고 있습니다. 네트워크 연결을 확인하고 다시 시도해주세요.');
+        } else if (error.message.includes('Client ID')) {
+          throw new Error('Google Client ID 설정에 문제가 있습니다. 관리자에게 문의해주세요.');
+        }
+      }
+      
       throw new Error(`Google API 초기화에 실패했습니다: ${error}`);
     }
   })();
@@ -305,10 +324,16 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string):
       throw new Error('액세스 토큰이 유효하지 않습니다. 다시 로그인해주세요.');
     }
 
-    // Google Docs API가 로드되었는지 확인
+    // Google Docs API가 로드되었는지 확인 및 재로드
     if (!gapi.client.docs) {
-      console.log('Google Docs API 재로드 중...');
-      await gapi.client.load('docs', 'v1');
+      console.log('Google Docs API 로드 중...');
+      try {
+        await gapi.client.load('docs', 'v1');
+        console.log('Google Docs API 로드 완료');
+      } catch (loadError) {
+        console.error('Google Docs API 로드 실패:', loadError);
+        throw new Error('Google Docs API를 로드할 수 없습니다. 네트워크 연결을 확인해주세요.');
+      }
     }
 
     let documentId: string;
