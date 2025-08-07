@@ -72,7 +72,7 @@ export const authenticateGoogle = async (): Promise<string> => {
 
     // OAuth 2.0 파라미터 설정
     const scope = 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file';
-    const redirectUri = window.location.origin;
+    const redirectUri = `${window.location.protocol}//${window.location.host}`;
     const responseType = 'token';
     const state = Math.random().toString(36).substring(2, 15);
     
