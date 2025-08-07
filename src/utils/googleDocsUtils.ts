@@ -420,30 +420,51 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
 
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
-// 파일명 생성 함수
-const generateReportFileName = (equipmentName?: string): string => {
+// 파일명 생성 함수 - 설비명 추출 로직 강화
+const generateReportFileName = (equipmentName?: string, htmlContent?: string): string => {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
   const month = String(currentDate.getMonth() + 1).padStart(2, '0');
   const day = String(currentDate.getDate()).padStart(2, '0');
   
-  // equipmentName 처리 로직 - 실제 선택된 설비명 사용
   let equipment = '설비'; // 기본값
   
-  if (equipmentName && equipmentName.trim()) {
-    const trimmedName = equipmentName.trim();
-    // 비어있지 않은 모든 설비명 사용 (ultra, 설비 등 필터링 제거)
-    if (trimmedName.length > 0) {
-      equipment = trimmedName;
+  // 1. 직접 전달된 equipmentName 사용
+  if (equipmentName && equipmentName.trim().length > 0) {
+    equipment = equipmentName.trim();
+    console.log('🎯 직접 전달된 설비명 사용:', equipment);
+  }
+  // 2. HTML 내용에서 설비명 추출 시도
+  else if (htmlContent) {
+    console.log('🔍 HTML에서 설비명 추출 시도...');
+    
+    // 설비명 목록
+    const equipmentList = [
+      '냉동기(압축식)', '냉동기(흡수식)', '냉각탑', '축열조', '보일러', '열교환기',
+      '펌프', '공기조화기', '환기설비', '현열교환기', '전열교환기', '팬코일유니트',
+      '위생기구설비', '급수급탕설비', '냉동기', '냉각기'
+    ];
+    
+    // HTML에서 설비명 찾기
+    for (const eq of equipmentList) {
+      if (htmlContent.includes(eq)) {
+        equipment = eq;
+        console.log('✅ HTML에서 설비명 발견:', equipment);
+        break;
+      }
     }
   }
   
-  console.log('🏷️ 파일명 생성:', { 
-    originalEquipmentName: equipmentName, 
-    finalEquipment: equipment,
-    생성된파일명: `기술진단내역작성_${equipment}_${year}.${month}.${day}`
+  const fileName = `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
+  
+  console.log('🏷️ 최종 파일명 생성:', { 
+    입력된equipmentName: equipmentName,
+    HTML에서추출시도: !equipmentName && !!htmlContent,
+    최종설비명: equipment,
+    최종파일명: fileName
   });
-  return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
+  
+  return fileName;
 };
 
 // Google Docs 생성 (간소화 버전)
@@ -479,7 +500,7 @@ export const createGoogleDoc = async (htmlContent: string, accessToken: string, 
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        title: generateReportFileName(equipmentName)
+        title: generateReportFileName(equipmentName, htmlContent)
       })
     });
 
