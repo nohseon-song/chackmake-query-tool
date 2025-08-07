@@ -140,9 +140,8 @@ export const initializeGapi = async (): Promise<void> => {
 // 인증 상태 관리
 let authenticationInProgress = false;
 
-// Google 인증 (근본적 문제 해결 버전)
+// Google 인증 (OAuth 설정 문제 해결)
 export const authenticateGoogle = async (): Promise<string> => {
-  // 중복 인증 방지
   if (authenticationInProgress) {
     throw new Error('이미 인증이 진행 중입니다. 잠시 후 다시 시도해주세요.');
   }
@@ -156,23 +155,18 @@ export const authenticateGoogle = async (): Promise<string> => {
     const authInstance = gapi.auth2.getAuthInstance();
     
     if (!authInstance) {
-      throw new Error('Google Auth2 인스턴스 초기화에 실패했습니다.');
+      throw new Error('Google Auth2 인스턴스를 가져올 수 없습니다. GAPI 초기화를 확인해주세요.');
     }
     
-    // 기존 세션 정리 (문제 방지를 위해)
-    try {
-      if (authInstance.isSignedIn.get()) {
-        console.log('🔄 기존 세션 정리 중...');
-        await authInstance.signOut();
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
-      }
-    } catch (signOutError) {
-      console.warn('기존 세션 정리 중 오류 (무시):', signOutError);
+    // 기존 세션 정리
+    if (authInstance.isSignedIn.get()) {
+      console.log('🔄 기존 세션 정리 중...');
+      await authInstance.signOut();
     }
     
     console.log('🪟 Google 계정 선택 팝업 시작');
     
-    // 직접 인증 (retry 로직 제거로 팝업 반복 방지)
+    // 단일 인증 시도
     const authResult = await authInstance.signIn({
       prompt: 'select_account',
       scope: SCOPES
@@ -182,17 +176,9 @@ export const authenticateGoogle = async (): Promise<string> => {
       throw new Error('Google 인증이 취소되었습니다.');
     }
     
-    // 인증 결과 검증
     const authResponse = authResult.getAuthResponse();
     if (!authResponse?.access_token) {
       throw new Error('유효한 액세스 토큰을 받지 못했습니다.');
-    }
-    
-    // 토큰 유효성 최종 검증
-    console.log('🔍 토큰 유효성 검증 중...');
-    const isValid = await validateGoogleToken(authResponse.access_token);
-    if (!isValid) {
-      throw new Error('토큰 검증에 실패했습니다. OAuth 설정을 확인해주세요.');
     }
     
     console.log('✅ Google 인증 완료');
@@ -201,21 +187,46 @@ export const authenticateGoogle = async (): Promise<string> => {
   } catch (error: any) {
     console.error('❌ Google 인증 실패:', error);
     
-    // 구체적인 오류 메시지 처리
+    // 구체적인 OAuth 설정 오류 처리
+    if (error?.type === 'tokenFailed' && error?.error === 'server_error') {
+      const currentDomain = window.location.origin;
+      throw new Error(`🚨 Google Cloud Console OAuth 설정 오류
+
+현재 도메인: ${currentDomain}
+
+필수 해결사항:
+
+1️⃣ Google Cloud Console (console.cloud.google.com) 접속
+2️⃣ 프로젝트 선택 → API 및 서비스 → OAuth 동의 화면
+3️⃣ 다음 중 하나 선택:
+
+옵션 A) 프로덕션 환경으로 발행
+   - "앱 발행" 버튼 클릭
+   - 검토 제출 (승인까지 1-2주 소요)
+
+옵션 B) 테스트 사용자 추가 (즉시 해결)
+   - OAuth 동의 화면 → "테스트 사용자" 섹션
+   - 현재 Google 계정 이메일 추가
+
+4️⃣ 사용자 인증 정보 → OAuth 2.0 클라이언트 ID
+   - "승인된 자바스크립트 원본"에 다음 추가:
+     ${currentDomain}
+
+5️⃣ 변경사항 저장 후 5분 대기
+
+이 설정이 완료되면 오류가 해결됩니다.`);
+    }
+    
     if (error?.error === 'popup_closed_by_user') {
-      throw new Error('팝업이 사용자에 의해 닫혔습니다.');
+      throw new Error('팝업이 사용자에 의해 닫혔습니다. 팝업 차단기를 해제하고 다시 시도해주세요.');
     }
     
     if (error?.error === 'access_denied') {
-      throw new Error('Google 계정 접근이 거부되었습니다.');
-    }
-    
-    if (error?.type === 'tokenFailed' || error?.error === 'server_error') {
-      throw new Error('Google OAuth 클라이언트 설정에 문제가 있습니다.\n\n해결방법:\n1. Google Cloud Console에서 OAuth 동의 화면을 "프로덕션 환경"으로 발행\n2. 또는 OAuth 테스트 사용자에 현재 계정 추가\n3. Authorized JavaScript origins에 현재 도메인 추가');
+      throw new Error('Google 계정 접근이 거부되었습니다. 권한을 허용하고 다시 시도해주세요.');
     }
     
     if (error?.error === 'unauthorized_client') {
-      throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console 설정을 확인해주세요.');
+      throw new Error('OAuth 클라이언트가 승인되지 않았습니다. Google Cloud Console에서 클라이언트 ID 설정을 확인해주세요.');
     }
     
     if (error instanceof Error) {
