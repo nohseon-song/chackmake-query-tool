@@ -449,7 +449,11 @@ const generateReportFileName = (equipmentName?: string): string => {
 // Google Docs 생성 (간소화 버전)
 export const createGoogleDoc = async (htmlContent: string, accessToken: string, equipmentName?: string): Promise<string> => {
   try {
-    console.log('🚀 Google Docs 생성 시작');
+    console.log('🚀 Google Docs 생성 시작', {
+      equipmentName: equipmentName,
+      hasEquipmentName: !!equipmentName,
+      equipmentNameLength: equipmentName?.length || 0
+    });
     
     // 토큰 유효성 검증
     console.log('🔍 토큰 유효성 검증...');

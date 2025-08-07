@@ -76,7 +76,14 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
         throw new Error('내보낼 콘텐츠가 없습니다.');
       }
       
-      // Google Docs 문서 생성
+      // Google Docs 문서 생성 - 디버그 로그 추가
+      console.log('📱 LogDisplay에서 createGoogleDoc 호출', {
+        equipment: equipment,
+        equipmentType: typeof equipment,
+        equipmentLength: equipment?.length || 0,
+        hasEquipment: !!equipment
+      });
+      
       const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipment);
       
       toast({
