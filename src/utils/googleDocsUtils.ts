@@ -193,10 +193,10 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const content = tempDiv.textContent || tempDiv.innerText || '';
   const lines = content.split('\n').filter(p => p.trim() !== '');
   
-  // 전체 텍스트 구성 - 개선된 구조화
+  // 전체 텍스트 구성 - 극대화된 가독성을 위한 구조화
   let fullText = mainTitle + '\n\n' + subTitle + '\n\n' + date + '\n\n\n';
   
-  // 각 라인을 분석하여 구조화하고 줄바꿈 개선
+  // 각 라인을 분석하여 구조화하고 줄바꿈 극대화
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
     if (trimmedLine) {
@@ -206,23 +206,57 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
       }
       // 세부 항목 (한글 가나다 또는 영문으로 시작하는 하위 항목): "가. 설비 정보", "1) 펌프 성능"
       else if (/^[가-힣]\.\s|^\d+\)\s|^[a-zA-Z]\)\s/.test(trimmedLine)) {
-        fullText += '\n' + trimmedLine + '\n\n';
+        fullText += trimmedLine + '\n\n';
       }
-      // 일반 텍스트 - 문장별로 줄바꿈 처리
+      // 핵심 원인 분석이나 개선 방향 (특별 처리)
+      else if (trimmedLine.includes('핵심 원인') || trimmedLine.includes('개선 권고') || 
+               trimmedLine.includes('기대 효과') || trimmedLine.includes('종합 결론')) {
+        fullText += trimmedLine + '\n\n';
+      }
+      // 일반 텍스트 - 문장을 짧게 분리하여 가독성 극대화
       else {
-        // 긴 문장은 의미 단위로 나누어 줄바꿈
-        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
-        if (sentences.length > 1) {
-          sentences.forEach((sentence, i) => {
-            if (sentence.trim()) {
-              fullText += sentence.trim();
-              if (i < sentences.length - 1) {
-                fullText += '.\n';
-              } else {
-                fullText += sentences[sentences.length - 1].includes('.') ? '\n\n' : '.\n\n';
+        // 문장을 더 짧게 분리 (40자 이상이면 분리)
+        if (trimmedLine.length > 40) {
+          // 쉼표나 접속어를 기준으로 분리
+          const parts = trimmedLine.split(/,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s/).filter(p => p.trim());
+          if (parts.length > 1) {
+            parts.forEach((part, i) => {
+              if (part.trim()) {
+                if (i === 0) {
+                  fullText += part.trim();
+                  if (!part.trim().endsWith('.') && !part.trim().endsWith(',')) {
+                    fullText += ',';
+                  }
+                  fullText += '\n';
+                } else if (i === parts.length - 1) {
+                  fullText += part.trim();
+                  if (!part.trim().endsWith('.')) {
+                    fullText += '.';
+                  }
+                  fullText += '\n\n';
+                } else {
+                  fullText += part.trim() + '\n';
+                }
               }
+            });
+          } else {
+            // 마침표로 분리
+            const sentences = trimmedLine.split(/\.\s/).filter(s => s.trim());
+            if (sentences.length > 1) {
+              sentences.forEach((sentence, i) => {
+                if (sentence.trim()) {
+                  fullText += sentence.trim();
+                  if (i < sentences.length - 1) {
+                    fullText += '.\n';
+                  } else {
+                    fullText += trimmedLine.endsWith('.') ? '.\n\n' : '.\n\n';
+                  }
+                }
+              });
+            } else {
+              fullText += trimmedLine + '\n\n';
             }
-          });
+          }
         } else {
           fullText += trimmedLine + '\n\n';
         }
@@ -286,89 +320,184 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   });
   indexTracker += date.length + 3; // +3 for newlines
   
-  // 각 라인에 스타일 적용 - 개선된 처리
-  lines.forEach((line) => {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) return;
+    // 스타일 적용을 위한 더 정확한 인덱스 추적
+    let textParts: {text: string, style: 'H2' | 'H3' | 'BOLD' | 'NORMAL', startIndex: number, endIndex: number}[] = [];
+    let currentPos = indexTracker;
     
-    // 주요 항목 (숫자로 시작): Heading 2 적용
-    if (/^\d+\.\s/.test(trimmedLine)) {
-      // 구분선과 줄바꿈 건너뛰기
-      indexTracker += 37; // "══════════════════════════════════\n\n" 길이
+    // 텍스트 파트별로 분석
+    lines.forEach((line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
       
-      requests.push({
-        updateParagraphStyle: {
-          range: {
-            startIndex: indexTracker,
-            endIndex: indexTracker + trimmedLine.length
-          },
-          paragraphStyle: {
-            namedStyleType: 'HEADING_2'
-          },
-          fields: 'namedStyleType'
-        }
-      });
-      indexTracker += trimmedLine.length + 2; // +2 for newlines
-    }
-    // 세부 항목: Heading 3 적용
-    else if (/^[가-힣]\.\s|^\d+\)\s|^[a-zA-Z]\)\s/.test(trimmedLine)) {
-      indexTracker += 1; // 앞의 줄바꿈
-      
-      requests.push({
-        updateParagraphStyle: {
-          range: {
-            startIndex: indexTracker,
-            endIndex: indexTracker + trimmedLine.length
-          },
-          paragraphStyle: {
-            namedStyleType: 'HEADING_3'
-          },
-          fields: 'namedStyleType'
-        }
-      });
-      indexTracker += trimmedLine.length + 2; // +2 for newlines
-    }
-    // 일반 텍스트 처리
-    else {
-      // 중요한 키워드나 수치가 포함된 경우 볼드 처리
-      if (trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
-          trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
-          trimmedLine.includes('역할') || trimmedLine.includes('전문분야') ||
-          trimmedLine.includes('참여역할') || trimmedLine.includes('핵심') ||
-          trimmedLine.includes('성능') || trimmedLine.includes('상태') ||
-          trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
-          trimmedLine.includes('유량') || trimmedLine.includes('진동') ||
-          /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine)) {
-        
-        // 문장이 나뉘어 있는 경우 각각 처리
-        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
-        if (sentences.length > 1) {
-          sentences.forEach((sentence, i) => {
-            if (sentence.trim()) {
-              const sentenceLength = sentence.trim().length + (i < sentences.length - 1 ? 2 : 1); // 마침표와 줄바꿈 포함
-              
-              requests.push({
-                updateTextStyle: {
-                  range: {
-                    startIndex: indexTracker,
-                    endIndex: indexTracker + sentenceLength - 1
-                  },
-                  textStyle: {
-                    bold: true
-                  },
-                  fields: 'bold'
+      // 주요 항목 (숫자로 시작): Heading 2
+      if (/^\d+\.\s/.test(trimmedLine)) {
+        // 구분선 건너뛰기
+        currentPos += 37; // "══════════════════════════════════\n\n"
+        textParts.push({
+          text: trimmedLine,
+          style: 'H2',
+          startIndex: currentPos,
+          endIndex: currentPos + trimmedLine.length
+        });
+        currentPos += trimmedLine.length + 2;
+      }
+      // 세부 항목: Heading 3
+      else if (/^[가-힣]\.\s|^\d+\)\s|^[a-zA-Z]\)\s/.test(trimmedLine)) {
+        textParts.push({
+          text: trimmedLine,
+          style: 'H3',
+          startIndex: currentPos,
+          endIndex: currentPos + trimmedLine.length
+        });
+        currentPos += trimmedLine.length + 2;
+      }
+      // 핵심 원인 분석이나 개선 방향 (특별 처리)
+      else if (trimmedLine.includes('핵심 원인') || trimmedLine.includes('개선 권고') || 
+               trimmedLine.includes('기대 효과') || trimmedLine.includes('종합 결론')) {
+        textParts.push({
+          text: trimmedLine,
+          style: 'H3',
+          startIndex: currentPos,
+          endIndex: currentPos + trimmedLine.length
+        });
+        currentPos += trimmedLine.length + 2;
+      }
+      // 일반 텍스트
+      else {
+        // 40자 이상인 경우 분리된 텍스트 처리
+        if (trimmedLine.length > 40) {
+          const parts = trimmedLine.split(/,\s|이는\s|또한\s|따라서\s|그러나\s|하지만\s|그리고\s/).filter(p => p.trim());
+          if (parts.length > 1) {
+            parts.forEach((part, i) => {
+              if (part.trim()) {
+                let partText = part.trim();
+                if (i === 0 && !partText.endsWith('.') && !partText.endsWith(',')) {
+                  partText += ',';
+                } else if (i === parts.length - 1 && !partText.endsWith('.')) {
+                  partText += '.';
+                }
+                
+                // 수치나 핵심 키워드 포함 여부 확인
+                const shouldBold = partText.includes('진단') || partText.includes('점검') || 
+                                 partText.includes('결과') || partText.includes('측정') ||
+                                 partText.includes('핵심') || partText.includes('원인') ||
+                                 partText.includes('압력') || partText.includes('온도') ||
+                                 partText.includes('개선') || partText.includes('권고') ||
+                                 /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(partText);
+                
+                textParts.push({
+                  text: partText,
+                  style: shouldBold ? 'BOLD' : 'NORMAL',
+                  startIndex: currentPos,
+                  endIndex: currentPos + partText.length
+                });
+                currentPos += partText.length + 1; // +1 for newline
+              }
+            });
+            currentPos += 1; // 마지막 줄바꿈
+          } else {
+            // 마침표로 분리
+            const sentences = trimmedLine.split(/\.\s/).filter(s => s.trim());
+            if (sentences.length > 1) {
+              sentences.forEach((sentence, i) => {
+                if (sentence.trim()) {
+                  let sentenceText = sentence.trim();
+                  if (i < sentences.length - 1) {
+                    sentenceText += '.';
+                  } else {
+                    sentenceText += trimmedLine.endsWith('.') ? '.' : '.';
+                  }
+                  
+                  const shouldBold = sentenceText.includes('진단') || sentenceText.includes('점검') || 
+                                   sentenceText.includes('결과') || sentenceText.includes('측정') ||
+                                   sentenceText.includes('핵심') || sentenceText.includes('원인') ||
+                                   sentenceText.includes('압력') || sentenceText.includes('온도') ||
+                                   sentenceText.includes('개선') || sentenceText.includes('권고') ||
+                                   /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(sentenceText);
+                  
+                  textParts.push({
+                    text: sentenceText,
+                    style: shouldBold ? 'BOLD' : 'NORMAL',
+                    startIndex: currentPos,
+                    endIndex: currentPos + sentenceText.length
+                  });
+                  currentPos += sentenceText.length + 1; // +1 for newline
                 }
               });
-              indexTracker += sentenceLength;
+              currentPos += 1; // 마지막 줄바꿈
+            } else {
+              const shouldBold = trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
+                               trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
+                               trimmedLine.includes('핵심') || trimmedLine.includes('원인') ||
+                               trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
+                               trimmedLine.includes('개선') || trimmedLine.includes('권고') ||
+                               /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
+              
+              textParts.push({
+                text: trimmedLine,
+                style: shouldBold ? 'BOLD' : 'NORMAL',
+                startIndex: currentPos,
+                endIndex: currentPos + trimmedLine.length
+              });
+              currentPos += trimmedLine.length + 2;
+            }
+          }
+        } else {
+          const shouldBold = trimmedLine.includes('진단') || trimmedLine.includes('점검') || 
+                           trimmedLine.includes('결과') || trimmedLine.includes('측정') ||
+                           trimmedLine.includes('핵심') || trimmedLine.includes('원인') ||
+                           trimmedLine.includes('압력') || trimmedLine.includes('온도') ||
+                           trimmedLine.includes('개선') || trimmedLine.includes('권고') ||
+                           /\d+\.?\d*\s*(kgf|cm²|℃|°C|Hz|RPM|bar|mm|kW|A|V|Ω|%|L\/min|m³\/h)/.test(trimmedLine);
+          
+          textParts.push({
+            text: trimmedLine,
+            style: shouldBold ? 'BOLD' : 'NORMAL',
+            startIndex: currentPos,
+            endIndex: currentPos + trimmedLine.length
+          });
+          currentPos += trimmedLine.length + 2;
+        }
+      }
+    });
+    
+    // 스타일 적용
+    textParts.forEach(part => {
+      switch (part.style) {
+        case 'H2':
+          requests.push({
+            updateParagraphStyle: {
+              range: {
+                startIndex: part.startIndex,
+                endIndex: part.endIndex
+              },
+              paragraphStyle: {
+                namedStyleType: 'HEADING_2'
+              },
+              fields: 'namedStyleType'
             }
           });
-          indexTracker += 1; // 마지막 줄바꿈
-        } else {
+          break;
+        case 'H3':
+          requests.push({
+            updateParagraphStyle: {
+              range: {
+                startIndex: part.startIndex,
+                endIndex: part.endIndex
+              },
+              paragraphStyle: {
+                namedStyleType: 'HEADING_3'
+              },
+              fields: 'namedStyleType'
+            }
+          });
+          break;
+        case 'BOLD':
           requests.push({
             updateTextStyle: {
               range: {
-                startIndex: indexTracker,
-                endIndex: indexTracker + trimmedLine.length
+                startIndex: part.startIndex,
+                endIndex: part.endIndex
               },
               textStyle: {
                 bold: true
@@ -376,23 +505,10 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
               fields: 'bold'
             }
           });
-          indexTracker += trimmedLine.length + 2; // +2 for newlines
-        }
-      } else {
-        // 일반 텍스트 인덱스 업데이트
-        const sentences = trimmedLine.split(/[.!?](?=\s|$)/).filter(s => s.trim());
-        if (sentences.length > 1) {
-          sentences.forEach((sentence, i) => {
-            const sentenceLength = sentence.trim().length + (i < sentences.length - 1 ? 2 : 1);
-            indexTracker += sentenceLength;
-          });
-          indexTracker += 1; // 마지막 줄바꿈
-        } else {
-          indexTracker += trimmedLine.length + 2; // +2 for newlines
-        }
+          break;
+        // NORMAL은 아무 스타일도 적용하지 않음
       }
-    }
-  });
+    });
   
   return requests;
 };
