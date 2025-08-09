@@ -383,24 +383,20 @@ export const exchangeCodeForToken = async (
   const clientId = getGoogleClientId();
   if (!clientId) throw new Error('Google Client ID가 설정되지 않았습니다.');
 
-  const resp = await fetch(
-    'https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/exchange-code-for-tokens',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, clientId }),
-    }
-  );
+  const { data, error } = await supabase.functions.invoke('exchange-code-for-tokens', {
+    body: { code, clientId },
+  });
 
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error(`토큰 교환 실패: ${t}`);
+  if (error) {
+    throw new Error(`토큰 교환 실패: ${error.message || error}`);
   }
-  const data = await resp.json();
-  if (!data?.success || !data?.access_token)
+
+  const access_token = (data as any)?.access_token as string | undefined;
+  const refresh_token = (data as any)?.refresh_token as string | undefined;
+  if (!access_token)
     throw new Error('올바른 토큰 응답을 받지 못했습니다.');
 
-  return { accessToken: data.access_token, refreshToken: data.refresh_token };
+  return { accessToken: access_token, refreshToken: refresh_token };
 };
 
 // Create Google Doc and apply rich formatting
