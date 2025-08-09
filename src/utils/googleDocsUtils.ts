@@ -1,6 +1,7 @@
 // src/utils/googleDocsUtils.ts
 
 // Google OAuth + Google Docs Utilities (Authorization Code Flow + Rich Formatting)
+import { supabase } from '@/integrations/supabase/client';
 export interface GoogleAuthState {
   isAuthenticated: boolean;
   accessToken: string | null;
@@ -12,20 +13,15 @@ let GOOGLE_CLIENT_ID = '';
 // Fetch Google Client ID from Supabase Edge Function (no secrets in client)
 export const fetchGoogleClientId = async (): Promise<string> => {
   try {
-    const response = await fetch(
-      'https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/get-google-config',
-      {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    const { data, error } = await supabase.functions.invoke('get-google-config', {
+      body: {},
+    });
+    if (error) throw error;
 
-    if (!response.ok) throw new Error('Failed to fetch Google Client ID');
-
-    const data = await response.json();
-    if (data?.success && data?.clientId) {
-      GOOGLE_CLIENT_ID = data.clientId as string;
-      return GOOGLE_CLIENT_ID;
+    const clientId = (data as any)?.clientId as string | undefined;
+    if (clientId) {
+      GOOGLE_CLIENT_ID = clientId;
+      return clientId;
     }
 
     throw new Error('Google Client ID not found in response');
