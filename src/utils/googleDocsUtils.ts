@@ -1,40 +1,38 @@
 // src/utils/googleDocsUtils.ts
 
-// Google OAuth + Google Docs Utilities (Authorization Code Flow + Rich Formatting)
 import { supabase } from '@/integrations/supabase/client';
+
 export interface GoogleAuthState {
   isAuthenticated: boolean;
   accessToken: string | null;
 }
 
-// Google Client ID - set dynamically
 let GOOGLE_CLIENT_ID = '';
 
-// Fetch Google Client ID from Supabase Edge Function (no secrets in client)
+// Supabase Function을 통해 환경 변수에서 클라이언트 ID를 안전하게 가져옵니다.
 export const fetchGoogleClientId = async (): Promise<string> => {
+  if (GOOGLE_CLIENT_ID) return GOOGLE_CLIENT_ID;
   try {
-    const { data, error } = await supabase.functions.invoke('get-google-config', {
-      body: {},
-    });
-    if (error) throw error;
+    const { data, error } = await supabase.functions.invoke('get-google-config');
+    if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
 
-    const clientId = (data as any)?.clientId as string | undefined;
-    if (clientId) {
-      GOOGLE_CLIENT_ID = clientId;
-      return clientId;
-    }
-
-    throw new Error('Google Client ID not found in response');
+    const clientId = (data as any)?.clientId;
+    if (!clientId) throw new Error('Google Client ID를 응답에서 찾을 수 없습니다.');
+    
+    GOOGLE_CLIENT_ID = clientId;
+    return clientId;
   } catch (error) {
-    console.error('Error fetching Google Client ID:', error);
+    console.error('Google Client ID 가져오기 오류:', error);
+    // 개발 환경을 위한 로컬 스토리지 대체 작동
     if (typeof window !== 'undefined') {
       const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
       if (storedClientId) {
+        console.warn('Supabase 함수 실패, 로컬 스토리지에서 Client ID를 사용합니다.');
         GOOGLE_CLIENT_ID = storedClientId;
         return storedClientId;
       }
     }
-    throw new Error('Google Client ID를 가져올 수 없습니다.');
+    throw new Error('Google Client ID를 가져올 수 없습니다. API 설정을 확인하세요.');
   }
 };
 
@@ -44,7 +42,7 @@ export const setGoogleClientId = (clientId: string) => {
 
 export const getGoogleClientId = (): string => GOOGLE_CLIENT_ID;
 
-// Direct OAuth (popup) to get Authorization Code with offline access (for refresh token)
+// OAuth 인증 팝업을 통해 'Authorization Code'를 얻는 함수
 export const authenticateGoogle = async (): Promise<string> => {
   try {
     let clientId = getGoogleClientId();
@@ -54,77 +52,41 @@ export const authenticateGoogle = async (): Promise<string> => {
     const scope = [
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'openid',
     ].join(' ');
 
     const redirectUri = `${window.location.protocol}//${window.location.host}`;
-    const state = Math.random().toString(36).slice(2);
-
+    
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('redirect_uri', redirectUri);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('scope', scope);
-    authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('include_granted_scopes', 'true');
     authUrl.searchParams.append('access_type', 'offline');
 
-    const popup = window.open(
-      authUrl.toString(),
-      'google-auth',
-      'width=500,height=650,scrollbars=yes,resizable=yes'
-    );
-    if (!popup) throw new Error('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
+    const popup = window.open(authUrl.toString(), 'google-auth', 'width=500,height=650');
+    if (!popup) throw new Error('팝업이 차단되었습니다.');
 
     return new Promise<string>((resolve, reject) => {
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          reject(new Error('팝업이 닫혔습니다. 다시 시도해주세요.'));
-        }
-      }, 800);
-
-      const messageListener = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', messageListener);
-          popup.close();
-          resolve(event.data.code);
-        } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', messageListener);
-          popup.close();
-          reject(new Error(event.data.error || 'Google 인증에 실패했습니다.'));
-        }
-      };
-      window.addEventListener('message', messageListener);
-
-      // Fallback: same-origin redirect detection
-      const checkUrl = setInterval(() => {
+      const timer = setInterval(() => {
         try {
-          if (popup.location.href.includes(redirectUri)) {
+          if (popup.location.href.startsWith(redirectUri)) {
             const url = new URL(popup.location.href);
             const code = url.searchParams.get('code');
-            const error = url.searchParams.get('error');
+            clearInterval(timer);
+            popup.close();
             if (code) {
-              clearInterval(checkUrl);
-              clearInterval(checkClosed);
-              window.removeEventListener('message', messageListener);
-              popup.close();
               resolve(code);
-            } else if (error) {
-              clearInterval(checkUrl);
-              clearInterval(checkClosed);
-              window.removeEventListener('message', messageListener);
-              popup.close();
-              reject(new Error(`인증 오류: ${error}`));
+            } else {
+              reject(new Error('Google 인증에 실패했습니다.'));
             }
           }
-        } catch (_) {
-          // Cross-origin while on accounts.google.com – ignore
+        } catch (error) {
+          // Cross-origin error, ignore
+        }
+        if (popup.closed) {
+          clearInterval(timer);
+          reject(new Error('인증 창이 닫혔습니다.'));
         }
       }, 500);
     });
@@ -134,6 +96,7 @@ export const authenticateGoogle = async (): Promise<string> => {
   }
 };
 
+// 액세스 토큰의 유효성을 검사하는 함수
 export const validateGoogleToken = async (accessToken: string): Promise<boolean> => {
   try {
     const response = await fetch(
@@ -146,228 +109,7 @@ export const validateGoogleToken = async (accessToken: string): Promise<boolean>
   }
 };
 
-// Convert rich HTML into Google Docs batchUpdate requests using DOMParser
-const htmlToDocsRequests = (html: string): any[] => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-  const container = doc.body.firstElementChild as HTMLElement;
-
-  const requests: any[] = [];
-  let currentIndex = 1; // Docs API content starts at index 1
-
-  const insertText = (text: string) => {
-    if (!text) return;
-    requests.push({ insertText: { location: { index: currentIndex }, text } });
-    currentIndex += text.length;
-  };
-
-  const applyParagraphStyle = (start: number, end: number, namedStyleType: string) => {
-    if (end <= start) return;
-    requests.push({
-      updateParagraphStyle: {
-        range: { startIndex: start, endIndex: end },
-        paragraphStyle: { namedStyleType },
-        fields: 'namedStyleType',
-      },
-    });
-  };
-
-  const applyTextStyle = (
-    start: number,
-    end: number,
-    style: { bold?: boolean; italic?: boolean; underline?: boolean; link?: string | null }
-  ) => {
-    if (end <= start) return;
-    const textStyle: any = {};
-    const fields: string[] = [];
-    if (style.bold) {
-      textStyle.bold = true;
-      fields.push('bold');
-    }
-    if (style.italic) {
-      textStyle.italic = true;
-      fields.push('italic');
-    }
-    if (style.underline) {
-      textStyle.underline = true;
-      fields.push('underline');
-    }
-    if (style.link) {
-      textStyle.link = { url: style.link };
-      fields.push('link');
-    }
-    if (fields.length === 0) return;
-    requests.push({
-      updateTextStyle: {
-        range: { startIndex: start, endIndex: end },
-        textStyle,
-        fields: fields.join(','),
-      },
-    });
-  };
-
-  const makeBullets = (start: number, end: number, preset: 'BULLET_DISC_CIRCLE_SQUARE' | 'NUMBERED_DECIMAL_ALPHA_ROMAN') => {
-    if (end <= start) return;
-    requests.push({
-      createParagraphBullets: {
-        range: { startIndex: start, endIndex: end },
-        bulletPreset: preset,
-      },
-    });
-  };
-
-  const headingMap: Record<string, string> = {
-    H1: 'HEADING_1',
-    H2: 'HEADING_2',
-    H3: 'HEADING_3',
-    H4: 'HEADING_4',
-    H5: 'HEADING_5',
-    H6: 'HEADING_6',
-  };
-
-  type StyleCtx = { bold?: boolean; italic?: boolean; underline?: boolean; link?: string | null };
-
-  const mergeCtx = (base: StyleCtx, extra: StyleCtx): StyleCtx => ({
-    bold: base.bold || extra.bold,
-    italic: base.italic || extra.italic,
-    underline: base.underline || extra.underline,
-    link: extra.link ?? base.link ?? null,
-  });
-
-  const processInline = (node: Node, ctx: StyleCtx) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = (node.textContent || '').replace(/\s+/g, ' ');
-      if (!text) return;
-      const start = currentIndex;
-      insertText(text);
-      applyTextStyle(start, currentIndex, ctx);
-      return;
-    }
-
-    if (!(node instanceof HTMLElement)) return;
-
-    const tag = node.tagName.toUpperCase();
-    let nextCtx: StyleCtx = { ...ctx };
-
-    if (tag === 'STRONG' || tag === 'B') nextCtx = mergeCtx(nextCtx, { bold: true });
-    if (tag === 'EM' || tag === 'I') nextCtx = mergeCtx(nextCtx, { italic: true });
-    if (tag === 'U') nextCtx = mergeCtx(nextCtx, { underline: true });
-    if (tag === 'A') nextCtx = mergeCtx(nextCtx, { link: node.getAttribute('href') });
-    if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP') {
-      // Keep plain text; optionally could set monospace via weightedFontFamily, omitted for compatibility
-    }
-
-    Array.from(node.childNodes).forEach((child) => processInline(child, nextCtx));
-  };
-
-  const processBlock = (el: HTMLElement, opts?: { listType?: 'UL' | 'OL' }) => {
-    const tag = el.tagName.toUpperCase();
-
-    if (tag === 'BR') {
-      insertText('\n');
-      return;
-    }
-
-    if (tag === 'UL' || tag === 'OL') {
-      Array.from(el.children).forEach((li) => processBlock(li as HTMLElement, { listType: tag as 'UL' | 'OL' }));
-      return;
-    }
-
-    if (tag === 'LI') {
-      const start = currentIndex;
-      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
-      // Ensure line break at end of list item
-      if (!el.textContent?.endsWith('\n')) insertText('\n');
-      const end = currentIndex;
-      makeBullets(start, end, opts?.listType === 'OL' ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE');
-      return;
-    }
-
-    const start = currentIndex;
-
-    if (tag in headingMap) {
-      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
-      if (!el.textContent?.endsWith('\n')) insertText('\n');
-      const end = currentIndex;
-      applyParagraphStyle(start, end, headingMap[tag]);
-      return;
-    }
-
-    if (tag === 'P' || tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE' || tag === 'PRE') {
-      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
-      if (!el.textContent?.endsWith('\n')) insertText('\n');
-      return;
-    }
-
-    // Fallback: process children
-    Array.from(el.childNodes).forEach((child) => {
-      if (child instanceof HTMLElement) {
-        processBlock(child, opts);
-      } else {
-        processInline(child, {});
-      }
-    });
-  };
-
-  // Header block
-  const title = '기술검토 및 진단 보고서\n';
-  const subtitle = '기계설비 성능점검 및 유지관리자 업무 Troubleshooting\n';
-  const dateLine = `작성일: ${new Date().toLocaleDateString('ko-KR')}\n\n`;
-  const titleStart = currentIndex;
-  insertText(title);
-  applyParagraphStyle(titleStart, titleStart + title.length - 1, 'HEADING_1');
-  const subtitleStart = currentIndex;
-  insertText(subtitle);
-  applyParagraphStyle(subtitleStart, subtitleStart + subtitle.length - 1, 'HEADING_2');
-  insertText(dateLine);
-
-  Array.from(container.children).forEach((child) => processBlock(child as HTMLElement));
-
-  return requests;
-};
-
-const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
-
-// File name generator with equipment extraction
-const generateReportFileName = (equipmentName?: string, htmlContent?: string): string => {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-
-  let equipment = '설비';
-  if (equipmentName?.trim()) {
-    equipment = equipmentName.trim();
-  } else if (htmlContent) {
-    const equipmentList = [
-      '냉동기(압축식)',
-      '냉동기(흡수식)',
-      '냉각탑',
-      '축열조',
-      '보일러',
-      '열교환기',
-      '펌프',
-      '공기조화기',
-      '환기설비',
-      '현열교환기',
-      '전열교환기',
-      '팬코일유니트',
-      '위생기구설비',
-      '급수급탕설비',
-      '냉동기',
-      '냉각기',
-    ];
-    for (const eq of equipmentList) {
-      if (htmlContent.includes(eq)) {
-        equipment = eq;
-        break;
-      }
-    }
-  }
-  return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
-};
-
-// Exchange authorization code for tokens via Supabase Edge Function
+// 'Authorization Code'를 'Access Token'으로 교환하는 함수
 export const exchangeCodeForToken = async (
   code: string
 ): Promise<{ accessToken: string; refreshToken?: string }> => {
@@ -387,68 +129,140 @@ export const exchangeCodeForToken = async (
   if (!access_token)
     throw new Error('올바른 토큰 응답을 받지 못했습니다.');
 
-  return { accessToken: access_token, refreshToken: refresh_token };
+  return { accessToken: access_token, RefreshToken: refresh_token } as any;
 };
 
-// Create Google Doc and apply rich formatting
+
+// =================================================================
+// [핵심] HTML을 Google Docs 요청으로 변환하는 새로운 로직
+// =================================================================
+const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
+  const requests: any[] = [];
+  let currentIndex = 1;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+
+  const processNode = (node: ChildNode) => {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+      const text = node.textContent.replace(/\u00A0/g, ' ');
+      if (text.trim() || text === '\n') {
+        requests.push({ insertText: { location: { index: currentIndex }, text } });
+        currentIndex += text.length;
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      const startTagIndex = currentIndex;
+
+      el.childNodes.forEach(processNode);
+      const endTagIndex = currentIndex;
+
+      if (endTagIndex > startTagIndex) {
+        switch (el.tagName.toLowerCase()) {
+          case 'h1':
+          case 'h2':
+          case 'h3':
+          case 'h4':
+            requests.push({
+              updateParagraphStyle: {
+                range: { startIndex: startTagIndex, endIndex: endTagIndex },
+                paragraphStyle: { namedStyleType: `HEADING_${el.tagName.substring(1)}` },
+                fields: 'namedStyleType',
+              },
+            });
+            break;
+          case 'li':
+            requests.push({
+              createParagraphBullets: {
+                range: { startIndex: startTagIndex, endIndex: endTagIndex },
+                bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+              },
+            });
+            break;
+          case 'strong':
+          case 'b':
+            requests.push({
+              updateTextStyle: {
+                range: { startIndex: startTagIndex, endIndex: endTagIndex },
+                textStyle: { bold: true },
+                fields: 'bold',
+              },
+            });
+            break;
+        }
+      }
+      
+      if (['p', 'h1', 'h2', 'h3', 'h4', 'div', 'section', 'header', 'footer', 'ul', 'li'].includes(el.tagName.toLowerCase())) {
+        const lastRequest = requests[requests.length - 1];
+        if (!lastRequest || !lastRequest.insertText || !lastRequest.insertText.text.endsWith('\n')) {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex += 1;
+        }
+      }
+    }
+  };
+
+  doc.body.childNodes.forEach(processNode);
+  
+  if (requests[0]?.insertText?.text.startsWith('\n')) {
+      requests[0].insertText.text = requests[0].insertText.text.substring(1);
+  }
+
+  return requests;
+};
+
+
+const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
+
+const generateReportFileName = (equipmentName?: string): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const equipment = equipmentName?.trim() || '설비';
+  return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
+};
+
 export const createGoogleDoc = async (
   htmlContent: string,
   accessToken: string,
   equipmentName?: string
 ): Promise<string> => {
-  // Validate token first
   const isValid = await validateGoogleToken(accessToken);
-  if (!isValid) throw new Error('토큰이 유효하지 않습니다.');
+  if (!isValid) throw new Error('Google API 토큰이 유효하지 않습니다.');
 
-  // Build formatting requests from content
-  const formattingRequests = htmlToDocsRequests(htmlContent);
-  if (formattingRequests.length === 0) throw new Error('변환할 콘텐츠가 없습니다.');
+  const requests = convertHtmlToGoogleDocsRequests(htmlContent);
 
-  // 1) Create document
+  if (requests.length === 0) {
+    throw new Error('Google Docs로 변환할 콘텐츠가 없습니다.');
+  }
+
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      title: generateReportFileName(equipmentName, htmlContent),
-    }),
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: generateReportFileName(equipmentName) }),
   });
-  if (!createResp.ok) {
-    const t = await createResp.text();
-    throw new Error(`문서 생성 실패: ${createResp.status} ${t}`);
-  }
-  const created = await createResp.json();
-  const documentId = created.documentId as string;
-  if (!documentId) throw new Error('문서 ID를 받지 못했습니다.');
+  if (!createResp.ok) throw new Error(`Google Docs 문서 생성 실패: ${await createResp.text()}`);
+  const createdDoc = await createResp.json();
+  const documentId = createdDoc.documentId as string;
 
-  // 2) Move to folder (best-effort)
-  const moveResp = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`,
-    {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    }
-  );
-  if (!moveResp.ok) {
-    // non-fatal
-    console.warn('폴더 이동 실패:', await moveResp.text());
-  }
-
-  // 3) Apply content updates
   const updateResp = await fetch(
     `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests: formattingRequests }),
+      body: JSON.stringify({ requests }),
     }
   );
-  if (!updateResp.ok) {
-    const t = await updateResp.text();
-    throw new Error(`문서 업데이트 실패: ${updateResp.status} ${t}`);
-  }
+  if (!updateResp.ok) throw new Error(`Google Docs 서식 적용 실패: ${await updateResp.text()}`);
+
+  await fetch(
+    `https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  ).catch(err => console.warn("폴더 이동 실패 (non-fatal):", err));
 
   return `https://docs.google.com/document/d/${documentId}/edit`;
 };
