@@ -146,96 +146,23 @@ export const validateGoogleToken = async (accessToken: string): Promise<boolean>
   }
 };
 
-// Robust JSON extraction from mixed HTML/text
-// - Finds inline JSON blocks and replaces them with human-readable text
-const parseAndCleanHtml = (htmlContent: string): string => {
-  let content = htmlContent ?? '';
-
-  // Normalize <br> to newlines to preserve paragraph breaks
-  content = content.replace(/<br\s*\/?>(?=\s*<)/gi, '\n');
-  content = content.replace(/<br\s*\/?>(?!\n)/gi, '\n');
-
-  // Remove recurring headings that shouldn't appear in final doc
-  content = content.replace(/기술검토 및 진단결과 종합/g, '');
-
-  // Extract JSON-looking fragments safely (spanning lines)
-  const jsonRegex = /\{[\s\S]*?\}/g;
-  const candidates = content.match(jsonRegex) || [];
-
-  for (const frag of candidates) {
-    try {
-      const parsed = JSON.parse(frag);
-      // Collect known fields in desired order
-      const keys = [
-        'result_final_text',
-        'final_summary',
-        'finalSummary',
-        'diagnosis_summary',
-        'complementary_summary',
-        'precision_verification',
-      ];
-      const pieces: string[] = [];
-      for (const k of keys) {
-        const v = (parsed as any)[k];
-        if (typeof v === 'string' && v.trim()) pieces.push(v.trim());
-      }
-
-      const replacement = pieces.join('\n').replace(/\\n/g, '\n');
-      // Replace JSON block with extracted text
-      if (replacement) content = content.replace(frag, replacement);
-    } catch (_) {
-      // Not valid JSON – ignore
-    }
-  }
-
-  // Strip any isolated braces/quotes remnants
-  content = content.replace(/\{\}|\[\]|\"\"/g, '');
-
-  // Convert remaining HTML to plain text while preserving line breaks
-  const div = document.createElement('div');
-  div.innerHTML = content
-    // Convert list items to bullet lines so we can style them later
-    .replace(/<li[^>]*>/gi, '\n• ')
-    .replace(/<\/li>/gi, '')
-    .replace(/<p[^>]*>/gi, '')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<h1[^>]*>/gi, '\n# ')
-    .replace(/<h2[^>]*>/gi, '\n## ')
-    .replace(/<h3[^>]*>/gi, '\n### ')
-    .replace(/<h[4-6][^>]*>/gi, '\n#### ')
-    .replace(/<ul[^>]*>/gi, '\n')
-    .replace(/<\/ul>/gi, '\n')
-    .replace(/<ol[^>]*>/gi, '\n')
-    .replace(/<\/ol>/gi, '\n');
-
-  const text = (div.textContent || div.innerText || '').replace(/\u00A0/g, ' ');
-
-  // Collapse excessive blank lines and trim
-  return text
-    .split('\n')
-    .map((l) => l.replace(/\s+$/g, ''))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-};
-
-// Convert cleaned plain text to Google Docs batchUpdate requests with styles
-const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
-  const rawText = parseAndCleanHtml(html);
-  const lines = rawText
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+// Convert rich HTML into Google Docs batchUpdate requests using DOMParser
+const htmlToDocsRequests = (html: string): any[] => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+  const container = doc.body.firstElementChild as HTMLElement;
 
   const requests: any[] = [];
   let currentIndex = 1; // Docs API content starts at index 1
 
   const insertText = (text: string) => {
+    if (!text) return;
     requests.push({ insertText: { location: { index: currentIndex }, text } });
     currentIndex += text.length;
   };
 
   const applyParagraphStyle = (start: number, end: number, namedStyleType: string) => {
+    if (end <= start) return;
     requests.push({
       updateParagraphStyle: {
         range: { startIndex: start, endIndex: end },
@@ -245,24 +172,140 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
     });
   };
 
-  const applyBold = (start: number, end: number) => {
-    if (end > start) {
-      requests.push({
-        updateTextStyle: {
-          range: { startIndex: start, endIndex: end },
-          textStyle: { bold: true },
-          fields: 'bold',
-        },
-      });
+  const applyTextStyle = (
+    start: number,
+    end: number,
+    style: { bold?: boolean; italic?: boolean; underline?: boolean; link?: string | null }
+  ) => {
+    if (end <= start) return;
+    const textStyle: any = {};
+    const fields: string[] = [];
+    if (style.bold) {
+      textStyle.bold = true;
+      fields.push('bold');
     }
+    if (style.italic) {
+      textStyle.italic = true;
+      fields.push('italic');
+    }
+    if (style.underline) {
+      textStyle.underline = true;
+      fields.push('underline');
+    }
+    if (style.link) {
+      textStyle.link = { url: style.link };
+      fields.push('link');
+    }
+    if (fields.length === 0) return;
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex: start, endIndex: end },
+        textStyle,
+        fields: fields.join(','),
+      },
+    });
   };
 
-  const makeBullet = (start: number, end: number) => {
+  const makeBullets = (start: number, end: number, preset: 'BULLET_DISC_CIRCLE_SQUARE' | 'NUMBERED_DECIMAL_ALPHA_ROMAN') => {
+    if (end <= start) return;
     requests.push({
       createParagraphBullets: {
         range: { startIndex: start, endIndex: end },
-        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+        bulletPreset: preset,
       },
+    });
+  };
+
+  const headingMap: Record<string, string> = {
+    H1: 'HEADING_1',
+    H2: 'HEADING_2',
+    H3: 'HEADING_3',
+    H4: 'HEADING_4',
+    H5: 'HEADING_5',
+    H6: 'HEADING_6',
+  };
+
+  type StyleCtx = { bold?: boolean; italic?: boolean; underline?: boolean; link?: string | null };
+
+  const mergeCtx = (base: StyleCtx, extra: StyleCtx): StyleCtx => ({
+    bold: base.bold || extra.bold,
+    italic: base.italic || extra.italic,
+    underline: base.underline || extra.underline,
+    link: extra.link ?? base.link ?? null,
+  });
+
+  const processInline = (node: Node, ctx: StyleCtx) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.textContent || '').replace(/\s+/g, ' ');
+      if (!text) return;
+      const start = currentIndex;
+      insertText(text);
+      applyTextStyle(start, currentIndex, ctx);
+      return;
+    }
+
+    if (!(node instanceof HTMLElement)) return;
+
+    const tag = node.tagName.toUpperCase();
+    let nextCtx: StyleCtx = { ...ctx };
+
+    if (tag === 'STRONG' || tag === 'B') nextCtx = mergeCtx(nextCtx, { bold: true });
+    if (tag === 'EM' || tag === 'I') nextCtx = mergeCtx(nextCtx, { italic: true });
+    if (tag === 'U') nextCtx = mergeCtx(nextCtx, { underline: true });
+    if (tag === 'A') nextCtx = mergeCtx(nextCtx, { link: node.getAttribute('href') });
+    if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP') {
+      // Keep plain text; optionally could set monospace via weightedFontFamily, omitted for compatibility
+    }
+
+    Array.from(node.childNodes).forEach((child) => processInline(child, nextCtx));
+  };
+
+  const processBlock = (el: HTMLElement, opts?: { listType?: 'UL' | 'OL' }) => {
+    const tag = el.tagName.toUpperCase();
+
+    if (tag === 'BR') {
+      insertText('\n');
+      return;
+    }
+
+    if (tag === 'UL' || tag === 'OL') {
+      Array.from(el.children).forEach((li) => processBlock(li as HTMLElement, { listType: tag as 'UL' | 'OL' }));
+      return;
+    }
+
+    if (tag === 'LI') {
+      const start = currentIndex;
+      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
+      // Ensure line break at end of list item
+      if (!el.textContent?.endsWith('\n')) insertText('\n');
+      const end = currentIndex;
+      makeBullets(start, end, opts?.listType === 'OL' ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE');
+      return;
+    }
+
+    const start = currentIndex;
+
+    if (tag in headingMap) {
+      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
+      if (!el.textContent?.endsWith('\n')) insertText('\n');
+      const end = currentIndex;
+      applyParagraphStyle(start, end, headingMap[tag]);
+      return;
+    }
+
+    if (tag === 'P' || tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE' || tag === 'PRE') {
+      Array.from(el.childNodes).forEach((child) => processInline(child, {}));
+      if (!el.textContent?.endsWith('\n')) insertText('\n');
+      return;
+    }
+
+    // Fallback: process children
+    Array.from(el.childNodes).forEach((child) => {
+      if (child instanceof HTMLElement) {
+        processBlock(child, opts);
+      } else {
+        processInline(child, {});
+      }
     });
   };
 
@@ -273,64 +316,12 @@ const convertHtmlToGoogleDocsRequests = (html: string): any[] => {
   const titleStart = currentIndex;
   insertText(title);
   applyParagraphStyle(titleStart, titleStart + title.length - 1, 'HEADING_1');
-
   const subtitleStart = currentIndex;
   insertText(subtitle);
   applyParagraphStyle(subtitleStart, subtitleStart + subtitle.length - 1, 'HEADING_2');
-
   insertText(dateLine);
 
-  // Section keyword heuristics
-  const sectionKeywords = [
-    '핵심 진단 요약',
-    '정밀 검증',
-    '최종 종합 의견',
-    '기술 진단 의견',
-    '심층 검증',
-    '계산 검증',
-    '단위 검증',
-    '논리 검증',
-    '종합 평가',
-    '주요 원인 분석',
-    '개선 권고 사항',
-    '기대 효과',
-    '결론',
-  ];
-
-  const isNumberedHeading = (line: string) => /^(\d+\.|\d+\)|[IVX]+\.|[가-힣]\)|[A-Z]\))\s+/.test(line);
-  const isSectionHeading = (line: string) =>
-    sectionKeywords.some((k) => line.startsWith(k)) || /[:：]$/.test(line);
-  const isBulletLine = (line: string) => /^([•\-\*]|\u2022)\s+/.test(line);
-
-  for (const line of lines) {
-    const textToInsert = line + '\n';
-    const startIndex = currentIndex;
-    insertText(textToInsert);
-    const endIndex = startIndex + textToInsert.length;
-
-    if (isNumberedHeading(line)) {
-      applyParagraphStyle(startIndex, endIndex, 'HEADING_2');
-      // Bold up to first colon if present
-      const m = line.match(/^(.{1,80}?)([:：])/);
-      if (m) applyBold(startIndex, startIndex + m[1].length);
-    } else if (isSectionHeading(line)) {
-      applyParagraphStyle(startIndex, endIndex, 'HEADING_3');
-      const m = line.match(/^(.{1,80}?)([:：])/);
-      if (m) applyBold(startIndex, startIndex + m[1].length);
-    } else if (isBulletLine(line)) {
-      // Convert to real bullet list and bold label before colon
-      makeBullet(startIndex, endIndex);
-      const m = line.replace(/^([•\-\*]|\u2022)\s+/, '').match(/^(.{1,80}?)([:：])/);
-      if (m) {
-        const offset = line.indexOf(' ') + 1; // after bullet symbol + space
-        applyBold(startIndex + offset, startIndex + offset + m[1].length);
-      }
-    } else {
-      // Normal paragraph: bold leading label (e.g., "원인:")
-      const m = line.match(/^(.{1,80}?)([:：])/);
-      if (m) applyBold(startIndex, startIndex + m[1].length);
-    }
-  }
+  Array.from(container.children).forEach((child) => processBlock(child as HTMLElement));
 
   return requests;
 };
@@ -410,7 +401,7 @@ export const createGoogleDoc = async (
   if (!isValid) throw new Error('토큰이 유효하지 않습니다.');
 
   // Build formatting requests from content
-  const formattingRequests = convertHtmlToGoogleDocsRequests(htmlContent);
+  const formattingRequests = htmlToDocsRequests(htmlContent);
   if (formattingRequests.length === 0) throw new Error('변환할 콘텐츠가 없습니다.');
 
   // 1) Create document

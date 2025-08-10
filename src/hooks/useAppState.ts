@@ -3,6 +3,7 @@ import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
 import { GoogleAuthState, authenticateGoogle, validateGoogleToken, fetchGoogleClientId, exchangeCodeForToken } from '@/utils/googleDocsUtils';
+import { supabase } from '@/integrations/supabase/client';
 
 export const useAppState = () => {
   const [isDark, setIsDark] = useState(() => {
@@ -122,23 +123,16 @@ export const useAppState = () => {
       if (refreshToken) {
         console.log('🔄 리프레시 토큰으로 새로운 액세스 토큰을 요청합니다.');
         // Supabase function을 호출하여 새로운 access token을 받아옴
-        const response = await fetch('https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/refresh-token', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
-            'apikey': `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw`,
-          },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+        const { data, error } = await supabase.functions.invoke('refresh-token', {
+          body: { refresh_token: refreshToken },
         });
-
-        if (!response.ok) {
+        if (error) {
           throw new Error('리프레시 토큰으로 액세스 토큰을 갱신하는 데 실패했습니다.');
         }
-
-        const data = await response.json();
-        const newAccessToken = data.access_token;
-
+        const newAccessToken = (data as any)?.access_token as string | undefined;
+        if (!newAccessToken) {
+          throw new Error('리프레시 토큰 응답에서 access_token을 받지 못했습니다.');
+        }
         setGoogleAuth({ isAuthenticated: true, accessToken: newAccessToken });
         return newAccessToken;
       }

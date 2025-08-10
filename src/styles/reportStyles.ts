@@ -104,6 +104,20 @@ export const getReportStyles = (isDark: boolean) => `
     page-break-inside: avoid;
   }
 
+  /* Expert profile box */
+  .report-content .expert-profile {
+    margin: 1rem 0;
+    padding: 1rem 1.25rem;
+    background: ${isDark ? '#111827' : '#f9fafb'};
+    border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};
+    border-left: 4px solid ${isDark ? '#60a5fa' : '#3b82f6'};
+    border-radius: 0.5rem;
+    color: ${isDark ? '#f3f4f6' : '#1f2937'};
+    page-break-inside: avoid;
+  }
+
+  .report-content .expert-profile p { margin: 0.5rem 0; }
+
   @media print {
     .report-content {
       margin: 0 !important;

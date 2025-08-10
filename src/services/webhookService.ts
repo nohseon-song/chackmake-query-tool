@@ -23,10 +23,25 @@ const getWebhookUrl = async () => {
   }
 }
 
-export const sendWebhookData = async (payload: { readings?: Reading[]; chat?: string; timestamp: number }) => {
+export const sendWebhookData = async (
+  payload: { readings?: Reading[]; chat?: string; timestamp: number } & Record<string, any>
+) => {
   const url = await getWebhookUrl();
   if (!url) {
     throw new Error('Webhook URL이 설정되지 않았습니다.');
+  }
+
+  // Wrap expert profile variables if present
+  const wrappedPayload = { ...payload } as any;
+  const candidateKeys = ['expert_profile_html', 'expert_profile', 'expertProfile'];
+  for (const key of candidateKeys) {
+    const val = wrappedPayload[key];
+    if (typeof val === 'string' && val.trim()) {
+      const alreadyWrapped = /class=["']expert-profile["']/.test(val);
+      const wrapped = alreadyWrapped ? val : `<div class="expert-profile">${val}</div>`;
+      wrappedPayload[key] = wrapped; // replace in-place
+      wrappedPayload[`${key}_html`] = wrapped; // also provide *_html variant for Make.com
+    }
   }
 
   const response = await fetch(url, {
@@ -34,8 +49,13 @@ export const sendWebhookData = async (payload: { readings?: Reading[]; chat?: st
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(wrappedPayload),
   });
-  
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Webhook 호출 실패');
+  }
+
   return await response.text();
 };
