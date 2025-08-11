@@ -143,7 +143,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   const processNode = (node: ChildNode) => {
     if (node.nodeType === Node.TEXT_NODE && node.textContent) {
       const text = node.textContent.replace(/\u00A0/g, ' ');
-      if (text) { // 비어있지 않은 모든 텍스트 노드를 삽입
+      if (text) {
         requests.push({ insertText: { location: { index: currentIndex }, text } });
         currentIndex += text.length;
       }
@@ -151,11 +151,9 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
       const el = node as HTMLElement;
       const startTagIndex = currentIndex;
 
-      // 자식 노드들을 먼저 처리
       el.childNodes.forEach(processNode);
       const endTagIndex = currentIndex;
 
-      // 텍스트가 삽입된 후에 해당 범위에 스타일을 적용
       if (endTagIndex > startTagIndex) {
         switch (el.tagName.toLowerCase()) {
           case 'h1':
@@ -191,7 +189,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         }
       }
       
-      // 블록 요소 뒤에는 줄바꿈을 추가하여 문단 구분을 명확하게 합니다.
       if (['p', 'h1', 'h2', 'h3', 'h4', 'div', 'section', 'header', 'footer', 'ul', 'li'].includes(el.tagName.toLowerCase())) {
         const lastRequest = requests[requests.length - 1];
         if (!lastRequest || !lastRequest.insertText || !lastRequest.insertText.text.endsWith('\n')) {
@@ -204,7 +201,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
   doc.body.childNodes.forEach(processNode);
 
-  // 문서 시작 부분의 불필요한 줄바꿈 제거
   if (requests[0]?.insertText?.text.startsWith('\n')) {
       requests[0].insertText.text = requests[0].insertText.text.substring(1);
   }
