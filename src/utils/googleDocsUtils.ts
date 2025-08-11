@@ -109,19 +109,24 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
      * 예: "h1>Hello/h1>" -> "<h1>Hello</h1>"
      */
     const repairMalformedHtml = (html: string): string => {
-        // 알려진 HTML 태그 목록
-        const KNOWN_TAGS = 'h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer|em|strong|b|i|br';
-        
-        // 여는 태그 복구 (예: "h1>" -> "<h1>", "div class...>" -> "<div class...>")
-        // 단어 경계(\b)로 시작하고, 알려진 태그 이름으로 이어지며, '>'로 끝나는 패턴을 찾음
-        const openTagRegex = new RegExp(`\\b(${KNOWN_TAGS})([\\s\\S]*?)>`, 'g');
-        let repairedHtml = html.replace(openTagRegex, '<$1$2>');
+        // 알려진 HTML 태그 목록을 |로 연결한 문자열
+        const tagList = 'h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer|em|strong|b|i|br';
 
-        // 닫는 태그 복구 (예: "/h1>" -> "</h1>")
-        // 슬래시(/)로 시작하고, 알려진 태그 이름으로 이어지며, '>'로 끝나는 패턴을 찾음
-        const closeTagRegex = new RegExp(`\\/(${KNOWN_TAGS})>`, 'g');
+        // 1. 여는 태그 복구: <가 누락된 태그를 찾아서 <를 붙여줌
+        // 예: h1>, p class="..">
+        const openTagRegex = new RegExp(`\\b(${tagList})([\\s>])`, 'g');
+        let repairedHtml = html.replace(openTagRegex, (match, p1, p2, offset) => {
+            // 바로 앞에 <가 이미 있다면, 중복해서 붙이지 않음 (안전장치)
+            if (offset > 0 && html[offset - 1] === '<') {
+                return match;
+            }
+            return `<${match}`;
+        });
+
+        // 2. 닫는 태그 복구: /tag> 를 </tag> 로 변경
+        const closeTagRegex = new RegExp(`\\/(${tagList})>`, 'g');
         repairedHtml = repairedHtml.replace(closeTagRegex, '</$1>');
-
+        
         return repairedHtml;
     };
 
@@ -135,7 +140,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         .trim();
 
     // 2-2. 정규식으로 HTML 블록 요소들을 순차적으로 찾기
-    const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer)([\s>])([\s\S]*?)<\/\1>/g;
+    const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer)(?:[^>]*)>([\s\S]*?)<\/\1>/g;
     let match;
     let lastIndex = 0;
 
@@ -146,8 +151,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         }
 
         const tagName = match[1].toLowerCase();
-        // innerHTML은 태그의 속성을 제외한 순수 내용만 포함해야 함
-        const innerHtml = match[3];
+        const innerHtml = match[2];
         processBlock(innerHtml, tagName);
 
         lastIndex = match.index + match[0].length;
