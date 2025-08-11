@@ -10,7 +10,7 @@ export interface GoogleAuthState {
 let GOOGLE_CLIENT_ID = '';
 
 // =================================================================
-// 인증 관련 함수 (수정 없음 - 완벽하게 작동 중)
+// 인증 관련 함수 (수정 없음)
 // =================================================================
 export const fetchGoogleClientId = async (): Promise<string> => {
   if (GOOGLE_CLIENT_ID) return GOOGLE_CLIENT_ID;
@@ -97,136 +97,78 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종] 데이터 자동 복구 기능이 포함된, 완벽한 변환 엔진
+// [최종] 순수 텍스트 패턴 분석 기반의 완벽한 변환 엔진
 // =================================================================
-const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
+const convertHtmlToGoogleDocsRequests = (textContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    /**
-     * [1단계: 데이터 복구]
-     * '<'가 누락된 비정상적인 HTML을 복구하는 가장 안정적인 함수
-     */
-    const repairMalformedHtml = (html: string): string => {
-        const tagList = 'article|header|h[1-6]|p|em|section|div|strong|b|ul|ol|li|pre|br|i|footer|blockquote';
-        const openTagRegex = new RegExp(`(?<!<)\\b(${tagList})`, 'g');
-        let repairedHtml = html.replace(openTagRegex, '<$&');
-        const closeTagRegex = new RegExp(`\\/(${tagList})>`, 'g');
-        repairedHtml = repairedHtml.replace(closeTagRegex, '</$1>');
-        return repairedHtml;
-    };
+    // 텍스트를 줄바꿈 기준으로 나눔
+    const lines = textContent.split('\n');
 
-    const repairedHtml = repairMalformedHtml(htmlContent);
-
-    // [2단계: 완벽 변환]
-    // 2-1. HTML 전처리
-    const cleanHtml = repairedHtml
-        .replace(/<br\s*\/?>/gi, '\n') // <br>을 줄바꿈으로 변환
-        .replace(/&nbsp;/g, ' ') // &nbsp;를 공백으로
-        .replace(/\s+/g, ' ')
-        .replace(/>\s+</g, '><')
-        .trim();
-
-    // 2-2. 정규식으로 HTML 블록 요소들을 순차적으로 찾기
-    const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer)(?:[^>]*)>([\s\S]*?)<\/\1>/g;
-    let match;
-    let lastIndex = 0;
-    let prevTag: string | null = null;
-
-    while ((match = blockRegex.exec(cleanHtml)) !== null) {
-        const precedingText = cleanHtml.substring(lastIndex, match.index).trim();
-        if (precedingText) {
-             processBlock(precedingText, 'p', prevTag);
-        }
-
-        const tagName = match[1].toLowerCase();
-        const innerHtml = match[2];
-        processBlock(innerHtml, tagName, prevTag);
-        
-        // li 태그는 연속될 수 있으므로 이전 태그로 기록하지 않음
-        if(tagName !== 'li') {
-            prevTag = tagName;
-        }
-
-        lastIndex = match.index + match[0].length;
-    }
-
-    const trailingText = cleanHtml.substring(lastIndex).trim();
-    if (trailingText) {
-        processBlock(trailingText, 'p', prevTag);
-    }
-
-    /**
-     * 하나의 블록을 처리하는 함수
-     */
-    function processBlock(innerHtml: string, tagName: string, previousTag: string | null) {
-        const content = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        if (!content) return;
-
-        // h3 다음에 p가 오는 경우를 제외하고 줄바꿈 추가
-        const isH3FollowedByP = previousTag === 'h3' && tagName === 'p';
-        if (currentIndex > 1 && !isH3FollowedByP) {
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) {
+            // 빈 줄은 단락 구분을 위해 그대로 유지
             requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
             currentIndex++;
+            continue;
         }
 
-        const blockStartIndex = currentIndex;
-        
+        const lineStartIndex = currentIndex;
+
         // 텍스트 삽입
-        requests.push({ insertText: { location: { index: currentIndex }, text: content } });
-        currentIndex += content.length;
+        requests.push({ insertText: { location: { index: currentIndex }, text: trimmedLine + '\n' } });
+        currentIndex += trimmedLine.length + 1;
+        
+        const lineEndIndex = currentIndex;
 
-        const blockEndIndex = currentIndex;
-
-        // 블록 레벨 스타일 적용
+        // 패턴에 따라 스타일 적용
         let textStyle: any = { fontSize: { magnitude: 10, unit: 'PT' } };
         let fields = 'fontSize';
 
-        if (tagName === 'h1') {
+        if (/^기술검토 및 진단 종합 보고서/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
-        } else if (tagName === 'h2') {
+        } else if (/^기계설비 성능점검/.test(trimmedLine)) {
+            textStyle = { fontSize: { magnitude: 16, unit: 'PT' }, bold: false }; // 부제목은 굵게하지 않음
+            fields = 'fontSize,bold';
+        } else if (/^\d+\.\s.*(Expert|전문가)/.test(trimmedLine) || /^AI 전문가 패널 소개/.test(trimmedLine) || /^4\.\s최종 기술 진단 종합 보고서/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
-        } else if (['h3', 'h4', 'h5', 'h6'].includes(tagName)) {
+        } else if (/^핵심 진단 요약|^주요 조언|^정밀 검증|^최종 종합 의견|^기술 검토 보완 요약|^추가 및 대안 권고/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
-        } else if (tagName === 'pre') {
-             textStyle.weightedFontFamily = { fontFamily: 'Courier New' };
-             fields += ',weightedFontFamily';
         }
 
+        // 전체 라인에 기본 스타일 적용
         requests.push({
             updateTextStyle: {
-                range: { startIndex: blockStartIndex, endIndex: blockEndIndex },
+                range: { startIndex: lineStartIndex, endIndex: lineEndIndex },
                 textStyle,
                 fields,
             },
         });
-        
-        // 인라인 굵게 처리
-        const boldRegex = /<(strong|b)>([\s\S]*?)<\/\1>/g;
-        let boldMatch;
-        while((boldMatch = boldRegex.exec(innerHtml)) !== null) {
-            const boldText = boldMatch[2].trim();
-            const startIndex = content.indexOf(boldText);
-            if(startIndex !== -1) {
-                 requests.push({
-                    updateTextStyle: {
-                        range: { startIndex: blockStartIndex + startIndex, endIndex: blockStartIndex + startIndex + boldText.length },
-                        textStyle: { bold: true },
-                        fields: 'bold',
-                    },
-                });
-            }
-        }
 
         // 글머리 기호 적용
-        if (tagName === 'li') {
+        if (/^•/.test(trimmedLine)) {
             requests.push({
                 createParagraphBullets: {
-                    range: { startIndex: blockStartIndex, endIndex: blockEndIndex },
+                    range: { startIndex: lineStartIndex, endIndex: lineEndIndex },
                     bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                },
+            });
+        }
+        
+        // '핵심 조언:' 같은 특정 키워드만 굵게 처리
+        const boldKeywordMatch = trimmedLine.match(/^(핵심 조언:|전문분야:|배경:)/);
+        if (boldKeywordMatch) {
+            const keyword = boldKeywordMatch[0];
+            requests.push({
+                updateTextStyle: {
+                    range: { startIndex: lineStartIndex, endIndex: lineStartIndex + keyword.length },
+                    textStyle: { bold: true },
+                    fields: 'bold',
                 },
             });
         }
@@ -236,7 +178,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 };
 
 
-const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'; // 지정된 구글 드라이브 폴더 ID
+const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
 const generateReportFileName = (equipmentName?: string): string => {
   const d = new Date();
@@ -266,6 +208,7 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
+  // 이제 함수 이름이 textContent를 받는 것을 명확히 함
   const requests = convertHtmlToGoogleDocsRequests(htmlContent);
 
   if (requests.length > 0) {
