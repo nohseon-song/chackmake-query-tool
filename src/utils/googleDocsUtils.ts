@@ -96,59 +96,78 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 };
 
 // =================================================================
-// [핵심] 가독성 문제를 해결한 최종 완성본 변환 로직
+// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
     const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent.replace(/<br\s*\/?>/gi, '\n'), 'text/html');
+    // `<br>` 태그를 임시로 줄바꿈 문자로 바꿔서 처리
+    const doc = parser.parseFromString(
+        htmlContent.replace(/<br\s*\/?>/gi, '\n'), 
+        'text/html'
+    );
 
     const processNode = (node: ChildNode) => {
+        // 1. 텍스트 노드 처리
         if (node.nodeType === Node.TEXT_NODE && node.textContent) {
-            const text = node.textContent.replace(/\u00A0/g, ' ').trim();
-            if (text) {
-                const textToInsert = text + '\n';
+            const text = node.textContent.replace(/\u00A0/g, ' ');
+            if (text.trim()) {
                 const startIndex = currentIndex;
-                requests.push({ insertText: { location: { index: currentIndex }, text: textToInsert } });
-                currentIndex += textToInsert.length;
-                
-                // 부모 노드를 확인하여 스타일을 적용합니다.
+                requests.push({ insertText: { location: { index: currentIndex }, text } });
+                currentIndex += text.length;
+
+                // 부모 노드를 확인하여 인라인 스타일(굵게 등)을 적용
                 let parent = node.parentElement;
-                if (parent) {
-                    const parentTagName = parent.tagName.toLowerCase();
-                    if (['h1', 'h2', 'h3', 'h4'].includes(parentTagName)) {
-                         requests.push({
-                            updateParagraphStyle: {
-                                range: { startIndex, endIndex: currentIndex -1 },
-                                paragraphStyle: { namedStyleType: `HEADING_${parentTagName.substring(1)}` },
-                                fields: 'namedStyleType',
-                            },
-                        });
-                    } else if (parentTagName === 'li') {
-                         requests.push({
-                            createParagraphBullets: {
-                                range: { startIndex, endIndex: currentIndex - 1 },
-                                bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                            },
-                        });
-                    }
-                    // strong 태그는 중첩될 수 있으므로 별도 처리
-                    if(parent.closest('strong, b')){
-                         requests.push({
-                            updateTextStyle: {
-                                range: { startIndex, endIndex: currentIndex - 1 },
-                                textStyle: { bold: true },
-                                fields: 'bold',
-                            },
-                        });
-                    }
+                if (parent && parent.closest('strong, b')) {
+                    requests.push({
+                        updateTextStyle: {
+                            range: { startIndex, endIndex: currentIndex },
+                            textStyle: { bold: true },
+                            fields: 'bold',
+                        },
+                    });
                 }
             }
+        // 2. 엘리먼트 노드 처리
         } else if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
+            const tagName = el.tagName.toLowerCase();
+            const isBlock = ['p', 'h1', 'h2', 'h3', 'h4', 'div', 'li', 'header', 'footer', 'section', 'article'].includes(tagName);
+            
+            const startBlockIndex = currentIndex;
+            
+            // 재귀적으로 자식 노드 처리
             el.childNodes.forEach(processNode);
+
+            const endBlockIndex = currentIndex;
+
+            // 블록 요소 전체에 스타일 적용
+            if (isBlock && endBlockIndex > startBlockIndex) {
+                 if (['h1', 'h2', 'h3', 'h4'].includes(tagName)) {
+                    requests.push({
+                        updateParagraphStyle: {
+                            range: { startIndex: startBlockIndex, endIndex: endBlockIndex },
+                            paragraphStyle: { namedStyleType: `HEADING_${tagName.substring(1)}` },
+                            fields: 'namedStyleType',
+                        },
+                    });
+                } else if (tagName === 'li') {
+                    requests.push({
+                        createParagraphBullets: {
+                            range: { startIndex: startBlockIndex, endIndex: endBlockIndex },
+                            bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                        },
+                    });
+                }
+            }
+
+            // 블록 요소 처리 후 줄바꿈 추가
+            if (isBlock) {
+                requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                currentIndex += 1;
+            }
         }
     };
 
@@ -179,9 +198,11 @@ export const createGoogleDoc = async (
   const requests = convertHtmlToGoogleDocsRequests(htmlContent);
 
   if (requests.length === 0) {
-    throw new Error('Google Docs로 변환할 콘텐츠가 없습니다.');
+    // 내용이 없을 경우 빈 문서를 만들고 제목만 설정
+    console.warn("내보낼 콘텐츠가 없어 빈 문서를 생성합니다.");
   }
 
+  // 1. 문서 생성
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -191,7 +212,9 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
+  // 2. 내용 및 서식 일괄 업데이트 (내용이 있을 때만)
   if (requests.length > 0) {
+      console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
       const updateResp = await fetch(
         `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
         {
@@ -207,6 +230,7 @@ export const createGoogleDoc = async (
       }
   }
 
+  // 3. 폴더 이동
   await fetch(
     `https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`,
     {
