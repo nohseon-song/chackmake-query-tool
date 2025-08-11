@@ -97,47 +97,58 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종] 순수 텍스트 패턴 분석 기반의 완벽한 변환 엔진
+// [최종] 데이터 자동 복구 기능 + 순수 텍스트 패턴 분석 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    // HTML 태그를 모두 제거하고 순수 텍스트로 변환
-    const textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    
-    // 텍스트를 줄바꿈 기준으로 나눔 (여러 공백이나 특정 구분자로 나눌 수도 있음)
-    // 여기서는 보고서의 구조적 단위를 나타내는 키워드로 분할
-    const sections = textContent.split(/(기술검토 및 진단 종합 보고서|AI 전문가 패널 소개|\d\.\s기술.*Expert|핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|추가 및 대안 권고)/)
-        .filter(Boolean);
+    // [1단계: 데이터 자동 복구]
+    const repairMalformedHtml = (html: string): string => {
+        const tagList = 'h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer|em|strong|b|i|br';
+        const openTagRegex = new RegExp(`(?<!<)\\b(${tagList})`, 'g');
+        let repairedHtml = html.replace(openTagRegex, '<$&');
+        const closeTagRegex = new RegExp(`\\/(${tagList})>`, 'g');
+        repairedHtml = repairedHtml.replace(closeTagRegex, '</$1>');
+        return repairedHtml;
+    };
 
+    // [2단계: 순수 텍스트 추출 및 정리]
+    const textContent = repairMalformedHtml(htmlContent)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(h[1-6]|p|div|li)>/gi, '\n') // 블록 태그가 닫힐 때 줄바꿈
+        .replace(/<[^>]*>/g, '') // 나머지 태그 모두 제거
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\n\s*\n/g, '\n') // 연속된 빈 줄을 하나로
+        .trim();
 
-    for (let i = 0; i < sections.length; i++) {
-        const part = sections[i].trim();
-        if (!part) continue;
+    // [3단계: 텍스트 라인별 패턴 분석]
+    const lines = textContent.split('\n');
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
 
         const lineStartIndex = currentIndex;
-        
-        // 텍스트 삽입
-        requests.push({ insertText: { location: { index: currentIndex }, text: part + '\n' } });
-        currentIndex += part.length + 1;
 
+        requests.push({ insertText: { location: { index: currentIndex }, text: trimmedLine + '\n' } });
+        currentIndex += trimmedLine.length + 1;
+        
         const lineEndIndex = currentIndex;
 
-        // 패턴에 따라 스타일 적용
         let textStyle: any = { fontSize: { magnitude: 10, unit: 'PT' } };
         let fields = 'fontSize';
 
-        if (/^기술검토 및 진단 종합 보고서/.test(part)) {
+        if (/^기술검토 및 진단 종합 보고서/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
-        } else if (/^기계설비 성능점검/.test(part)) {
-            textStyle = { fontSize: { magnitude: 16, unit: 'PT' }, bold: false };
-            fields = 'fontSize,bold';
-        } else if (/^\d+\.\s.*(Expert|전문가)/.test(part) || /^AI 전문가 패널 소개/.test(part) || /^4\.\s최종 기술 진단 종합 보고서/.test(part)) {
+        } else if (/^기계설비 성능점검/.test(trimmedLine)) {
+            textStyle = { fontSize: { magnitude: 14, unit: 'PT' }, bold: false, italic: true };
+            fields = 'fontSize,bold,italic';
+        } else if (/^\d+\.\s.*(Expert|전문가)/.test(trimmedLine) || /^AI 전문가 패널 소개/.test(trimmedLine) || /^4\.\s최종 기술 진단 종합 보고서/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
-        } else if (/^핵심 진단 요약|^주요 조언|^정밀 검증|^최종 종합 의견|^기술 검토 보완 요약|^추가 및 대안 권고/.test(part)) {
+        } else if (/^핵심 진단 요약|^주요 조언|^정밀 검증|^최종 종합 의견|^기술 검토 보완 요약|^추가 및 대안 권고|^심층 검증 결과/.test(trimmedLine)) {
             textStyle = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true };
             fields = 'fontSize,bold';
         }
@@ -150,30 +161,16 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             },
         });
 
-        // 글머리 기호 적용
-        const bulletLines = part.split('•').filter(l => l.trim());
-        if (bulletLines.length > 1) {
-            let bulletStartIndex = lineStartIndex;
-            for (const bulletLine of bulletLines) {
-                const trimmedBullet = "• " + bulletLine.trim();
-                const bulletEndIndex = bulletStartIndex + trimmedBullet.length;
-                 if(bulletStartIndex > lineStartIndex){ // 첫번째는 이미 텍스트가 있으므로 제외
-                    requests.push({ insertText: { location: { index: bulletStartIndex }, text: trimmedBullet + '\n' } });
-                    currentIndex += trimmedBullet.length + 1;
-                 }
-                
-                requests.push({
-                    createParagraphBullets: {
-                        range: { startIndex: bulletStartIndex, endIndex: bulletEndIndex },
-                        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                    },
-                });
-                bulletStartIndex = bulletEndIndex + 1;
-            }
+        if (/^•/.test(trimmedLine)) {
+            requests.push({
+                createParagraphBullets: {
+                    range: { startIndex: lineStartIndex, endIndex: lineEndIndex },
+                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                },
+            });
         }
         
-        // 특정 키워드만 굵게 처리
-        const boldKeywordMatch = part.match(/^(핵심 조언:|전문분야:|배경:)/);
+        const boldKeywordMatch = trimmedLine.match(/^(핵심 조언:|전문분야:|배경:)/);
         if (boldKeywordMatch) {
             const keyword = boldKeywordMatch[0];
             requests.push({
