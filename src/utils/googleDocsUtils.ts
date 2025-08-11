@@ -49,7 +49,7 @@ export const authenticateGoogle = async (): Promise<string> => {
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('scope', scope);
     authUrl.searchParams.append('include_granted_scopes', 'true');
-    authUrl.searchParams.append('access_type', 'offline');
+    authUrl.search_params.append('access_type', 'offline');
     const popup = window.open(authUrl.toString(), 'google-auth', 'width=500,height=650');
     if (!popup) throw new Error('팝업이 차단되었습니다.');
     return new Promise<string>((resolve, reject) => {
@@ -96,88 +96,125 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 };
 
 // =================================================================
-// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직
+// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (완전히 새로 작성됨)
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
-    let currentIndex = 1;
+    let currentIndex = 1; // Google Docs의 인덱스는 1부터 시작합니다.
 
     const parser = new DOMParser();
-    // `<br>` 태그를 임시로 줄바꿈 문자로 바꿔서 처리
-    const doc = parser.parseFromString(
-        htmlContent.replace(/<br\s*\/?>/gi, '\n'), 
-        'text/html'
-    );
+    const doc = parser.parseFromString(htmlContent, 'text/html');
 
-    const processNode = (node: ChildNode) => {
-        // 1. 텍스트 노드 처리
-        if (node.nodeType === Node.TEXT_NODE && node.textContent) {
-            const text = node.textContent.replace(/\u00A0/g, ' ');
+    /**
+     * DOM 노드를 재귀적으로 처리하여 Google Docs API 요청 배열을 생성합니다.
+     * @param node 처리할 DOM 노드
+     */
+    const processNode = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || '';
             if (text.trim()) {
-                const startIndex = currentIndex;
-                requests.push({ insertText: { location: { index: currentIndex }, text } });
+                const textStartIndex = currentIndex;
+                requests.push({
+                    insertText: {
+                        location: { index: textStartIndex },
+                        text: text,
+                    },
+                });
                 currentIndex += text.length;
 
-                // 부모 노드를 확인하여 인라인 스타일(굵게 등)을 적용
-                let parent = node.parentElement;
-                if (parent && parent.closest('strong, b')) {
+                // 부모가 <strong> 또는 <b> 태그인지 확인하여 '굵게' 스타일 적용
+                if (node.parentElement?.closest('strong, b')) {
                     requests.push({
                         updateTextStyle: {
-                            range: { startIndex, endIndex: currentIndex },
+                            range: { startIndex: textStartIndex, endIndex: currentIndex },
                             textStyle: { bold: true },
                             fields: 'bold',
                         },
                     });
                 }
             }
-        // 2. 엘리먼트 노드 처리
         } else if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
             const tagName = el.tagName.toLowerCase();
-            const isBlock = ['p', 'h1', 'h2', 'h3', 'h4', 'div', 'li', 'header', 'footer', 'section', 'article'].includes(tagName);
-            
-            const startBlockIndex = currentIndex;
-            
-            // 재귀적으로 자식 노드 처리
+            const paragraphStartIndex = currentIndex;
+
+            // 자식 노드들을 먼저 재귀적으로 처리
             el.childNodes.forEach(processNode);
 
-            const endBlockIndex = currentIndex;
-
-            // 블록 요소 전체에 스타일 적용
-            if (isBlock && endBlockIndex > startBlockIndex) {
-                 if (['h1', 'h2', 'h3', 'h4'].includes(tagName)) {
+            // 블록 레벨 요소 처리 후 스타일 적용 및 줄바꿈
+            switch (tagName) {
+                case 'h1':
+                case 'h2':
+                case 'h3':
+                case 'h4':
+                case 'h5':
+                case 'h6':
+                    // 헤딩 스타일 적용
                     requests.push({
                         updateParagraphStyle: {
-                            range: { startIndex: startBlockIndex, endIndex: endBlockIndex },
-                            paragraphStyle: { namedStyleType: `HEADING_${tagName.substring(1)}` },
+                            range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
+                            paragraphStyle: { namedStyleType: `HEADING_${tagName.charAt(1)}` },
                             fields: 'namedStyleType',
                         },
                     });
-                } else if (tagName === 'li') {
+                    // 블록 요소 뒤에 줄바꿈 추가
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
+                    break;
+
+                case 'p':
+                case 'div':
+                    // 일반 단락 뒤에 줄바꿈 추가
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
+                    break;
+
+                case 'li':
+                    // 목록 항목(li)에 글머리 기호 적용
                     requests.push({
                         createParagraphBullets: {
-                            range: { startIndex: startBlockIndex, endIndex: endBlockIndex },
+                            range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
                             bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
                         },
                     });
-                }
-            }
+                    // li 요소는 ul/ol이 줄바꿈을 관리하므로 여기서 추가하지 않음
+                    break;
+                
+                case 'ul':
+                case 'ol':
+                     // 리스트 컨테이너 뒤에 줄바꿈 추가
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
+                    break;
 
-            // 블록 요소 처리 후 줄바꿈 추가
-            if (isBlock) {
-                requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                currentIndex += 1;
+                case 'br':
+                    // <br> 태그를 줄바꿈으로 처리
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
+                    break;
             }
         }
     };
 
+    // body의 모든 자식 노드를 순회하며 변환 시작
     doc.body.childNodes.forEach(processNode);
+    
+    // 문서 시작 부분에 불필요하게 추가된 빈 줄 제거 (예: 첫 노드가 p태그일 경우)
+    if (requests.length > 0 && requests[0]?.insertText?.text === '\n') {
+        requests.shift();
+    }
+
     return requests;
 };
 
 
-const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
+const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'; // 지정된 구글 드라이브 폴더 ID
 
+/**
+ * 보고서 파일 이름을 생성합니다. (예: 기술진단내역작성_설비명_2025.08.11)
+ * @param equipmentName 설비 이름
+ * @returns 생성된 파일 이름
+ */
 const generateReportFileName = (equipmentName?: string): string => {
   const d = new Date();
   const year = d.getFullYear();
@@ -187,6 +224,13 @@ const generateReportFileName = (equipmentName?: string): string => {
   return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
 };
 
+/**
+ * HTML 콘텐츠를 사용하여 Google Docs 문서를 생성하고 지정된 폴더로 이동시킵니다.
+ * @param htmlContent 문서에 채울 HTML 형식의 콘텐츠
+ * @param accessToken Google API 접근 토큰
+ * @param equipmentName 파일 이름에 사용될 설비 이름
+ * @returns 생성된 Google Docs 문서의 URL
+ */
 export const createGoogleDoc = async (
   htmlContent: string,
   accessToken: string,
@@ -195,49 +239,50 @@ export const createGoogleDoc = async (
   const isValid = await validateGoogleToken(accessToken);
   if (!isValid) throw new Error('Google API 토큰이 유효하지 않습니다.');
 
-  const requests = convertHtmlToGoogleDocsRequests(htmlContent);
-
-  if (requests.length === 0) {
-    // 내용이 없을 경우 빈 문서를 만들고 제목만 설정
-    console.warn("내보낼 콘텐츠가 없어 빈 문서를 생성합니다.");
-  }
-
-  // 1. 문서 생성
+  // 1. 문서 생성 (제목만 포함)
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: generateReportFileName(equipmentName) }),
   });
-  if (!createResp.ok) throw new Error(`Google Docs 문서 생성 실패: ${await createResp.text()}`);
+  if (!createResp.ok) {
+    throw new Error(`Google Docs 문서 생성 실패: ${await createResp.text()}`);
+  }
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
-  // 2. 내용 및 서식 일괄 업데이트 (내용이 있을 때만)
+  // 2. HTML을 Google Docs API 요청으로 변환
+  const requests = convertHtmlToGoogleDocsRequests(htmlContent);
+
+  // 3. 내용 및 서식 일괄 업데이트 (내용이 있을 때만)
   if (requests.length > 0) {
-      console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
-      const updateResp = await fetch(
-        `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requests }),
-        }
-      );
-      if (!updateResp.ok) {
-        const errorBody = await updateResp.text();
-        console.error("Google Docs API Error:", errorBody);
-        throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
+    console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
+    const updateResp = await fetch(
+      `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests }),
       }
+    );
+    if (!updateResp.ok) {
+      const errorBody = await updateResp.text();
+      console.error("Google Docs API Error:", errorBody);
+      // 문서 업데이트 실패 시 생성된 빈 문서를 삭제하는 로직을 추가할 수 있습니다.
+      throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
+    }
+  } else {
+    console.warn("내보낼 콘텐츠가 없어 빈 문서가 생성되었습니다.");
   }
 
-  // 3. 폴더 이동
+  // 4. 생성된 문서를 지정된 폴더로 이동
   await fetch(
     `https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`,
     {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${accessToken}` },
     }
-  ).catch(err => console.warn("폴더 이동 실패 (non-fatal):", err));
+  ).catch(err => console.warn("폴더 이동 실패 (치명적이지 않음):", err));
 
   return `https://docs.google.com/document/d/${documentId}/edit`;
 };
