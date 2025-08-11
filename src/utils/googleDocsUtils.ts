@@ -95,29 +95,25 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종 완전체] 자동 보정 HTML 변환 엔진
+// [최종 완성본] 자동 보정 및 줄바꿈 최적화 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     let processedHtml = htmlContent;
 
-    // 1단계: 숨어있는 JSON 객체를 찾아내서 그 안의 HTML을 추출 (가장 중요한 자동 보정)
     const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"final_summary_text":\s*"([\s\S]*?)"\s*}/;
     const jsonMatch = processedHtml.match(jsonRegex);
     if (jsonMatch) {
-        // JSON 문자열 내부의 이스케이프된 문자를 원래대로 복원
         const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/•/g, '<li>•');
-        // JSON 부분을 추출된 HTML로 교체
         processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
     }
     
-    // 2단계: 지저분한 공백 및 줄바꿈을 정돈
     processedHtml = processedHtml
-        .replace(/<br\s*\/?>/gi, '\n') // <br> 태그를 줄바꿈 문자로
-        .replace(/<\/p>|<\/li>|<\/h[1-3]>/gi, '\n') // 닫는 태그들을 줄바꿈으로
-        .replace(/\s*\n\s*/g, '\n') // 여러 줄바꿈을 하나로
-        .replace(/&nbsp;/g, ' ') // 공백 엔티티
-        .replace(/<[^>]+>/g, '') // 남은 태그 모두 제거
-        .replace(/\n\s*•/g, '\n•') // 글머리 기호 앞 공백 제거
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>|<\/li>|<\/h[1-3]>/gi, '\n')
+        .replace(/\s*\n\s*/g, '\n')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\n\s*•/g, '\n•')
         .trim();
 
     const requests: any[] = [];
@@ -136,20 +132,24 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' } };
         let fields = 'fontSize';
 
-        // 스타일 적용 로직
-        if (trimmedLine.match(/^기술검토 및 진단 종합 보고서$/)) {
+        const isH1 = trimmedLine.match(/^기술검토 및 진단 종합 보고서$/);
+        const isH2 = trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|최종 기술 진단 종합 보고서)/);
+        const isH3 = trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/);
+        const isLabel = trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/);
+        
+        if (isH1) {
             textStyle.fontSize = { magnitude: 20, unit: 'PT' };
             textStyle.bold = true;
             fields += ',bold';
-        } else if (trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|최종 기술 진단 종합 보고서)/)) {
+        } else if (isH2) {
             textStyle.fontSize = { magnitude: 16, unit: 'PT' };
             textStyle.bold = true;
             fields += ',bold';
-        } else if (trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/)) {
+        } else if (isH3) {
             textStyle.fontSize = { magnitude: 14, unit: 'PT' };
             textStyle.bold = true;
             fields += ',bold';
-        } else if (trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/)) {
+        } else if (isLabel) {
              textStyle.bold = true;
              fields += ',bold';
         }
@@ -162,7 +162,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             },
         });
         
-        // 글머리 기호 적용
         if (trimmedLine.startsWith('•')) {
             requests.push({
                 createParagraphBullets: {
@@ -171,7 +170,14 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
                 },
             });
         }
+        
         currentIndex = endIndex;
+        
+        // *** [최종 개선] 제목 뒤에 자동으로 공백 한 줄 추가 ***
+        if (isH1 || isH2 || isH3) {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex += 1;
+        }
     }
 
     return requests;
