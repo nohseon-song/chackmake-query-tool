@@ -95,105 +95,88 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종 오버홀 버전] 고성능 HTML 변환 엔진
+// [최종 완전체] 자동 보정 HTML 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
+    let processedHtml = htmlContent;
+
+    // 1단계: 숨어있는 JSON 객체를 찾아내서 그 안의 HTML을 추출 (가장 중요한 자동 보정)
+    const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"final_summary_text":\s*"([\s\S]*?)"\s*}/;
+    const jsonMatch = processedHtml.match(jsonRegex);
+    if (jsonMatch) {
+        // JSON 문자열 내부의 이스케이프된 문자를 원래대로 복원
+        const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/•/g, '<li>•');
+        // JSON 부분을 추출된 HTML로 교체
+        processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
+    }
+    
+    // 2단계: 지저분한 공백 및 줄바꿈을 정돈
+    processedHtml = processedHtml
+        .replace(/<br\s*\/?>/gi, '\n') // <br> 태그를 줄바꿈 문자로
+        .replace(/<\/p>|<\/li>|<\/h[1-3]>/gi, '\n') // 닫는 태그들을 줄바꿈으로
+        .replace(/\s*\n\s*/g, '\n') // 여러 줄바꿈을 하나로
+        .replace(/&nbsp;/g, ' ') // 공백 엔티티
+        .replace(/<[^>]+>/g, '') // 남은 태그 모두 제거
+        .replace(/\n\s*•/g, '\n•') // 글머리 기호 앞 공백 제거
+        .trim();
+
     const requests: any[] = [];
     let currentIndex = 1;
 
-    // HTML을 정규화하고, 태그와 텍스트로 분리
-    const cleanedHtml = htmlContent.replace(/<br\s*\/?>/gi, '\n').replace(/>\s+</g, '><').trim();
-    const parts = cleanedHtml.split(/(<[^>]+>)/g).filter(Boolean);
+    const lines = processedHtml.split('\n').filter(line => line.trim() !== '');
 
-    let currentTag = 'p'; // 현재 텍스트 블록의 태그 종류
-    let isBold = false;
-    let isItalic = false;
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        const startIndex = currentIndex;
+        const textToInsert = trimmedLine + '\n';
+        
+        requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
+        const endIndex = startIndex + textToInsert.length;
 
-    for (const part of parts) {
-        if (part.startsWith('<')) { // 태그 처리
-            const match = part.match(/<\/?(\w+)/);
-            if (match) {
-                const tagName = match[1].toLowerCase();
-                const isClosingTag = part.startsWith('</');
+        const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' } };
+        let fields = 'fontSize';
 
-                if (['h1', 'h2', 'h3', 'p', 'li'].includes(tagName)) {
-                    currentTag = isClosingTag ? 'p' : tagName;
-                } else if (tagName === 'strong' || tagName === 'b') {
-                    isBold = !isClosingTag;
-                } else if (tagName === 'em' || tagName === 'i') {
-                    isItalic = !isClosingTag;
-                }
-            }
-        } else { // 텍스트 콘텐츠 처리
-            const text = part.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-            if (!text.trim()) continue;
+        // 스타일 적용 로직
+        if (trimmedLine.match(/^기술검토 및 진단 종합 보고서$/)) {
+            textStyle.fontSize = { magnitude: 20, unit: 'PT' };
+            textStyle.bold = true;
+            fields += ',bold';
+        } else if (trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|최종 기술 진단 종합 보고서)/)) {
+            textStyle.fontSize = { magnitude: 16, unit: 'PT' };
+            textStyle.bold = true;
+            fields += ',bold';
+        } else if (trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/)) {
+            textStyle.fontSize = { magnitude: 14, unit: 'PT' };
+            textStyle.bold = true;
+            fields += ',bold';
+        } else if (trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/)) {
+             textStyle.bold = true;
+             fields += ',bold';
+        }
 
-            const textToInsert = text + '\n';
-            const startIndex = currentIndex;
-            requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
-            const endIndex = startIndex + textToInsert.length;
-
-            const textStyle: any = {};
-            let fields = '';
-
-            // 1. 태그 기반 스타일 (h1, h2, li 등)
-            switch (currentTag) {
-                case 'h1':
-                    textStyle.fontSize = { magnitude: 20, unit: 'PT' };
-                    textStyle.bold = true;
-                    fields = 'fontSize,bold';
-                    break;
-                case 'h2':
-                    textStyle.fontSize = { magnitude: 16, unit: 'PT' };
-                    textStyle.bold = true;
-                    fields = 'fontSize,bold';
-                    break;
-                case 'h3':
-                    textStyle.fontSize = { magnitude: 14, unit: 'PT' };
-                    textStyle.bold = true;
-                    fields = 'fontSize,bold';
-                    break;
-                case 'li':
-                case 'p':
-                default:
-                    textStyle.fontSize = { magnitude: 11, unit: 'PT' };
-                    fields = 'fontSize';
-                    break;
-            }
-
-            // 2. 인라인 스타일 (strong, em)
-            if (isBold) {
-                textStyle.bold = true;
-                if (!fields.includes('bold')) fields += ',bold';
-            }
-            if (isItalic) {
-                textStyle.italic = true;
-                if (!fields.includes('italic')) fields += ',italic';
-            }
-            
+        requests.push({
+            updateTextStyle: {
+                range: { startIndex, endIndex: endIndex - 1 },
+                textStyle,
+                fields: fields,
+            },
+        });
+        
+        // 글머리 기호 적용
+        if (trimmedLine.startsWith('•')) {
             requests.push({
-                updateTextStyle: {
+                createParagraphBullets: {
                     range: { startIndex, endIndex: endIndex - 1 },
-                    textStyle,
-                    fields: fields.replace(/,$/, ''),
+                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
                 },
             });
-
-            // 3. 목록(<li>)일 경우 글머리 기호 생성
-            if (currentTag === 'li' || text.trim().startsWith('•')) {
-                 requests.push({
-                    createParagraphBullets: {
-                        range: { startIndex, endIndex: endIndex - 1 },
-                        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                    },
-                });
-            }
-
-            currentIndex = endIndex;
         }
+        currentIndex = endIndex;
     }
+
     return requests;
 };
+
 
 // --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
