@@ -96,34 +96,51 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 };
 
 // =================================================================
-// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (완전히 새로 작성됨)
+// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (패턴 분석 방식으로 전면 수정)
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
-    let currentIndex = 1; // Google Docs의 인덱스는 1부터 시작합니다.
+    let currentIndex = 1;
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent, 'text/html');
+    // 1. HTML을 다루기 쉬운 텍스트로 정제합니다.
+    // <p>, <div>, <br> 태그를 모두 줄바꿈(\n)으로 변경하여 일관성을 유지합니다.
+    const textContent = htmlContent
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/?p>/gi, '\n')
+        .replace(/<\/?div.*?>/gi, '\n')
+        .replace(/&nbsp;/g, ' ') // 공백 문자 처리
+        .replace(/\n{3,}/g, '\n\n') // 여러 줄바꿈을 최대 2개로 압축
+        .trim();
 
-    /**
-     * DOM 노드를 재귀적으로 처리하여 Google Docs API 요청 배열을 생성합니다.
-     * @param node 처리할 DOM 노드
-     */
-    const processNode = (node: Node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-            const text = node.textContent || '';
-            if (text.trim()) {
+    // 2. 정제된 텍스트를 줄바꿈 기준으로 문단 배열로 만듭니다.
+    const paragraphs = textContent.split('\n');
+
+    // 3. 각 문단을 순회하며 내용에 따라 서식을 적용합니다.
+    for (const paragraph of paragraphs) {
+        const trimmedParagraph = paragraph.trim();
+        if (!trimmedParagraph) {
+            // 빈 줄은 그대로 유지하여 단락 구분을 만듭니다.
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex++;
+            continue;
+        }
+
+        const paragraphStartIndex = currentIndex;
+
+        // 4. 문단 내의 굵은 글씨(<strong>, <b>)를 처리합니다.
+        // 정규식을 사용하여 태그와 일반 텍스트를 분리합니다.
+        const parts = trimmedParagraph.split(/(<strong>.*?<\/strong>|<b>.*?<\/b>)/g).filter(Boolean);
+
+        for (const part of parts) {
+            const isBold = /<strong>.*?<\/strong>|<b>.*?<\/b>/.test(part);
+            const text = part.replace(/<\/?(strong|b)>/g, '');
+
+            if (text) {
                 const textStartIndex = currentIndex;
-                requests.push({
-                    insertText: {
-                        location: { index: textStartIndex },
-                        text: text,
-                    },
-                });
+                requests.push({ insertText: { location: { index: currentIndex }, text } });
                 currentIndex += text.length;
 
-                // 부모가 <strong> 또는 <b> 태그인지 확인하여 '굵게' 스타일 적용
-                if (node.parentElement?.closest('strong, b')) {
+                if (isBold) {
                     requests.push({
                         updateTextStyle: {
                             range: { startIndex: textStartIndex, endIndex: currentIndex },
@@ -133,75 +150,40 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
                     });
                 }
             }
-        } else if (node.nodeType === Node.ELEMENT_NODE) {
-            const el = node as HTMLElement;
-            const tagName = el.tagName.toLowerCase();
-            const paragraphStartIndex = currentIndex;
-
-            // 자식 노드들을 먼저 재귀적으로 처리
-            el.childNodes.forEach(processNode);
-
-            // 블록 레벨 요소 처리 후 스타일 적용 및 줄바꿈
-            switch (tagName) {
-                case 'h1':
-                case 'h2':
-                case 'h3':
-                case 'h4':
-                case 'h5':
-                case 'h6':
-                    // 헤딩 스타일 적용
-                    requests.push({
-                        updateParagraphStyle: {
-                            range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
-                            paragraphStyle: { namedStyleType: `HEADING_${tagName.charAt(1)}` },
-                            fields: 'namedStyleType',
-                        },
-                    });
-                    // 블록 요소 뒤에 줄바꿈 추가
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                    break;
-
-                case 'p':
-                case 'div':
-                    // 일반 단락 뒤에 줄바꿈 추가
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                    break;
-
-                case 'li':
-                    // 목록 항목(li)에 글머리 기호 적용
-                    requests.push({
-                        createParagraphBullets: {
-                            range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
-                            bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                        },
-                    });
-                    // li 요소는 ul/ol이 줄바꿈을 관리하므로 여기서 추가하지 않음
-                    break;
-                
-                case 'ul':
-                case 'ol':
-                     // 리스트 컨테이너 뒤에 줄바꿈 추가
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                    break;
-
-                case 'br':
-                    // <br> 태그를 줄바꿈으로 처리
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                    break;
-            }
         }
-    };
+        
+        // 5. 문단 전체에 적용될 스타일을 내용 패턴에 따라 결정합니다.
+        // 예: "1. ~", "2. ~" 로 시작하면 HEADING_2 스타일 적용
+        if (/^\d+\.\s/.test(trimmedParagraph)) {
+            requests.push({
+                updateParagraphStyle: {
+                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
+                    paragraphStyle: { namedStyleType: 'HEADING_2' },
+                    fields: 'namedStyleType',
+                },
+            });
+        // 예: "• " 로 시작하면 글머리 기호 적용
+        } else if (/^•\s/.test(trimmedParagraph)) {
+             requests.push({
+                createParagraphBullets: {
+                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
+                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                },
+            });
+        // 예: "핵심 진단 요약", "최종 종합 의견" 등 특정 키워드는 HEADING_3 스타일 적용
+        } else if (['핵심 진단 요약', '정밀 검증', '최종 종합 의견', '기술 검토 보완 요약', '심층 검증 결과', '추가 및 대안 권고', '최종 정밀 검증 완료'].includes(trimmedParagraph)) {
+             requests.push({
+                updateParagraphStyle: {
+                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
+                    paragraphStyle: { namedStyleType: 'HEADING_3' },
+                    fields: 'namedStyleType',
+                },
+            });
+        }
 
-    // body의 모든 자식 노드를 순회하며 변환 시작
-    doc.body.childNodes.forEach(processNode);
-    
-    // 문서 시작 부분에 불필요하게 추가된 빈 줄 제거 (예: 첫 노드가 p태그일 경우)
-    if (requests.length > 0 && requests[0]?.insertText?.text === '\n') {
-        requests.shift();
+        // 각 문단이 끝난 후 줄바꿈을 추가하여 다음 문단과 분리합니다.
+        requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+        currentIndex++;
     }
 
     return requests;
@@ -256,7 +238,7 @@ export const createGoogleDoc = async (
 
   // 3. 내용 및 서식 일괄 업데이트 (내용이 있을 때만)
   if (requests.length > 0) {
-    console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
+    // console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
     const updateResp = await fetch(
       `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
       {
