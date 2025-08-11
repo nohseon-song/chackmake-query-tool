@@ -96,7 +96,7 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 };
 
 // =================================================================
-// [핵심] 가독성 문제를 해결한 최종 완성본 변환 로직
+// [핵심] 모든 오류를 수정한 최종 완성본 변환 로직
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
@@ -105,22 +105,29 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
 
-    const processNodes = (nodes: NodeListOf<ChildNode>) => {
-        nodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                const el = node as HTMLElement;
-                const textContent = (el.textContent || '').trim();
-                
-                if (!textContent) return; // 내용이 없는 요소는 건너뜁니다.
+    const processNode = (node: ChildNode) => {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+            const text = node.textContent.replace(/\u00A0/g, ' ');
+            if (text) { // 비어있지 않은 모든 텍스트 노드를 삽입
+                requests.push({ insertText: { location: { index: currentIndex }, text } });
+                currentIndex += text.length;
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            
+            // p, li, h1-h4 태그 앞에 줄바꿈을 추가하여 문단을 명확히 분리 (가장 안정적인 방식)
+            if (['p', 'h1', 'h2', 'h3', 'h4', 'li'].includes(el.tagName.toLowerCase())) {
+                if (requests.length > 0) { // 문서 시작이 아니면 줄바꿈 추가
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex += 1;
+                }
+            }
 
-                const textToInsert = textContent + '\n';
-                const startIndex = currentIndex;
+            const startTagIndex = currentIndex;
+            el.childNodes.forEach(processNode);
+            const endTagIndex = currentIndex;
 
-                requests.push({ insertText: { location: { index: currentIndex }, text: textToInsert } });
-                currentIndex += textToInsert.length;
-                
-                const elementEndIndex = currentIndex - 1;
-
+            if (endTagIndex > startTagIndex) {
                 switch (el.tagName.toLowerCase()) {
                     case 'h1':
                     case 'h2':
@@ -128,60 +135,36 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
                     case 'h4':
                         requests.push({
                             updateParagraphStyle: {
-                                range: { startIndex, endIndex: elementEndIndex },
+                                range: { startIndex: startTagIndex, endIndex: endTagIndex },
                                 paragraphStyle: { namedStyleType: `HEADING_${el.tagName.substring(1)}` },
                                 fields: 'namedStyleType',
                             },
                         });
                         break;
-                    case 'ul':
-                        // ul 안의 li들을 찾아서 처리합니다.
-                        el.querySelectorAll('li').forEach(li => {
-                            const liText = (li.textContent || '').trim();
-                            if (!liText) return;
-
-                            const liStartIndex = (requests[requests.length - 1].insertText.text.lastIndexOf(liText) + startIndex);
-                            const liEndIndex = liStartIndex + liText.length;
-                           
-                            requests.push({
-                                createParagraphBullets: {
-                                    range: { startIndex: liStartIndex, endIndex: liEndIndex },
-                                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                                },
-                            });
+                    case 'li':
+                        requests.push({
+                            createParagraphBullets: {
+                                range: { startIndex: startTagIndex, endIndex: endTagIndex },
+                                bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                            },
                         });
                         break;
-                }
-                
-                // strong 태그는 별도로 찾아 처리합니다 (더 안정적).
-                el.querySelectorAll('strong, b').forEach(strong => {
-                    const strongText = (strong.textContent || '').trim();
-                    if (!strongText) return;
-
-                    let strongStartIndex = -1;
-                    let lastRequestText = requests[requests.length-1].insertText.text;
-                    let searchOffset = startIndex;
-
-                    // 텍스트 블록 내에서 strong 태그의 위치를 찾습니다.
-                    strongStartIndex = lastRequestText.indexOf(strongText, searchOffset - (currentIndex - lastRequestText.length));
-
-                    if (strongStartIndex !== -1) {
-                         const absoluteStartIndex = (currentIndex - lastRequestText.length) + strongStartIndex;
-                         const strongEndIndex = absoluteStartIndex + strongText.length;
+                    case 'strong':
+                    case 'b':
                         requests.push({
                             updateTextStyle: {
-                                range: { startIndex: absoluteStartIndex, endIndex: strongEndIndex },
+                                range: { startIndex: startTagIndex, endIndex: endTagIndex },
                                 textStyle: { bold: true },
                                 fields: 'bold',
                             },
                         });
-                    }
-                });
+                        break;
+                }
             }
-        });
+        }
     };
 
-    processNodes(doc.body.childNodes);
+    doc.body.childNodes.forEach(processNode);
     return requests;
 };
 
@@ -223,18 +206,21 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
-  const updateResp = await fetch(
-    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests }),
-    }
-  );
-  if (!updateResp.ok) {
-    const errorBody = await updateResp.text();
-    console.error("Google Docs API Error:", errorBody);
-    throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
+  // 내용이 있을 때만 업데이트 요청을 보냅니다.
+  if (requests.length > 0) {
+      const updateResp = await fetch(
+        `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests }),
+        }
+      );
+      if (!updateResp.ok) {
+        const errorBody = await updateResp.text();
+        console.error("Google Docs API Error:", errorBody);
+        throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
+      }
   }
 
   await fetch(
