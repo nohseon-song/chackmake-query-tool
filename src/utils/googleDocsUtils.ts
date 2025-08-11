@@ -101,39 +101,18 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    // 1. JSON 코드 자동 추출 및 HTML 재구성
     let processedHtml = htmlContent;
-    const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"final_summary_text":\s*"([\s\S]*?)"\s*}/;
+    const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"(?:final|tınal)_summary_text":\s*"([\s\S]*?)"\s*}/;
     const jsonMatch = processedHtml.match(jsonRegex);
     if (jsonMatch) {
         const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
         processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
     }
-    
-    // 2. HTML 정규화 및 분할
-    processedHtml = processedHtml.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ');
-    const parts = processedHtml.split(/(<[^>]+>)/g).filter(Boolean);
 
-    // 3. 스타일 스택 및 상태 관리
-    const styleStack: any[] = [];
-    let isFirstBlock = true;
+    const parts = processedHtml.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').split(/(<[^>]+>)/g).filter(Boolean);
 
-    const applyStyles = (startIndex: number, endIndex: number) => {
-        const finalStyle: any = {};
-        let fields = '';
-        styleStack.forEach(style => Object.assign(finalStyle, style));
-        
-        for (const key in finalStyle) {
-            fields += `${key},`;
-        }
-        fields = fields.slice(0, -1);
-
-        if (fields) {
-            requests.push({
-                updateTextStyle: { range: { startIndex, endIndex }, textStyle: finalStyle, fields },
-            });
-        }
-    };
+    const styleStack: any[] = [{ fontSize: { magnitude: 11, unit: 'PT' } }]; // 기본 스타일
+    let isNewLine = true;
 
     for (const part of parts) {
         if (part.startsWith('<')) { // 태그 처리
@@ -141,61 +120,64 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             const tagName = part.replace(/<\/?|>/g, '').split(' ')[0].toLowerCase();
             
             let style = {};
-            let isBlockTag = false;
+            const isBlockTag = ['h1', 'h2', 'h3', 'p', 'li', 'div', 'article', 'section', 'footer'].includes(tagName);
 
-            switch (tagName) {
-                case 'h1': style = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true }; isBlockTag = true; break;
-                case 'h2': style = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true }; isBlockTag = true; break;
-                case 'h3': style = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true }; isBlockTag = true; break;
-                case 'p': style = { fontSize: { magnitude: 11, unit: 'PT' } }; isBlockTag = true; break;
-                case 'li': style = { fontSize: { magnitude: 11, unit: 'PT' } }; isBlockTag = true; break;
-                case 'strong': case 'b': style = { bold: true }; break;
-                case 'em': case 'i': style = { italic: true }; break;
-            }
-
-            if (isBlockTag && !isFirstBlock) { // 블록 태그 앞에 공백 추가
+            if (isBlockTag && !isNewLine) {
                 requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
                 currentIndex++;
+            }
+
+            switch (tagName) {
+                case 'h1': style = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true }; break;
+                case 'h2': style = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true }; break;
+                case 'h3': style = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true }; break;
+                case 'strong': case 'b': style = { bold: true }; break;
+                case 'em': case 'i': style = { italic: true }; break;
             }
 
             if (!isClosingTag) {
                 styleStack.push(style);
             } else {
-                // 스택에서 해당 스타일 제거 (가장 마지막에 추가된 것부터)
-                for (let i = styleStack.length - 1; i >= 0; i--) {
-                    if (Object.keys(style)[0] === Object.keys(styleStack[i])[0]) {
-                        styleStack.splice(i, 1);
-                        break;
-                    }
-                }
+                styleStack.pop();
             }
-             if (isBlockTag) isFirstBlock = false;
+
+            if (isBlockTag && !isClosingTag && tagName.match(/^h[1-3]$/)) { // 제목 태그 뒤에 공백 추가
+                 setTimeout(() => { // Hack to ensure spacing is added after the content
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
+                 }, 0);
+            }
+             isNewLine = isBlockTag;
 
         } else { // 텍스트 처리
-            let text = part.trim();
+            const text = part.replace(/\s+/g, ' ').trim();
             if (!text) continue;
 
-            const isListItem = styleStack.some(s => s.fontSize?.magnitude === 11) && (text.startsWith('•') || styleStack.some(s => Object.keys(s).includes('listItem')));
-
-
-            if (text.startsWith('•')) { // 글머리 기호 텍스트 정리
-                text = text.substring(1).trim();
-            }
-             const textToInsert = text + '\n';
+            const textToInsert = text + (isNewLine ? '\n' : '');
+            isNewLine = false;
 
             const startIndex = currentIndex;
             requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
-            currentIndex += textToInsert.length;
             
-            applyStyles(startIndex, currentIndex - 1);
-            
-            if (isListItem) {
-                 requests.push({ createParagraphBullets: { range: { startIndex, endIndex: currentIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
+            const currentStyle: any = Object.assign({}, ...styleStack);
+            let fields = Object.keys(currentStyle).join(',');
+
+            if (fields) {
+                requests.push({
+                    updateTextStyle: { range: { startIndex, endIndex: startIndex + text.length }, textStyle: currentStyle, fields },
+                });
             }
+
+            const isListItem = text.startsWith('•') || styleStack.some(s => s.listItem);
+            if (isListItem) {
+                 requests.push({ createParagraphBullets: { range: { startIndex, endIndex: startIndex + text.length }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
+            }
+            currentIndex += textToInsert.length;
         }
     }
     return requests;
 };
+
 
 // --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
