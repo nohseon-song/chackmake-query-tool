@@ -95,12 +95,11 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종결정판] The Legendary Edition 변환 엔진
+// [The Perfection] 최종 완성판 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     let processedHtml = htmlContent;
 
-    // 1. JSON 코드 자동 추출 및 HTML 재구성
     const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"(?:final|tınal)_summary_text":\s*"([\s\S]*?)"\s*}/;
     const jsonMatch = processedHtml.match(jsonRegex);
     if (jsonMatch) {
@@ -108,7 +107,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
     }
     
-    // 2. HTML을 텍스트로 변환하되, 구조를 유지하는 정제 과정
     processedHtml = processedHtml
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<li>/gi, '\n• ')
@@ -118,16 +116,15 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         .replace(/<strong>(.*?)<\/strong>/gi, '$1')
         .replace(/&nbsp;/g, ' ')
         .replace(/<[^>]+>/g, '')
-        .replace(/(\n\s*){2,}/g, '\n\n'); // 여러 공백 라인을 최대 하나로
+        .replace(/(\n\s*){2,}/g, '\n\n');
 
-    // 3. 더 똑똑해진 중복 제목 제거 로직
     const lines = processedHtml.split('\n');
     const uniqueLines: string[] = [];
     let lastNonBlankLine = '';
     for (const line of lines) {
         const currentTrimmed = line.trim();
         if (currentTrimmed && currentTrimmed === lastNonBlankLine) {
-            continue; // 마지막 비어있지 않은 줄과 내용이 같으면 건너뜀
+            continue;
         }
         uniqueLines.push(line);
         if (currentTrimmed) {
@@ -138,8 +135,8 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
     const requests: any[] = [];
     let currentIndex = 1;
+    let isFirstLine = true;
 
-    // 4. 최종 텍스트를 기반으로 Docs 요청 생성
     processedHtml.split('\n').forEach(line => {
         let trimmedLine = line.trim();
         if (!trimmedLine) {
@@ -148,9 +145,16 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             return;
         }
 
+        // *** 최종 수정: 번호 목록 제목 앞에만 선별적으로 공백 추가 ***
+        const isNumberedHeading = trimmedLine.match(/^\d+\.\s/);
+        if (isNumberedHeading && !isFirstLine) {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex++;
+        }
+
         const isBullet = trimmedLine.startsWith('•');
         if (isBullet) {
-            trimmedLine = trimmedLine.substring(1).trim(); // 글머리 기호 문자(•) 제거
+            trimmedLine = trimmedLine.substring(1).trim();
         }
 
         const startIndex = currentIndex;
@@ -161,12 +165,12 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' }, bold: false };
         let fields = 'fontSize,bold';
 
-        // 스타일 적용 로직
+        // 스타일 적용
         if (trimmedLine.match(/^기술검토 및 진단 종합 보고서$/)) {
             textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true;
         } else if (trimmedLine.match(/^(\d\.\s|AI 전문가 패널 소개|4\.\s)/)) {
             textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true;
-        } else if (trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|\d+\.\s.*변환|\d+\.\s.*계산|\d+\.\s.*분석|\d+\.\s.*결과|\d+\..*검토)/)) {
+        } else if (trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|단위 변환 공식|압력값 변환|유량 변환|양정\(H\) 계산|출력 전력\(Pout\) 계산|효율\(η\) 계산|경제성 분석|검증 결과|보완 보고서 내용 검토)/)) {
             textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true;
         } else if (trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/)) {
              textStyle.bold = true;
@@ -180,6 +184,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             requests.push({ createParagraphBullets: { range: { startIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
         }
         currentIndex = endIndex;
+        isFirstLine = false;
     });
 
     return requests;
