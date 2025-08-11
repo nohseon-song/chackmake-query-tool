@@ -95,93 +95,105 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종 완성본] 지능형 서식 적용 엔진
+// [최종 진화형] AI 기반 HTML 문서 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
-    let processedHtml = htmlContent;
+    const requests: any[] = [];
+    let currentIndex = 1;
 
+    // 1. JSON 코드 자동 추출 및 HTML 재구성
+    let processedHtml = htmlContent;
     const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"final_summary_text":\s*"([\s\S]*?)"\s*}/;
     const jsonMatch = processedHtml.match(jsonRegex);
     if (jsonMatch) {
-        const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/•/g, '<li>•');
+        const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
         processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
     }
     
-    processedHtml = processedHtml
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>|<\/li>|<\/h[1-3]>/gi, '\n')
-        .replace(/\s*\n\s*/g, '\n')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\n\s*•/g, '\n•')
-        .trim();
+    // 2. HTML 정규화 및 분할
+    processedHtml = processedHtml.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ');
+    const parts = processedHtml.split(/(<[^>]+>)/g).filter(Boolean);
 
-    const requests: any[] = [];
-    let currentIndex = 1;
-    let lastLineType = ''; // 이전 라인의 유형을 저장 ('h2', 'h3' 등)
+    // 3. 스타일 스택 및 상태 관리
+    const styleStack: any[] = [];
+    let isFirstBlock = true;
 
-    const lines = processedHtml.split('\n').filter(line => line.trim() !== '');
-
-    for (const line of lines) {
-        const trimmedLine = line.trim();
-        const startIndex = currentIndex;
+    const applyStyles = (startIndex: number, endIndex: number) => {
+        const finalStyle: any = {};
+        let fields = '';
+        styleStack.forEach(style => Object.assign(finalStyle, style));
         
-        const isH2 = trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|4\.\s)/);
-
-        // *** [개선 1] H2 제목 '위'에 공백 한 줄 추가 ***
-        if (isH2 && lastLineType !== 'blank') {
-            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-            currentIndex += 1;
+        for (const key in finalStyle) {
+            fields += `${key},`;
         }
+        fields = fields.slice(0, -1);
 
-        const textToInsert = trimmedLine + '\n';
-        
-        requests.push({ insertText: { location: { index: currentIndex }, text: textToInsert } });
-        const endIndex = currentIndex + textToInsert.length;
-
-        const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' } };
-        let fields = 'fontSize';
-
-        // 스타일 적용 로직
-        const isH1 = trimmedLine.match(/^기술검토 및 진단 종합 보고서$/);
-        const isH3 = trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/);
-        const isLabel = trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/);
-        
-        let currentLineType = 'p';
-
-        if (isH1) {
-            textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h1';
-        } else if (isH2) {
-            textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h2';
-        } else if (isH3) {
-            textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h3';
-        } else if (isLabel) {
-             textStyle.bold = true; fields += ',bold';
+        if (fields) {
+            requests.push({
+                updateTextStyle: { range: { startIndex, endIndex }, textStyle: finalStyle, fields },
+            });
         }
+    };
 
-        requests.push({ updateTextStyle: { range: { startIndex: currentIndex, endIndex: endIndex - 1 }, textStyle, fields: fields } });
-        
-        // *** [개선 2] 문맥을 파악하여 지능적으로 글머리 기호 추가 ***
-        const shouldBeBullet = trimmedLine.startsWith('•') ||
-            ['핵심 진단 요약', '기술 검토 보완 요약', '추가 및 대안 권고', '8. 검증 결과 요약', '1. 단위 식별 및 변환 기준', '2. SI 기본 단위 정의', '8. 추가 보완 사항'].includes(lastLineType);
-        
-        if (shouldBeBullet) {
-            requests.push({ createParagraphBullets: { range: { startIndex: currentIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
-        }
-        
-        currentIndex = endIndex;
-        
-        // 제목 '아래'에 공백 한 줄 추가
-        if (isH1 || isH2 || isH3) {
-            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-            currentIndex += 1;
-            lastLineType = 'blank'; // 공백이 추가되었음을 표시
-        } else {
-            lastLineType = isH3 ? '핵심 진단 요약' : trimmedLine; // 다음 라인이 참조할 수 있도록 현재 라인 정보 저장
-            if (isH3) lastLineType = trimmedLine; // H3 태그의 정확한 텍스트 저장
+    for (const part of parts) {
+        if (part.startsWith('<')) { // 태그 처리
+            const isClosingTag = part.startsWith('</');
+            const tagName = part.replace(/<\/?|>/g, '').split(' ')[0].toLowerCase();
+            
+            let style = {};
+            let isBlockTag = false;
+
+            switch (tagName) {
+                case 'h1': style = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true }; isBlockTag = true; break;
+                case 'h2': style = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true }; isBlockTag = true; break;
+                case 'h3': style = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true }; isBlockTag = true; break;
+                case 'p': style = { fontSize: { magnitude: 11, unit: 'PT' } }; isBlockTag = true; break;
+                case 'li': style = { fontSize: { magnitude: 11, unit: 'PT' } }; isBlockTag = true; break;
+                case 'strong': case 'b': style = { bold: true }; break;
+                case 'em': case 'i': style = { italic: true }; break;
+            }
+
+            if (isBlockTag && !isFirstBlock) { // 블록 태그 앞에 공백 추가
+                requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                currentIndex++;
+            }
+
+            if (!isClosingTag) {
+                styleStack.push(style);
+            } else {
+                // 스택에서 해당 스타일 제거 (가장 마지막에 추가된 것부터)
+                for (let i = styleStack.length - 1; i >= 0; i--) {
+                    if (Object.keys(style)[0] === Object.keys(styleStack[i])[0]) {
+                        styleStack.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+             if (isBlockTag) isFirstBlock = false;
+
+        } else { // 텍스트 처리
+            let text = part.trim();
+            if (!text) continue;
+
+            const isListItem = styleStack.some(s => s.fontSize?.magnitude === 11) && (text.startsWith('•') || styleStack.some(s => Object.keys(s).includes('listItem')));
+
+
+            if (text.startsWith('•')) { // 글머리 기호 텍스트 정리
+                text = text.substring(1).trim();
+            }
+             const textToInsert = text + '\n';
+
+            const startIndex = currentIndex;
+            requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
+            currentIndex += textToInsert.length;
+            
+            applyStyles(startIndex, currentIndex - 1);
+            
+            if (isListItem) {
+                 requests.push({ createParagraphBullets: { range: { startIndex, endIndex: currentIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
+            }
         }
     }
-
     return requests;
 };
 
