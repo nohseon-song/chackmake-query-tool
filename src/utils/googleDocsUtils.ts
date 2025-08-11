@@ -15,15 +15,12 @@ export const fetchGoogleClientId = async (): Promise<string> => {
   try {
     const { data, error } = await supabase.functions.invoke('get-google-config');
     if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
-
     const clientId = (data as any)?.clientId;
     if (!clientId) throw new Error('Google Client ID를 응답에서 찾을 수 없습니다.');
-    
     GOOGLE_CLIENT_ID = clientId;
     return clientId;
   } catch (error) {
     console.error('Google Client ID 가져오기 오류:', error);
-    // 개발 환경을 위한 로컬 스토리지 대체 작동
     if (typeof window !== 'undefined') {
       const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
       if (storedClientId) {
@@ -129,7 +126,7 @@ export const exchangeCodeForToken = async (
   if (!access_token)
     throw new Error('올바른 토큰 응답을 받지 못했습니다.');
 
-  return { accessToken: access_token, RefreshToken: refresh_token } as any;
+  return { accessToken: access_token, refreshToken: refresh_token };
 };
 
 
@@ -146,17 +143,19 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   const processNode = (node: ChildNode) => {
     if (node.nodeType === Node.TEXT_NODE && node.textContent) {
       const text = node.textContent.replace(/\u00A0/g, ' ');
-      if (text.trim() || text === '\n') {
-        requests.push({ insertText: { location: { index: currentIndex }, text } });
-        currentIndex += text.length;
+      if (text) {
+          requests.push({ insertText: { location: { index: currentIndex }, text } });
+          currentIndex += text.length;
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
       const startTagIndex = currentIndex;
 
+      // 자식 노드들을 먼저 처리
       el.childNodes.forEach(processNode);
       const endTagIndex = currentIndex;
 
+      // 텍스트가 삽입된 후에 해당 범위에 스타일을 적용
       if (endTagIndex > startTagIndex) {
         switch (el.tagName.toLowerCase()) {
           case 'h1':
@@ -192,21 +191,15 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         }
       }
       
+      // 블록 요소 뒤에는 줄바꿈을 추가하여 문단 구분을 명확하게 합니다.
       if (['p', 'h1', 'h2', 'h3', 'h4', 'div', 'section', 'header', 'footer', 'ul', 'li'].includes(el.tagName.toLowerCase())) {
-        const lastRequest = requests[requests.length - 1];
-        if (!lastRequest || !lastRequest.insertText || !lastRequest.insertText.text.endsWith('\n')) {
-            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-            currentIndex += 1;
-        }
+        requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+        currentIndex += 1;
       }
     }
   };
 
   doc.body.childNodes.forEach(processNode);
-  
-  if (requests[0]?.insertText?.text.startsWith('\n')) {
-      requests[0].insertText.text = requests[0].insertText.text.substring(1);
-  }
 
   return requests;
 };
