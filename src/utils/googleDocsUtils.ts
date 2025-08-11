@@ -105,44 +105,33 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
     /**
      * [1단계: 데이터 복구]
-     * '<'가 누락된 비정상적인 HTML을 복구하는 함수
-     * 예: "h1>Hello/h1>" -> "<h1>Hello</h1>"
+     * '<'가 누락된 비정상적인 HTML을 복구하는 가장 안정적인 함수
      */
     const repairMalformedHtml = (html: string): string => {
-        // 알려진 HTML 태그 목록을 |로 연결한 문자열
-        const tagList = 'h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer|em|strong|b|i|br';
-
-        // 1. 여는 태그 복구: <가 누락된 태그를 찾아서 <를 붙여줌
-        // 예: h1>, p class="..">
-        const openTagRegex = new RegExp(`\\b(${tagList})([\\s>])`, 'g');
-        let repairedHtml = html.replace(openTagRegex, (match, p1, p2, offset) => {
-            // 바로 앞에 <가 이미 있다면, 중복해서 붙이지 않음 (안전장치)
-            if (offset > 0 && html[offset - 1] === '<') {
-                return match;
-            }
-            return `<${match}`;
-        });
-
-        // 2. 닫는 태그 복구: /tag> 를 </tag> 로 변경
+        const tagList = 'article|header|h[1-6]|p|em|section|div|strong|b|ul|ol|li|pre|br|i|footer|blockquote';
+        const openTagRegex = new RegExp(`(?<!<)\\b(${tagList})`, 'g');
+        let repairedHtml = html.replace(openTagRegex, '<$&');
         const closeTagRegex = new RegExp(`\\/(${tagList})>`, 'g');
         repairedHtml = repairedHtml.replace(closeTagRegex, '</$1>');
-        
         return repairedHtml;
     };
 
     const repairedHtml = repairMalformedHtml(htmlContent);
 
     // [2단계: 완벽 변환]
-    // 2-1. HTML 전처리: 태그를 유지한 채 불필요한 공백과 줄바꿈만 정리
+    // 2-1. HTML 전처리
     const cleanHtml = repairedHtml
-        .replace(/\s+/g, ' ') // 모든 연속 공백을 하나로
-        .replace(/>\s+</g, '><') // 태그 사이 공백 제거
+        .replace(/<br\s*\/?>/gi, '\n') // <br>을 줄바꿈으로 변환
+        .replace(/&nbsp;/g, ' ') // &nbsp;를 공백으로
+        .replace(/\s+/g, ' ')
+        .replace(/>\s+</g, '><')
         .trim();
 
     // 2-2. 정규식으로 HTML 블록 요소들을 순차적으로 찾기
     const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer)(?:[^>]*)>([\s\S]*?)<\/\1>/g;
     let match;
     let lastIndex = 0;
+    let prevTag: string | null = null;
 
     while ((match = blockRegex.exec(cleanHtml)) !== null) {
         const precedingText = cleanHtml.substring(lastIndex, match.index).trim();
@@ -152,54 +141,44 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
         const tagName = match[1].toLowerCase();
         const innerHtml = match[2];
-        processBlock(innerHtml, tagName);
+        processBlock(innerHtml, tagName, prevTag);
+        
+        // li 태그는 연속될 수 있으므로 이전 태그로 기록하지 않음
+        if(tagName !== 'li') {
+            prevTag = tagName;
+        }
 
         lastIndex = match.index + match[0].length;
     }
 
     const trailingText = cleanHtml.substring(lastIndex).trim();
     if (trailingText) {
-        processBlock(trailingText, 'p');
+        processBlock(trailingText, 'p', prevTag);
     }
 
     /**
      * 하나의 블록을 처리하는 함수
      */
-    function processBlock(innerHtml: string, tagName: string) {
-        if (!innerHtml.trim()) return;
+    function processBlock(innerHtml: string, tagName: string, previousTag: string | null) {
+        const content = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!content) return;
 
-        if (currentIndex > 1) {
+        // h3 다음에 p가 오는 경우를 제외하고 줄바꿈 추가
+        const isH3FollowedByP = previousTag === 'h3' && tagName === 'p';
+        if (currentIndex > 1 && !isH3FollowedByP) {
             requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
             currentIndex++;
         }
 
         const blockStartIndex = currentIndex;
         
-        const inlineRegex = /<(strong|b|em|i)>([\s\S]*?)<\/\1>|([^<]+)/g;
-        let inlineMatch;
-        while ((inlineMatch = inlineRegex.exec(innerHtml)) !== null) {
-            const isBold = /strong|b/.test(inlineMatch[1]);
-            const text = (inlineMatch[2] || inlineMatch[3] || '').replace(/<br\s*\/?>/gi, '\n').trim();
-            if (!text) continue;
-
-            const textStartIndex = currentIndex;
-            requests.push({ insertText: { location: { index: currentIndex }, text } });
-            currentIndex += text.length;
-
-            if (isBold) {
-                requests.push({
-                    updateTextStyle: {
-                        range: { startIndex: textStartIndex, endIndex: currentIndex },
-                        textStyle: { bold: true },
-                        fields: 'bold',
-                    },
-                });
-            }
-        }
+        // 텍스트 삽입
+        requests.push({ insertText: { location: { index: currentIndex }, text: content } });
+        currentIndex += content.length;
 
         const blockEndIndex = currentIndex;
-        if (blockEndIndex <= blockStartIndex) return;
 
+        // 블록 레벨 스타일 적용
         let textStyle: any = { fontSize: { magnitude: 10, unit: 'PT' } };
         let fields = 'fontSize';
 
@@ -224,7 +203,25 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
                 fields,
             },
         });
+        
+        // 인라인 굵게 처리
+        const boldRegex = /<(strong|b)>([\s\S]*?)<\/\1>/g;
+        let boldMatch;
+        while((boldMatch = boldRegex.exec(innerHtml)) !== null) {
+            const boldText = boldMatch[2].trim();
+            const startIndex = content.indexOf(boldText);
+            if(startIndex !== -1) {
+                 requests.push({
+                    updateTextStyle: {
+                        range: { startIndex: blockStartIndex + startIndex, endIndex: blockStartIndex + startIndex + boldText.length },
+                        textStyle: { bold: true },
+                        fields: 'bold',
+                    },
+                });
+            }
+        }
 
+        // 글머리 기호 적용
         if (tagName === 'li') {
             requests.push({
                 createParagraphBullets: {
