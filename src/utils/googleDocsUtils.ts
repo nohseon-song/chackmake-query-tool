@@ -136,7 +136,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     while ((match = blockRegex.exec(cleanHtml)) !== null) {
         const precedingText = cleanHtml.substring(lastIndex, match.index).trim();
         if (precedingText) {
-             processBlock(precedingText, 'p');
+             processBlock(precedingText, 'p', prevTag);
         }
 
         const tagName = match[1].toLowerCase();
