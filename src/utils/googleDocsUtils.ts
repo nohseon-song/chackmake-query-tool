@@ -95,7 +95,7 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종 완성본] 자동 보정 및 줄바꿈 최적화 엔진
+// [최종 완성본] 지능형 서식 적용 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     let processedHtml = htmlContent;
@@ -118,71 +118,72 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
     const requests: any[] = [];
     let currentIndex = 1;
+    let lastLineType = ''; // 이전 라인의 유형을 저장 ('h2', 'h3' 등)
 
     const lines = processedHtml.split('\n').filter(line => line.trim() !== '');
 
     for (const line of lines) {
         const trimmedLine = line.trim();
         const startIndex = currentIndex;
+        
+        const isH2 = trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|4\.\s)/);
+
+        // *** [개선 1] H2 제목 '위'에 공백 한 줄 추가 ***
+        if (isH2 && lastLineType !== 'blank') {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex += 1;
+        }
+
         const textToInsert = trimmedLine + '\n';
         
-        requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
-        const endIndex = startIndex + textToInsert.length;
+        requests.push({ insertText: { location: { index: currentIndex }, text: textToInsert } });
+        const endIndex = currentIndex + textToInsert.length;
 
         const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' } };
         let fields = 'fontSize';
 
+        // 스타일 적용 로직
         const isH1 = trimmedLine.match(/^기술검토 및 진단 종합 보고서$/);
-        const isH2 = trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|최종 기술 진단 종합 보고서)/);
         const isH3 = trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/);
         const isLabel = trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/);
         
+        let currentLineType = 'p';
+
         if (isH1) {
-            textStyle.fontSize = { magnitude: 20, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
+            textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h1';
         } else if (isH2) {
-            textStyle.fontSize = { magnitude: 16, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
+            textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h2';
         } else if (isH3) {
-            textStyle.fontSize = { magnitude: 14, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
+            textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true; fields += ',bold'; currentLineType = 'h3';
         } else if (isLabel) {
-             textStyle.bold = true;
-             fields += ',bold';
+             textStyle.bold = true; fields += ',bold';
         }
 
-        requests.push({
-            updateTextStyle: {
-                range: { startIndex, endIndex: endIndex - 1 },
-                textStyle,
-                fields: fields,
-            },
-        });
+        requests.push({ updateTextStyle: { range: { startIndex: currentIndex, endIndex: endIndex - 1 }, textStyle, fields: fields } });
         
-        if (trimmedLine.startsWith('•')) {
-            requests.push({
-                createParagraphBullets: {
-                    range: { startIndex, endIndex: endIndex - 1 },
-                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                },
-            });
+        // *** [개선 2] 문맥을 파악하여 지능적으로 글머리 기호 추가 ***
+        const shouldBeBullet = trimmedLine.startsWith('•') ||
+            ['핵심 진단 요약', '기술 검토 보완 요약', '추가 및 대안 권고', '8. 검증 결과 요약', '1. 단위 식별 및 변환 기준', '2. SI 기본 단위 정의', '8. 추가 보완 사항'].includes(lastLineType);
+        
+        if (shouldBeBullet) {
+            requests.push({ createParagraphBullets: { range: { startIndex: currentIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
         }
         
         currentIndex = endIndex;
         
-        // *** [최종 개선] 제목 뒤에 자동으로 공백 한 줄 추가 ***
+        // 제목 '아래'에 공백 한 줄 추가
         if (isH1 || isH2 || isH3) {
             requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
             currentIndex += 1;
+            lastLineType = 'blank'; // 공백이 추가되었음을 표시
+        } else {
+            lastLineType = isH3 ? '핵심 진단 요약' : trimmedLine; // 다음 라인이 참조할 수 있도록 현재 라인 정보 저장
+            if (isH3) lastLineType = trimmedLine; // H3 태그의 정확한 텍스트 저장
         }
     }
 
     return requests;
 };
-
 
 // --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
