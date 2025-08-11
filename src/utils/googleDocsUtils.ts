@@ -9,9 +9,7 @@ export interface GoogleAuthState {
 
 let GOOGLE_CLIENT_ID = '';
 
-// =================================================================
-// 인증 관련 함수 (수정 없음)
-// =================================================================
+// --- 인증 관련 함수 (수정 없음) ---
 export const fetchGoogleClientId = async (): Promise<string> => {
   if (GOOGLE_CLIENT_ID) return GOOGLE_CLIENT_ID;
   try {
@@ -97,102 +95,107 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [빌드 오류 해결] 안정성을 극대화한 최종 코드
+// [최종 오버홀 버전] 고성능 HTML 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    const normalizedHtml = htmlContent.replace(/>\s+</g, '><').trim();
-    const parts = normalizedHtml.split(/(<[^>]+>)/g).filter(Boolean);
+    // HTML을 정규화하고, 태그와 텍스트로 분리
+    const cleanedHtml = htmlContent.replace(/<br\s*\/?>/gi, '\n').replace(/>\s+</g, '><').trim();
+    const parts = cleanedHtml.split(/(<[^>]+>)/g).filter(Boolean);
 
+    let currentTag = 'p'; // 현재 텍스트 블록의 태그 종류
     let isBold = false;
+    let isItalic = false;
 
     for (const part of parts) {
-        if (part.startsWith('<')) {
-            if (part.startsWith('<strong>') || part.startsWith('<b>')) {
-                isBold = true;
-            } else if (part.startsWith('</strong>') || part.startsWith('</b>')) {
-                isBold = false;
+        if (part.startsWith('<')) { // 태그 처리
+            const match = part.match(/<\/?(\w+)/);
+            if (match) {
+                const tagName = match[1].toLowerCase();
+                const isClosingTag = part.startsWith('</');
+
+                if (['h1', 'h2', 'h3', 'p', 'li'].includes(tagName)) {
+                    currentTag = isClosingTag ? 'p' : tagName;
+                } else if (tagName === 'strong' || tagName === 'b') {
+                    isBold = !isClosingTag;
+                } else if (tagName === 'em' || tagName === 'i') {
+                    isItalic = !isClosingTag;
+                }
             }
-            continue;
-        }
+        } else { // 텍스트 콘텐츠 처리
+            const text = part.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            if (!text.trim()) continue;
 
-        const text = part.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-        const trimmedText = text.trim();
-        
-        if (!trimmedText) continue;
+            const textToInsert = text + '\n';
+            const startIndex = currentIndex;
+            requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
+            const endIndex = startIndex + textToInsert.length;
 
-        const textToInsert = text + '\n';
-        const startIndex = currentIndex;
+            const textStyle: any = {};
+            let fields = '';
 
-        requests.push({
-            insertText: {
-                location: { index: startIndex },
-                text: textToInsert,
-            },
-        });
-        
-        const endIndex = startIndex + textToInsert.length;
+            // 1. 태그 기반 스타일 (h1, h2, li 등)
+            switch (currentTag) {
+                case 'h1':
+                    textStyle.fontSize = { magnitude: 20, unit: 'PT' };
+                    textStyle.bold = true;
+                    fields = 'fontSize,bold';
+                    break;
+                case 'h2':
+                    textStyle.fontSize = { magnitude: 16, unit: 'PT' };
+                    textStyle.bold = true;
+                    fields = 'fontSize,bold';
+                    break;
+                case 'h3':
+                    textStyle.fontSize = { magnitude: 14, unit: 'PT' };
+                    textStyle.bold = true;
+                    fields = 'fontSize,bold';
+                    break;
+                case 'li':
+                case 'p':
+                default:
+                    textStyle.fontSize = { magnitude: 11, unit: 'PT' };
+                    fields = 'fontSize';
+                    break;
+            }
 
-        // --- 스타일링 로직 시작 ---
-        const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' } };
-        let fields = 'fontSize';
-
-        // 제목 스타일 (단순하고 명확한 includes 함수 사용)
-        if (trimmedText.includes('기술검토 및 진단 종합 보고서')) {
-            textStyle.fontSize = { magnitude: 20, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
-        } else if (trimmedText.includes('전문가 (')) {
-            textStyle.fontSize = { magnitude: 14, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
-        } 
-        // 부제목 스타일 (정규식 대신 단순한 startsWith 함수 사용)
-        else if (
-            trimmedText.startsWith('핵심 진단 요약') ||
-            trimmedText.startsWith('주요 조언') ||
-            trimmedText.startsWith('최종 종합 의견') ||
-            trimmedText.startsWith('추가 및 대안 권고') ||
-            trimmedText.startsWith('심층 검증 결과') ||
-            trimmedText.startsWith('정밀 검증')
-        ) {
-            textStyle.fontSize = { magnitude: 12, unit: 'PT' };
-            textStyle.bold = true;
-            fields += ',bold';
-        }
-
-        // <strong> 태그에 대한 처리
-        if (isBold && !textStyle.bold) {
-            textStyle.bold = true;
-            fields += ',bold';
-        }
-
-        requests.push({
-            updateTextStyle: {
-                range: { startIndex, endIndex: endIndex - 1 },
-                textStyle,
-                fields,
-            },
-        });
-
-        // 글머리 기호 처리
-        if (trimmedText.startsWith('•')) {
+            // 2. 인라인 스타일 (strong, em)
+            if (isBold) {
+                textStyle.bold = true;
+                if (!fields.includes('bold')) fields += ',bold';
+            }
+            if (isItalic) {
+                textStyle.italic = true;
+                if (!fields.includes('italic')) fields += ',italic';
+            }
+            
             requests.push({
-                createParagraphBullets: {
+                updateTextStyle: {
                     range: { startIndex, endIndex: endIndex - 1 },
-                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                    textStyle,
+                    fields: fields.replace(/,$/, ''),
                 },
             });
+
+            // 3. 목록(<li>)일 경우 글머리 기호 생성
+            if (currentTag === 'li' || text.trim().startsWith('•')) {
+                 requests.push({
+                    createParagraphBullets: {
+                        range: { startIndex, endIndex: endIndex - 1 },
+                        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                    },
+                });
+            }
+
+            currentIndex = endIndex;
         }
-        
-        currentIndex = endIndex;
     }
     return requests;
 };
 
-
+// --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
 const generateReportFileName = (equipmentName?: string): string => {
