@@ -95,89 +95,89 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종 진화형] AI 기반 HTML 문서 변환 엔진
+// [최종결정판] PDF-Perfect 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
-    const requests: any[] = [];
-    let currentIndex = 1;
-
     let processedHtml = htmlContent;
+
+    // 1. JSON 코드 자동 추출 및 HTML 재구성
     const jsonRegex = /{\s*"precision_verification_html":\s*"([\s\S]*?)",\s*"(?:final|tınal)_summary_text":\s*"([\s\S]*?)"\s*}/;
     const jsonMatch = processedHtml.match(jsonRegex);
     if (jsonMatch) {
         const verificationHtml = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
         processedHtml = processedHtml.replace(jsonRegex, verificationHtml);
     }
+    
+    // 2. HTML을 텍스트로 변환하되, 구조를 유지하는 정제 과정
+    processedHtml = processedHtml
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<li>/gi, '\n• ') // <li>를 글머리 기호로 변환
+        .replace(/<p>/gi, '\n')
+        .replace(/<h[1-6]>/gi, '\n\n') // 제목 태그 앞에 여백 추가
+        .replace(/<\/(h[1-6]|p|li|div|section)>/gi, '\n') // 블록 태그 뒤에 줄바꿈
+        .replace(/<strong>(.*?)<\/strong>/gi, '$1') // strong 태그는 텍스트만 남김
+        .replace(/&nbsp;/g, ' ')
+        .replace(/<[^>]+>/g, '') // 나머지 태그 모두 제거
+        .replace(/\n\s*\n/g, '\n\n'); // 여러 공백 라인을 하나로
 
-    const parts = processedHtml.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').split(/(<[^>]+>)/g).filter(Boolean);
-
-    const styleStack: any[] = [{ fontSize: { magnitude: 11, unit: 'PT' } }]; // 기본 스타일
-    let isNewLine = true;
-
-    for (const part of parts) {
-        if (part.startsWith('<')) { // 태그 처리
-            const isClosingTag = part.startsWith('</');
-            const tagName = part.replace(/<\/?|>/g, '').split(' ')[0].toLowerCase();
-            
-            let style = {};
-            const isBlockTag = ['h1', 'h2', 'h3', 'p', 'li', 'div', 'article', 'section', 'footer'].includes(tagName);
-
-            if (isBlockTag && !isNewLine) {
-                requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                currentIndex++;
-            }
-
-            switch (tagName) {
-                case 'h1': style = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true }; break;
-                case 'h2': style = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true }; break;
-                case 'h3': style = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true }; break;
-                case 'strong': case 'b': style = { bold: true }; break;
-                case 'em': case 'i': style = { italic: true }; break;
-            }
-
-            if (!isClosingTag) {
-                styleStack.push(style);
-            } else {
-                styleStack.pop();
-            }
-
-            if (isBlockTag && !isClosingTag && tagName.match(/^h[1-3]$/)) { // 제목 태그 뒤에 공백 추가
-                 setTimeout(() => { // Hack to ensure spacing is added after the content
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                 }, 0);
-            }
-             isNewLine = isBlockTag;
-
-        } else { // 텍스트 처리
-            const text = part.replace(/\s+/g, ' ').trim();
-            if (!text) continue;
-
-            const textToInsert = text + (isNewLine ? '\n' : '');
-            isNewLine = false;
-
-            const startIndex = currentIndex;
-            requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
-            
-            const currentStyle: any = Object.assign({}, ...styleStack);
-            let fields = Object.keys(currentStyle).join(',');
-
-            if (fields) {
-                requests.push({
-                    updateTextStyle: { range: { startIndex, endIndex: startIndex + text.length }, textStyle: currentStyle, fields },
-                });
-            }
-
-            const isListItem = text.startsWith('•') || styleStack.some(s => s.listItem);
-            if (isListItem) {
-                 requests.push({ createParagraphBullets: { range: { startIndex, endIndex: startIndex + text.length }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
-            }
-            currentIndex += textToInsert.length;
+    // 3. 중복 제목 제거
+    const lines = processedHtml.split('\n');
+    const uniqueLines: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+        const currentLine = lines[i]?.trim();
+        const nextLine = lines[i + 1]?.trim();
+        if (currentLine && currentLine === nextLine) {
+            // 현재 줄과 다음 줄이 같으면 현재 줄을 건너뛰어 중복 제거
+            continue;
         }
+        uniqueLines.push(lines[i]);
     }
+    processedHtml = uniqueLines.join('\n').trim();
+
+    const requests: any[] = [];
+    let currentIndex = 1;
+
+    // 4. 최종 텍스트를 기반으로 Docs 요청 생성
+    processedHtml.split('\n').forEach(line => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) { // 빈 줄은 그대로 삽입하여 여백 역할
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex++;
+            return;
+        }
+
+        const startIndex = currentIndex;
+        const textToInsert = trimmedLine + '\n';
+        requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
+        const endIndex = startIndex + textToInsert.length;
+
+        const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' }, bold: false };
+        let fields = 'fontSize,bold';
+
+        // 스타일 적용 로직
+        if (trimmedLine.match(/^기술검토 및 진단 종합 보고서$/)) {
+            textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true;
+        } else if (trimmedLine.match(/^(\d\.|AI 전문가 패널 소개|4\.\s)/)) {
+            textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true;
+        } else if (trimmedLine.match(/^(핵심 진단 요약|정밀 검증|최종 종합 의견|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료)/)) {
+            textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true;
+        } else if (trimmedLine.match(/^(전문분야:|배경:|주요 조언:|핵심 조언:)/)) {
+             textStyle.bold = true;
+        }
+
+        requests.push({
+            updateTextStyle: { range: { startIndex, endIndex: endIndex - 1 }, textStyle, fields },
+        });
+
+        // 글머리 기호 적용
+        if (trimmedLine.startsWith('•')) {
+            requests.push({ createParagraphBullets: { range: { startIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
+        }
+        currentIndex = endIndex;
+    });
+
     return requests;
 };
-
 
 // --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
