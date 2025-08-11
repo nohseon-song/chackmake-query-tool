@@ -131,7 +131,7 @@ export const exchangeCodeForToken = async (
 
 
 // =================================================================
-// [핵심] HTML을 Google Docs 요청으로 변환하는 새로운 로직
+// [핵심] HTML을 Google Docs 요청으로 변환하는 최종 완성본 로직
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   const requests: any[] = [];
@@ -143,9 +143,9 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   const processNode = (node: ChildNode) => {
     if (node.nodeType === Node.TEXT_NODE && node.textContent) {
       const text = node.textContent.replace(/\u00A0/g, ' ');
-      if (text) {
-          requests.push({ insertText: { location: { index: currentIndex }, text } });
-          currentIndex += text.length;
+      if (text) { // 비어있지 않은 모든 텍스트 노드를 삽입
+        requests.push({ insertText: { location: { index: currentIndex }, text } });
+        currentIndex += text.length;
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
@@ -193,13 +193,21 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
       
       // 블록 요소 뒤에는 줄바꿈을 추가하여 문단 구분을 명확하게 합니다.
       if (['p', 'h1', 'h2', 'h3', 'h4', 'div', 'section', 'header', 'footer', 'ul', 'li'].includes(el.tagName.toLowerCase())) {
-        requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-        currentIndex += 1;
+        const lastRequest = requests[requests.length - 1];
+        if (!lastRequest || !lastRequest.insertText || !lastRequest.insertText.text.endsWith('\n')) {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex += 1;
+        }
       }
     }
   };
 
   doc.body.childNodes.forEach(processNode);
+
+  // 문서 시작 부분의 불필요한 줄바꿈 제거
+  if (requests[0]?.insertText?.text.startsWith('\n')) {
+      requests[0].insertText.text = requests[0].insertText.text.substring(1);
+  }
 
   return requests;
 };
