@@ -49,7 +49,7 @@ export const authenticateGoogle = async (): Promise<string> => {
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('scope', scope);
     authUrl.searchParams.append('include_granted_scopes', 'true');
-    authUrl.search_params.append('access_type', 'offline');
+    authUrl.searchParams.append('access_type', 'offline');
     const popup = window.open(authUrl.toString(), 'google-auth', 'width=500,height=650');
     if (!popup) throw new Error('팝업이 차단되었습니다.');
     return new Promise<string>((resolve, reject) => {
