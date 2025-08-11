@@ -97,38 +97,62 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [최종] 데이터 정규화 후 사용하는, 빌드 오류 없는 변환 엔진
+// [최종] 데이터 자동 복구 기능이 포함된, 완벽한 변환 엔진
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    // 1. HTML 전처리: 태그를 유지한 채 불필요한 공백과 줄바꿈만 정리
-    const cleanHtml = htmlContent
+    /**
+     * [1단계: 데이터 복구]
+     * '<'가 누락된 비정상적인 HTML을 복구하는 함수
+     * 예: "h1>Hello/h1>" -> "<h1>Hello</h1>"
+     */
+    const repairMalformedHtml = (html: string): string => {
+        // 알려진 HTML 태그 목록
+        const KNOWN_TAGS = 'h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer|em|strong|b|i|br';
+        
+        // 여는 태그 복구 (예: "h1>" -> "<h1>", "div class...>" -> "<div class...>")
+        // 단어 경계(\b)로 시작하고, 알려진 태그 이름으로 이어지며, '>'로 끝나는 패턴을 찾음
+        const openTagRegex = new RegExp(`\\b(${KNOWN_TAGS})([\\s\\S]*?)>`, 'g');
+        let repairedHtml = html.replace(openTagRegex, '<$1$2>');
+
+        // 닫는 태그 복구 (예: "/h1>" -> "</h1>")
+        // 슬래시(/)로 시작하고, 알려진 태그 이름으로 이어지며, '>'로 끝나는 패턴을 찾음
+        const closeTagRegex = new RegExp(`\\/(${KNOWN_TAGS})>`, 'g');
+        repairedHtml = repairedHtml.replace(closeTagRegex, '</$1>');
+
+        return repairedHtml;
+    };
+
+    const repairedHtml = repairMalformedHtml(htmlContent);
+
+    // [2단계: 완벽 변환]
+    // 2-1. HTML 전처리: 태그를 유지한 채 불필요한 공백과 줄바꿈만 정리
+    const cleanHtml = repairedHtml
         .replace(/\s+/g, ' ') // 모든 연속 공백을 하나로
         .replace(/>\s+</g, '><') // 태그 사이 공백 제거
         .trim();
 
-    // 2. 정규식으로 HTML 블록 요소들을 순차적으로 찾기
-    const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote)[\s>]([\s\S]*?)<\/\1>/g;
+    // 2-2. 정규식으로 HTML 블록 요소들을 순차적으로 찾기
+    const blockRegex = /<(h[1-6]|p|ul|ol|li|pre|div|blockquote|article|section|header|footer)([\s>])([\s\S]*?)<\/\1>/g;
     let match;
     let lastIndex = 0;
 
     while ((match = blockRegex.exec(cleanHtml)) !== null) {
-        // 태그 사이의 텍스트 처리 (거의 발생하지 않지만 안전장치)
         const precedingText = cleanHtml.substring(lastIndex, match.index).trim();
         if (precedingText) {
              processBlock(precedingText, 'p');
         }
 
         const tagName = match[1].toLowerCase();
-        const innerHtml = match[2];
+        // innerHTML은 태그의 속성을 제외한 순수 내용만 포함해야 함
+        const innerHtml = match[3];
         processBlock(innerHtml, tagName);
 
         lastIndex = match.index + match[0].length;
     }
 
-    // 마지막 블록 이후 남은 텍스트 처리
     const trailingText = cleanHtml.substring(lastIndex).trim();
     if (trailingText) {
         processBlock(trailingText, 'p');
@@ -136,13 +160,10 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
     /**
      * 하나의 블록을 처리하는 함수
-     * @param innerHtml 블록 내부의 HTML 문자열
-     * @param tagName 블록의 태그 이름 (h1, p 등)
      */
     function processBlock(innerHtml: string, tagName: string) {
         if (!innerHtml.trim()) return;
 
-        // 블록 시작 전 줄바꿈 추가 (문서 시작 제외)
         if (currentIndex > 1) {
             requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
             currentIndex++;
@@ -150,12 +171,11 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
         const blockStartIndex = currentIndex;
         
-        // 블록 내부의 텍스트와 인라인 태그 처리
         const inlineRegex = /<(strong|b|em|i)>([\s\S]*?)<\/\1>|([^<]+)/g;
         let inlineMatch;
         while ((inlineMatch = inlineRegex.exec(innerHtml)) !== null) {
             const isBold = /strong|b/.test(inlineMatch[1]);
-            const text = (inlineMatch[2] || inlineMatch[3] || '').trim();
+            const text = (inlineMatch[2] || inlineMatch[3] || '').replace(/<br\s*\/?>/gi, '\n').trim();
             if (!text) continue;
 
             const textStartIndex = currentIndex;
@@ -176,7 +196,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
         const blockEndIndex = currentIndex;
         if (blockEndIndex <= blockStartIndex) return;
 
-        // 블록 레벨 스타일 적용 (폰트 크기, 굵기 등)
         let textStyle: any = { fontSize: { magnitude: 10, unit: 'PT' } };
         let fields = 'fontSize';
 
@@ -202,7 +221,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             },
         });
 
-        // 글머리 기호 적용
         if (tagName === 'li') {
             requests.push({
                 createParagraphBullets: {
