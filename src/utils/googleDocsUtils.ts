@@ -97,7 +97,7 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
 
 
 // =================================================================
-// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (HTML DOM 파싱 방식으로 전면 재설계)
+// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (계층적 스타일링 엔진으로 전면 재설계)
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
@@ -124,102 +124,150 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
     const parser = new DOMParser();
 
-    // DOM 노드를 재귀적으로 탐색하며 Google Docs API 요청을 생성하는 함수
-    const processNode = (node: Node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-            const text = node.textContent;
-            if (text && text.trim()) {
-                const textStartIndex = currentIndex;
-                requests.push({ insertText: { location: { index: currentIndex }, text } });
-                currentIndex += text.length;
+    /**
+     * DOM 노드를 순회하며 계층적으로 스타일을 적용하는 메인 함수
+     * @param parentNode - 처리할 최상위 노드
+     */
+    const processNodes = (parentNode: Node) => {
+        // block-level 요소들만 순차적으로 처리
+        parentNode.childNodes.forEach(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
 
-                // 부모 태그에 따라 인라인 스타일(굵게, 기울임) 적용
-                const parent = node.parentElement;
-                if (parent) {
-                    const textStyle: { bold?: boolean; italic?: boolean } = {};
-                    const fields: string[] = [];
-                    if (parent.closest('strong, b')) {
-                        textStyle.bold = true;
-                        fields.push('bold');
-                    }
-                    if (parent.closest('em, i')) {
-                        textStyle.italic = true;
-                        fields.push('italic');
-                    }
-                    if (fields.length > 0) {
-                        requests.push({
-                            updateTextStyle: {
-                                range: { startIndex: textStartIndex, endIndex: currentIndex },
-                                textStyle,
-                                fields: fields.join(','),
-                            },
-                        });
-                    }
-                }
-            }
+            const el = node as HTMLElement;
+            // 빈 텍스트만 가진 요소는 건너뛰어 불필요한 공백을 막음
+            if (!el.textContent?.trim()) return;
+            
+            // 각 블록 요소 처리 함수 호출
+            processBlockElement(el);
+        });
+    }
+
+    /**
+     * 개별 블록 요소(p, h1, ul 등)를 처리하는 함수
+     * @param el - 처리할 HTML 요소
+     */
+    const processBlockElement = (el: HTMLElement) => {
+        const tagName = el.tagName.toLowerCase();
+
+        // 블록 요소 시작 전, 구분을 위한 줄바꿈 추가 (문서 첫 시작 제외)
+        if (currentIndex > 1) {
+            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+            currentIndex++;
+        }
+
+        const blockStartIndex = currentIndex;
+
+        // 1. 블록의 기본 텍스트 스타일 결정 (폰트 크기, 굵기 등)
+        let baseTextStyle: any = { fontSize: { magnitude: 10, unit: 'PT' } };
+        let baseFields = 'fontSize';
+
+        switch (tagName) {
+            case 'h1':
+                baseTextStyle = { fontSize: { magnitude: 20, unit: 'PT' }, bold: true };
+                baseFields = 'fontSize,bold';
+                break;
+            case 'h2':
+                baseTextStyle = { fontSize: { magnitude: 16, unit: 'PT' }, bold: true };
+                baseFields = 'fontSize,bold';
+                break;
+            case 'h3':
+            case 'h4': // h4, h5, h6도 h3와 동일하게 처리
+            case 'h5':
+            case 'h6':
+                baseTextStyle = { fontSize: { magnitude: 14, unit: 'PT' }, bold: true };
+                baseFields = 'fontSize,bold';
+                break;
+            case 'pre':
+                baseTextStyle.weightedFontFamily = { fontFamily: 'Courier New' };
+                baseFields += ',weightedFontFamily';
+                break;
+        }
+
+        // 2. 블록 내부의 인라인 요소(텍스트, strong 등)를 처리
+        el.childNodes.forEach(childNode => {
+            processInlineNode(childNode, baseTextStyle, baseFields);
+        });
+
+        const blockEndIndex = currentIndex;
+
+        // 3. 블록 레벨 서식 적용 (예: 글머리 기호)
+        if (tagName === 'li') {
+            requests.push({
+                createParagraphBullets: {
+                    range: { startIndex: blockStartIndex, endIndex: blockEndIndex },
+                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                },
+            });
+        }
+    };
+
+    /**
+     * 텍스트, strong, em 등 인라인 요소를 처리하는 함수
+     * @param node - 처리할 인라인 노드
+     * @param baseTextStyle - 상위 블록에서 상속된 기본 스타일
+     * @param baseFields - 상속된 스타일의 필드 목록
+     */
+    const processInlineNode = (node: Node, baseTextStyle: any, baseFields: string) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || '';
+            if (!text.trim() && text.length > 0) return; // 공백만 있는 텍스트 노드는 무시
+            if (!text) return;
+
+            const textStartIndex = currentIndex;
+            requests.push({ insertText: { location: { index: currentIndex }, text } });
+            currentIndex += text.length;
+
+            // 상속된 기본 스타일 적용
+            requests.push({
+                updateTextStyle: {
+                    range: { startIndex: textStartIndex, endIndex: currentIndex },
+                    textStyle: baseTextStyle,
+                    fields: baseFields,
+                },
+            });
         } else if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
+            const text = el.textContent || '';
+            if (!text) return;
+
+            const textStartIndex = currentIndex;
+            requests.push({ insertText: { location: { index: currentIndex }, text } });
+            currentIndex += text.length;
+
+            // 상속된 스타일에 현재 인라인 스타일(예: bold)을 추가하여 적용
+            const finalTextStyle = { ...baseTextStyle };
+            let finalFields = baseFields;
+
             const tagName = el.tagName.toLowerCase();
-            const blockStartIndex = currentIndex;
-
-            el.childNodes.forEach(processNode);
-
-            // 블록 레벨 요소에 따라 스타일 적용
-            const headingMatch = tagName.match(/^h([1-6])$/);
-            if (headingMatch) {
-                requests.push({
-                    updateParagraphStyle: {
-                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
-                        paragraphStyle: { namedStyleType: `HEADING_${headingMatch[1]}` },
-                        fields: 'namedStyleType',
-                    },
-                });
-            } else if (tagName === 'li') {
-                requests.push({
-                    createParagraphBullets: {
-                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
-                        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                    },
-                });
-            } else if (tagName === 'pre') {
-                 requests.push({
-                    updateTextStyle: {
-                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
-                        textStyle: { weightedFontFamily: { fontFamily: 'Courier New' }, fontSize: { magnitude: 9, unit: 'PT' } },
-                        fields: 'weightedFontFamily,fontSize',
-                    },
-                });
+            if (tagName === 'strong' || tagName === 'b') {
+                finalTextStyle.bold = true;
+                if (!finalFields.includes('bold')) finalFields += ',bold';
             }
+            // 다른 인라인 태그(em, u 등)도 여기에 추가 가능
 
-            // 블록 요소 처리 후 줄바꿈 추가 (가독성 향상)
-            if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'div', 'section', 'header', 'footer', 'article', 'pre'].includes(tagName)) {
-                if (currentIndex > 1 && requests[requests.length - 1]?.insertText?.text !== '\n') {
-                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-                    currentIndex++;
-                }
-            }
+            requests.push({
+                updateTextStyle: {
+                    range: { startIndex: textStartIndex, endIndex: currentIndex },
+                    textStyle: finalTextStyle,
+                    fields: finalFields,
+                },
+            });
         }
     };
     
     // 1. 정리된 기본 HTML 콘텐츠 처리
     const mainDoc = parser.parseFromString(cleanHtml, 'text/html');
-    processNode(mainDoc.body);
+    processNodes(mainDoc.body);
 
     // 2. 추출된 JSON 안의 HTML 콘텐츠 처리
     if (precisionHtml) {
         const precisionDoc = parser.parseFromString(`<div>${precisionHtml}</div>`, 'text/html');
-        processNode(precisionDoc.body);
+        processNodes(precisionDoc.body);
     }
     
-    // 3. 추출된 JSON 안의 요약 텍스트 처리
+    // 3. 추출된 JSON 안의 요약 텍스트 처리 (일반 본문으로 처리)
     if (summaryText) {
-        requests.push({ insertText: { location: { index: currentIndex }, text: summaryText + '\n' } });
-        currentIndex += summaryText.length + 1;
-    }
-
-    // 마지막에 불필요한 줄바꿈이 있으면 제거
-    if (requests.length > 0 && requests[requests.length - 1]?.insertText?.text === '\n') {
-        requests.pop();
+        processBlockElement(Object.assign(document.createElement('p'), { innerHTML: summaryText }));
     }
 
     return requests;
