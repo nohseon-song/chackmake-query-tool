@@ -95,95 +95,131 @@ export const exchangeCodeForToken = async (code: string): Promise<{ accessToken:
   return { accessToken: access_token, refreshToken: refresh_token };
 };
 
+
 // =================================================================
-// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (패턴 분석 방식으로 전면 수정)
+// [핵심] PDF와 동일한 가독성을 위한 최종 완성본 변환 로직 (HTML DOM 파싱 방식으로 전면 재설계)
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     const requests: any[] = [];
     let currentIndex = 1;
 
-    // 1. HTML을 다루기 쉬운 텍스트로 정제합니다.
-    // <p>, <div>, <br> 태그를 모두 줄바꿈(\n)으로 변경하여 일관성을 유지합니다.
-    const textContent = htmlContent
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/?p>/gi, '\n')
-        .replace(/<\/?div.*?>/gi, '\n')
-        .replace(/&nbsp;/g, ' ') // 공백 문자 처리
-        .replace(/\n{3,}/g, '\n\n') // 여러 줄바꿈을 최대 2개로 압축
-        .trim();
+    // HTML 문자열에서 숨겨진 JSON 데이터를 먼저 추출하고 제거합니다.
+    const jsonRegex = /<script type="application\/json">([\s\S]*?)<\/script>|({[\s\S]*"precision_verification_html"[\s\S]*})/;
+    const jsonMatch = htmlContent.match(jsonRegex);
+    let precisionHtml = '';
+    let summaryText = '';
+    let cleanHtml = htmlContent;
 
-    // 2. 정제된 텍스트를 줄바꿈 기준으로 문단 배열로 만듭니다.
-    const paragraphs = textContent.split('\n');
-
-    // 3. 각 문단을 순회하며 내용에 따라 서식을 적용합니다.
-    for (const paragraph of paragraphs) {
-        const trimmedParagraph = paragraph.trim();
-        if (!trimmedParagraph) {
-            // 빈 줄은 그대로 유지하여 단락 구분을 만듭니다.
-            requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-            currentIndex++;
-            continue;
+    if (jsonMatch) {
+        cleanHtml = htmlContent.replace(jsonRegex, ''); // 원본 HTML에서 JSON 부분 제거
+        const jsonString = jsonMatch[1] || jsonMatch[2];
+        try {
+            const jsonData = JSON.parse(jsonString);
+            precisionHtml = jsonData.precision_verification_html || '';
+            summaryText = jsonData.final_summary_text || '';
+        } catch (e) {
+            console.error("숨겨진 JSON 데이터 파싱 실패:", e);
         }
+    }
 
-        const paragraphStartIndex = currentIndex;
+    const parser = new DOMParser();
 
-        // 4. 문단 내의 굵은 글씨(<strong>, <b>)를 처리합니다.
-        // 정규식을 사용하여 태그와 일반 텍스트를 분리합니다.
-        const parts = trimmedParagraph.split(/(<strong>.*?<\/strong>|<b>.*?<\/b>)/g).filter(Boolean);
-
-        for (const part of parts) {
-            const isBold = /<strong>.*?<\/strong>|<b>.*?<\/b>/.test(part);
-            const text = part.replace(/<\/?(strong|b)>/g, '');
-
-            if (text) {
+    // DOM 노드를 재귀적으로 탐색하며 Google Docs API 요청을 생성하는 함수
+    const processNode = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent;
+            if (text && text.trim()) {
                 const textStartIndex = currentIndex;
                 requests.push({ insertText: { location: { index: currentIndex }, text } });
                 currentIndex += text.length;
 
-                if (isBold) {
-                    requests.push({
-                        updateTextStyle: {
-                            range: { startIndex: textStartIndex, endIndex: currentIndex },
-                            textStyle: { bold: true },
-                            fields: 'bold',
-                        },
-                    });
+                // 부모 태그에 따라 인라인 스타일(굵게, 기울임) 적용
+                const parent = node.parentElement;
+                if (parent) {
+                    const textStyle: { bold?: boolean; italic?: boolean } = {};
+                    const fields: string[] = [];
+                    if (parent.closest('strong, b')) {
+                        textStyle.bold = true;
+                        fields.push('bold');
+                    }
+                    if (parent.closest('em, i')) {
+                        textStyle.italic = true;
+                        fields.push('italic');
+                    }
+                    if (fields.length > 0) {
+                        requests.push({
+                            updateTextStyle: {
+                                range: { startIndex: textStartIndex, endIndex: currentIndex },
+                                textStyle,
+                                fields: fields.join(','),
+                            },
+                        });
+                    }
+                }
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            const tagName = el.tagName.toLowerCase();
+            const blockStartIndex = currentIndex;
+
+            el.childNodes.forEach(processNode);
+
+            // 블록 레벨 요소에 따라 스타일 적용
+            const headingMatch = tagName.match(/^h([1-6])$/);
+            if (headingMatch) {
+                requests.push({
+                    updateParagraphStyle: {
+                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
+                        paragraphStyle: { namedStyleType: `HEADING_${headingMatch[1]}` },
+                        fields: 'namedStyleType',
+                    },
+                });
+            } else if (tagName === 'li') {
+                requests.push({
+                    createParagraphBullets: {
+                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
+                        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+                    },
+                });
+            } else if (tagName === 'pre') {
+                 requests.push({
+                    updateTextStyle: {
+                        range: { startIndex: blockStartIndex, endIndex: currentIndex },
+                        textStyle: { weightedFontFamily: { fontFamily: 'Courier New' }, fontSize: { magnitude: 9, unit: 'PT' } },
+                        fields: 'weightedFontFamily,fontSize',
+                    },
+                });
+            }
+
+            // 블록 요소 처리 후 줄바꿈 추가 (가독성 향상)
+            if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'div', 'section', 'header', 'footer', 'article', 'pre'].includes(tagName)) {
+                if (currentIndex > 1 && requests[requests.length - 1]?.insertText?.text !== '\n') {
+                    requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
+                    currentIndex++;
                 }
             }
         }
-        
-        // 5. 문단 전체에 적용될 스타일을 내용 패턴에 따라 결정합니다.
-        // 예: "1. ~", "2. ~" 로 시작하면 HEADING_2 스타일 적용
-        if (/^\d+\.\s/.test(trimmedParagraph)) {
-            requests.push({
-                updateParagraphStyle: {
-                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
-                    paragraphStyle: { namedStyleType: 'HEADING_2' },
-                    fields: 'namedStyleType',
-                },
-            });
-        // 예: "• " 로 시작하면 글머리 기호 적용
-        } else if (/^•\s/.test(trimmedParagraph)) {
-             requests.push({
-                createParagraphBullets: {
-                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
-                    bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-                },
-            });
-        // 예: "핵심 진단 요약", "최종 종합 의견" 등 특정 키워드는 HEADING_3 스타일 적용
-        } else if (['핵심 진단 요약', '정밀 검증', '최종 종합 의견', '기술 검토 보완 요약', '심층 검증 결과', '추가 및 대안 권고', '최종 정밀 검증 완료'].includes(trimmedParagraph)) {
-             requests.push({
-                updateParagraphStyle: {
-                    range: { startIndex: paragraphStartIndex, endIndex: currentIndex },
-                    paragraphStyle: { namedStyleType: 'HEADING_3' },
-                    fields: 'namedStyleType',
-                },
-            });
-        }
+    };
+    
+    // 1. 정리된 기본 HTML 콘텐츠 처리
+    const mainDoc = parser.parseFromString(cleanHtml, 'text/html');
+    processNode(mainDoc.body);
 
-        // 각 문단이 끝난 후 줄바꿈을 추가하여 다음 문단과 분리합니다.
-        requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
-        currentIndex++;
+    // 2. 추출된 JSON 안의 HTML 콘텐츠 처리
+    if (precisionHtml) {
+        const precisionDoc = parser.parseFromString(`<div>${precisionHtml}</div>`, 'text/html');
+        processNode(precisionDoc.body);
+    }
+    
+    // 3. 추출된 JSON 안의 요약 텍스트 처리
+    if (summaryText) {
+        requests.push({ insertText: { location: { index: currentIndex }, text: summaryText + '\n' } });
+        currentIndex += summaryText.length + 1;
+    }
+
+    // 마지막에 불필요한 줄바꿈이 있으면 제거
+    if (requests.length > 0 && requests[requests.length - 1]?.insertText?.text === '\n') {
+        requests.pop();
     }
 
     return requests;
@@ -192,11 +228,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'; // 지정된 구글 드라이브 폴더 ID
 
-/**
- * 보고서 파일 이름을 생성합니다. (예: 기술진단내역작성_설비명_2025.08.11)
- * @param equipmentName 설비 이름
- * @returns 생성된 파일 이름
- */
 const generateReportFileName = (equipmentName?: string): string => {
   const d = new Date();
   const year = d.getFullYear();
@@ -206,13 +237,6 @@ const generateReportFileName = (equipmentName?: string): string => {
   return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
 };
 
-/**
- * HTML 콘텐츠를 사용하여 Google Docs 문서를 생성하고 지정된 폴더로 이동시킵니다.
- * @param htmlContent 문서에 채울 HTML 형식의 콘텐츠
- * @param accessToken Google API 접근 토큰
- * @param equipmentName 파일 이름에 사용될 설비 이름
- * @returns 생성된 Google Docs 문서의 URL
- */
 export const createGoogleDoc = async (
   htmlContent: string,
   accessToken: string,
@@ -221,7 +245,6 @@ export const createGoogleDoc = async (
   const isValid = await validateGoogleToken(accessToken);
   if (!isValid) throw new Error('Google API 토큰이 유효하지 않습니다.');
 
-  // 1. 문서 생성 (제목만 포함)
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -233,10 +256,8 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
-  // 2. HTML을 Google Docs API 요청으로 변환
   const requests = convertHtmlToGoogleDocsRequests(htmlContent);
 
-  // 3. 내용 및 서식 일괄 업데이트 (내용이 있을 때만)
   if (requests.length > 0) {
     // console.log("Sending to Google Docs API:", JSON.stringify(requests, null, 2));
     const updateResp = await fetch(
@@ -250,14 +271,12 @@ export const createGoogleDoc = async (
     if (!updateResp.ok) {
       const errorBody = await updateResp.text();
       console.error("Google Docs API Error:", errorBody);
-      // 문서 업데이트 실패 시 생성된 빈 문서를 삭제하는 로직을 추가할 수 있습니다.
       throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
     }
   } else {
     console.warn("내보낼 콘텐츠가 없어 빈 문서가 생성되었습니다.");
   }
 
-  // 4. 생성된 문서를 지정된 폴더로 이동
   await fetch(
     `https://www.googleapis.com/drive/v3/files/${documentId}?addParents=${FOLDER_ID}&removeParents=root`,
     {
