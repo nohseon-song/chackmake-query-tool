@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import ReportHeader from './ReportHeader';
 import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
@@ -34,6 +34,14 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGoogleDocsDownloading, setIsGoogleDocsDownloading] = useState(false);
   const { toast } = useToast();
+  
+  // 마지막으로 선택된 설비명을 기억 (제출 후 상태 초기화되어도 사용)
+  const equipmentRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (equipment && equipment.trim()) {
+      equipmentRef.current = equipment.trim();
+    }
+  }, [equipment]);
   
   // 응답 로그만 필터링
   const responseLogs = logs.filter(log => log.isResponse);
@@ -87,7 +95,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
         hasEquipment: !!equipment
       });
       
-      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipment || undefined);
+      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipmentRef.current || equipment || undefined);
       
       toast({
         title: "Google Docs 문서가 생성되었습니다",
