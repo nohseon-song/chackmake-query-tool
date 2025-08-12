@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { LogEntry } from '@/types';
 
 // HTML 콘텐츠 결합 유틸리티 (원본 코드로 복구)
@@ -9,5 +10,6 @@ export const getCombinedHtml = (log: LogEntry) => {
     log.final_summary_html || ''
   ].filter(part => part.trim() !== '');
   
-  return parts.length > 0 ? parts.join('') : log.content;
+  const html = parts.length > 0 ? parts.join('') : log.content;
+  return DOMPurify.sanitize(html);
 };
