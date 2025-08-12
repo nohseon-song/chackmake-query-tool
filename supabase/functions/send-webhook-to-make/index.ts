@@ -67,8 +67,8 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("Error within the function execution:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error("Error within the function execution:", (error as any).message);
+    return new Response(JSON.stringify({ error: (error as any).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
