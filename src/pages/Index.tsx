@@ -1,4 +1,3 @@
-
 import React from 'react';
 import ThemeToggle from '@/components/ThemeToggle';
 import MainContent from '@/components/MainContent';
@@ -8,7 +7,6 @@ import { EQUIPMENT_TREE } from '@/constants/equipment';
 import { useAppState } from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const {
@@ -59,8 +57,31 @@ const Index = () => {
       return;
     }
 
+    // --- 👇 여기가 업그레이드된 핵심 코드입니다 ---
+    // 1. 현재 로그인한 사용자의 정보를 가져옵니다.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
+      return;
+    }
+
+    // 2. user_profiles 테이블에서 해당 사용자의 조직 ID를 찾습니다.
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile?.organization_id) {
+      toast({ title: "오류", description: "사용자 프로필 또는 조직 정보를 찾을 수 없습니다.", variant: "destructive" });
+      console.error("Profile Error:", profileError);
+      return;
+    }
+    // --- 👆 여기까지 ---
+
     const payload: any = {
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      organization_id: profile.organization_id, // 3. payload에 조직 ID를 추가합니다.
     };
 
     if (savedReadings.length > 0) {
@@ -81,10 +102,7 @@ const Index = () => {
   };
 
   const handleChatMessage = async (message: string) => {
-    await sendWebhook({
-      chat: message,
-      timestamp: Date.now()
-    });
+    // 채팅 메시지는 임시 저장 후 handleSubmit을 통해 전송됩니다.
   };
 
   return (
