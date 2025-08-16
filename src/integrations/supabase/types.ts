@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
@@ -21,6 +21,7 @@ export type Database = {
           id: string
           new_values: Json | null
           old_values: Json | null
+          organization_id: string
           record_id: string | null
           table_name: string
           user_id: string | null
@@ -31,6 +32,7 @@ export type Database = {
           id?: string
           new_values?: Json | null
           old_values?: Json | null
+          organization_id: string
           record_id?: string | null
           table_name: string
           user_id?: string | null
@@ -41,6 +43,7 @@ export type Database = {
           id?: string
           new_values?: Json | null
           old_values?: Json | null
+          organization_id?: string
           record_id?: string | null
           table_name?: string
           user_id?: string | null
@@ -356,6 +359,36 @@ export type Database = {
           },
         ]
       }
+      knowledge_base: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string | null
+          equipment_type: string | null
+          id: string
+          metadata: Json | null
+          organization_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding?: string | null
+          equipment_type?: string | null
+          id?: string
+          metadata?: Json | null
+          organization_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          equipment_type?: string | null
+          id?: string
+          metadata?: Json | null
+          organization_id?: string
+        }
+        Relationships: []
+      }
       measurement_items: {
         Row: {
           created_at: string | null
@@ -611,6 +644,18 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      match_documents: {
+        Args: {
+          match_count: number
+          match_threshold: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          similarity: number
+        }[]
       }
     }
     Enums: {
