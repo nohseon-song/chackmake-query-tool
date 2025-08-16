@@ -120,29 +120,6 @@ const Index = () => {
         onAddLogEntry={addLogEntry}
       />
 
-      <div className="p-4">
-        <Button
-          onClick={async () => {
-            try {
-              console.log('테스트 버튼 클릭: "test-auth" 함수를 호출합니다.');
-              const { data, error } = await supabase.functions.invoke('test-auth');
-              if (error) {
-                throw error;
-              }
-              console.log('테스트 성공:', data);
-              alert('테스트 성공! 콘솔을 확인하세요.');
-            } catch (err) {
-              console.error('테스트 실패:', err);
-              alert('테스트 실패! 콘솔을 확인하세요.');
-            }
-          }}
-          variant="destructive"
-          className="w-full"
-        >
-          인증 테스트 버튼 (임시)
-        </Button>
-      </div>
-
       <FloatingButtons
         isProcessing={isProcessing}
         class2={class2}
