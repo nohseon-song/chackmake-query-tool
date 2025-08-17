@@ -6,49 +6,50 @@
 
 @layer base {
   :root {
-    --background: 45 15% 97%;
+    /* 더욱 부드럽고 눈에 편안한 라이트모드 색상 */
+    --background: 210 20% 95%;
     --foreground: 222.2 84% 4.9%;
 
-    --card: 45 20% 96%;
+    --card: 210 25% 93%;
     --card-foreground: 222.2 84% 4.9%;
 
-    --popover: 45 20% 96%;
+    --popover: 210 25% 93%;
     --popover-foreground: 222.2 84% 4.9%;
 
     --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 45 25% 93%;
+    --secondary: 210 30% 90%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 45 25% 93%;
+    --muted: 210 30% 90%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 45 25% 93%;
+    --accent: 210 30% 90%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 45 20% 88%;
-    --input: 45 20% 94%;
+    --border: 210 25% 85%;
+    --input: 210 30% 91%;
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 45 20% 95%;
+    --sidebar-background: 210 25% 92%;
 
     --sidebar-foreground: 240 5.3% 26.1%;
 
     --sidebar-primary: 240 5.9% 10%;
 
-    --sidebar-primary-foreground: 45 20% 95%;
+    --sidebar-primary-foreground: 210 25% 92%;
 
-    --sidebar-accent: 45 25% 91%;
+    --sidebar-accent: 210 30% 88%;
 
     --sidebar-accent-foreground: 240 5.9% 10%;
 
-    --sidebar-border: 45 20% 88%;
+    --sidebar-border: 210 25% 85%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
   }

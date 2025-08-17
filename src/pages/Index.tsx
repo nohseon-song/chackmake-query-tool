@@ -126,29 +126,46 @@ const Index = () => {
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <header className={`flex flex-col items-center p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm relative`}>
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          {user && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <User className="w-4 h-4" />
-              <span>{user.email}</span>
+      <header className={`p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
+        {/* 모바일 친화적 반응형 헤더 레이아웃 */}
+        <div className="flex flex-col space-y-3">
+          {/* 상단 라인: 타이틀과 사용자 정보/버튼들 */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="text-center sm:text-left">
+              <h1 className="text-lg sm:text-xl font-bold">CheckMake Pro-Ultra 2.0</h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 현장 기술 진단 App</p>
             </div>
-          )}
-          <Button
-            onClick={handleSignOut}
-            variant="ghost"
-            size="sm"
-            className="flex items-center gap-1"
-            disabled={isProcessing}
-          >
-            <LogOut className="w-4 h-4" />
-            로그아웃
-          </Button>
-          <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+            
+            {/* 사용자 정보와 액션 버튼들 */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+              {user && (
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 order-3 sm:order-1">
+                  <User className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="truncate max-w-[150px] sm:max-w-none">{user.email}</span>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2 order-1 sm:order-2">
+                <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+                <Button
+                  onClick={handleSignOut}
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3"
+                  disabled={isProcessing}
+                >
+                  <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">로그아웃</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+          
+          {/* 하단 라인: 서브타이틀 */}
+          <div className="text-center sm:text-left">
+            <p className="text-xs text-gray-500 dark:text-gray-500">professional-engineering Insight by SNS</p>
+          </div>
         </div>
-        <h1 className="text-xl font-bold mb-1">CheckMake Pro-Ultra 2.0</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 현장 기술 진단 App</p>
-        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">professional-engineering Insight by SNS</p>
       </header>
 
       {/* 🔽🔽🔽 빠졌던 연결선(props)들을 모두 다시 연결했어! 🔽🔽🔽 */}
