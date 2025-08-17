@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_logs: {
+        Row: {
+          calculated_cost: number | null
+          completion_tokens: number | null
+          created_at: string
+          id: number
+          model_name: string | null
+          organization_id: string | null
+          prompt_tokens: number | null
+          total_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          calculated_cost?: number | null
+          completion_tokens?: number | null
+          created_at?: string
+          id?: number
+          model_name?: string | null
+          organization_id?: string | null
+          prompt_tokens?: number | null
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          calculated_cost?: number | null
+          completion_tokens?: number | null
+          created_at?: string
+          id?: number
+          model_name?: string | null
+          organization_id?: string | null
+          prompt_tokens?: number | null
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -592,6 +636,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_inspector_access: {
+        Row: {
+          created_at: string
+          id: string
+          inspector_id: string
+          organization_id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inspector_id: string
+          organization_id: string
+          role?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inspector_id?: string
+          organization_id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_profiles: {
         Row: {
           created_at: string | null
@@ -633,6 +707,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      execute_sql: {
+        Args: { sql: string }
+        Returns: {
+          result_json: Json
+        }[]
+      }
+      get_company_billing: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          name: string
+          total_cost_usd: number
+          total_requests: number
+          total_tokens_used: number
+        }[]
+      }
       get_current_user_org_id: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -640,6 +729,16 @@ export type Database = {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_user_billing: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          email: string
+          name: string
+          total_cost_usd: number
+          total_requests: number
+          total_tokens_used: number
+        }[]
       }
       is_admin: {
         Args: Record<PropertyKey, never>
