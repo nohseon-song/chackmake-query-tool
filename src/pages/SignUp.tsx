@@ -36,7 +36,7 @@ const SignUp = () => {
 
     // 이름 검증
     if (!formData.name.trim()) {
-      newErrors.name = '이름을 입력해주세요.';
+      newErrors.name = '회사명 및 이름을 입력해주세요.';
     }
 
     // 전화번호 검증
@@ -54,8 +54,8 @@ const SignUp = () => {
     // 비밀번호 검증
     if (!formData.password) {
       newErrors.password = '비밀번호를 입력해주세요.';
-    } else if (formData.password.length < 4) {
-      newErrors.password = '비밀번호는 최소 4자 이상이어야 합니다.';
+    } else if (formData.password.length < 6) {
+      newErrors.password = '비밀번호는 최소 6자 이상이어야 합니다.';
     }
 
     setErrors(newErrors);
@@ -68,7 +68,7 @@ const SignUp = () => {
            formData.phone.trim() && 
            formData.email.trim() && 
            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
-           formData.password.length >= 4 &&
+           formData.password.length >= 6 &&
            Object.keys(errors).length === 0;
   };
 
@@ -151,11 +151,11 @@ const SignUp = () => {
           <form onSubmit={handleSignUp} className="space-y-4">
             {/* 이름 입력 필드 */}
             <div className="space-y-2">
-              <Label htmlFor="name">이름 *</Label>
+              <Label htmlFor="name">회사명 및 이름 *</Label>
               <Input
                 id="name"
                 type="text"
-                placeholder="이름을 입력하세요"
+                placeholder="회사명 및 이름을 입력하세요"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 className={errors.name ? 'border-destructive' : ''}
@@ -203,7 +203,7 @@ const SignUp = () => {
               <Input
                 id="password"
                 type="password"
-                placeholder="최소 4자 이상"
+                placeholder="최소 6자 이상"
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
                 className={errors.password ? 'border-destructive' : ''}
