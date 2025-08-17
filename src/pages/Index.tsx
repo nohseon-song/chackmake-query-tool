@@ -169,7 +169,7 @@ const Index = () => {
         onUpdateReading={handleUpdateReading}
         onDeleteReading={handleDeleteReading}
         onSubmit={handleSubmit}
-        onDeleteLog={(id) => handleDeleteLog(id, setLogs)}
+        onDeleteLog={(id) => handleDeleteLog(id)}
         onDownloadPdf={handleDownloadPdf}
         onGoogleAuth={handleGoogleAuth}
         onChatOpen={() => setChatOpen(true)}
