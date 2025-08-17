@@ -70,8 +70,13 @@ export const useAppState = () => {
   };
 
   const addLogEntry = (type: 'info' | 'error' | 'success', message: string) => {
-    const timestamp = new Date().toISOString();
-    setLogs(prevLogs => [...prevLogs, { timestamp, type, message }]);
+    const newLog: LogEntry = {
+      id: Date.now().toString(),
+      tag: type,
+      content: message,
+      timestamp: Date.now()
+    };
+    setLogs(prevLogs => [...prevLogs, newLog]);
   };
 
   const addTempMessage = (message: string) => {
@@ -119,7 +124,7 @@ export const useAppState = () => {
     } else {
       try {
         const clientId = await fetchGoogleClientId();
-        const token = await authenticateGoogle(clientId);
+        const token = await authenticateGoogle();
         await validateGoogleToken(token);
         setGoogleAuth({ isAuthenticated: true, accessToken: token });
         toast({ title: 'Google 로그인 성공', description: 'Google 계정에 성공적으로 로그인했습니다.' });

@@ -5,6 +5,7 @@ export interface Reading {
   class2: string;
   design: string;
   measure: string;
+  value?: string; // For backward compatibility
 }
 
 export interface LogEntry {

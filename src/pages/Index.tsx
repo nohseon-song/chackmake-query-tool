@@ -6,6 +6,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import MainContent from '@/components/MainContent';
 import FloatingButtons from '@/components/FloatingButtons';
 import ChatModal from '@/components/ChatModal';
+import LogDisplay from '@/components/LogDisplay';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
 import { useAppState } from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
@@ -52,9 +53,16 @@ const Index = () => {
     handleUpdateReading,
     handleDeleteReading,
     clearSavedReadings,
-    handleDeleteLog,
     handleDownloadPdf
   } = useReadings(savedReadings, setSavedReadings);
+
+  const handleDeleteLog = (id: string) => {
+    setLogs(prev => prev.filter(log => log.id !== id));
+    toast({
+      title: "삭제 완료",
+      description: "진단 결과가 삭제되었습니다.",
+    });
+  };
   
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -77,7 +85,7 @@ const Index = () => {
       equipment,
       class1,
       class2,
-      readings: savedReadings.map(r => ({ ...r, value: parseFloat(r.value) }))
+      readings: savedReadings.map(r => ({ ...r, measure: parseFloat(r.measure) }))
     };
 
     await sendWebhook(data, 'Submitting readings to webhook...');
@@ -139,20 +147,28 @@ const Index = () => {
         savedReadings={savedReadings}
         isDark={isDark}
         isProcessing={isProcessing}
-        handleEquipmentChange={handleEquipmentChange}
-        handleClass1Change={handleClass1Change}
-        setClass2={setClass2}
-        handleSaveReading={handleSaveReading}
-        handleUpdateReading={handleUpdateReading}
-        handleDeleteReading={handleDeleteReading}
-        handleSubmit={handleSubmit}
-        clearSavedReadings={clearSavedReadings}
+        tempMessagesCount={tempMessages.length}
+        onEquipmentChange={handleEquipmentChange}
+        onClass1Change={handleClass1Change}
+        onClass2Change={setClass2}
+        onSaveReading={handleSaveReading}
+        onUpdateReading={handleUpdateReading}
+        onDeleteReading={handleDeleteReading}
+        onSubmit={handleSubmit}
         equipmentTree={EQUIPMENT_TREE}
+        logs={logs}
+        onDeleteLog={handleDeleteLog}
+        onDownloadPdf={handleDownloadPdf}
+        onChatOpen={() => setChatOpen(true)}
+        onAddLogEntry={addLogEntry}
       />
       
       <FloatingButtons
-        onChatClick={() => setChatOpen(true)}
-        onPdfClick={() => handleDownloadPdf(equipment, class1, class2)}
+        isProcessing={isProcessing}
+        class2={class2}
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={(result) => console.log(result)}
+        onAddLogEntry={addLogEntry}
       />
 
       <ChatModal
@@ -161,13 +177,12 @@ const Index = () => {
         onSendMessage={handleChatMessage}
         isDark={isDark}
         tempMessages={tempMessages}
-        addTempMessage={addTempMessage}
-        updateTempMessage={updateTempMessage}
-        deleteTempMessage={deleteTempMessage}
-        clearTempMessages={clearTempMessages}
+        onTempMessageAdd={addTempMessage}
+        onTempMessageUpdate={updateTempMessage}
+        onTempMessageDelete={deleteTempMessage}
       />
       
-      <LogDisplay logs={logs} onDeleteLog={handleDeleteLog} />
+      <LogDisplay logs={logs} isDark={isDark} equipment={equipment} onDeleteLog={handleDeleteLog} />
     </div>
   );
 };

@@ -24,8 +24,8 @@ export const useReadings = (
     setSavedReadings([]);
   };
 
-  const handleDeleteLog = (id: string, setLogs: React.Dispatch<React.SetStateAction<any[]>>) => {
-    setLogs(prev => prev.filter(log => log.id !== id));
+  const handleDeleteLog = (id: string) => {
+    // This will be handled by the parent component
     toast({
       title: "삭제 완료",
       description: "진단 결과가 삭제되었습니다.",
