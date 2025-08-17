@@ -81,6 +81,7 @@ const Index = () => {
 
     const payload: any = {
       timestamp: Date.now(),
+      user_id: user.id, // ◀◀◀ 이 한 줄이 추가되었습니다!
       organization_id: profile.organization_id, // 3. payload에 조직 ID를 추가합니다.
     };
 
