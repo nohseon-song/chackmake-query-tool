@@ -6,7 +6,6 @@ import ThemeToggle from '@/components/ThemeToggle';
 import MainContent from '@/components/MainContent';
 import FloatingButtons from '@/components/FloatingButtons';
 import ChatModal from '@/components/ChatModal';
-import LogDisplay from '@/components/LogDisplay';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
 import { useAppState } from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
@@ -53,16 +52,9 @@ const Index = () => {
     handleUpdateReading,
     handleDeleteReading,
     clearSavedReadings,
+    handleDeleteLog,
     handleDownloadPdf
   } = useReadings(savedReadings, setSavedReadings);
-
-  const handleDeleteLog = (id: string) => {
-    setLogs(prev => prev.filter(log => log.id !== id));
-    toast({
-      title: "삭제 완료",
-      description: "진단 결과가 삭제되었습니다.",
-    });
-  };
   
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -70,38 +62,58 @@ const Index = () => {
     }
   }, [user, isAuthLoading, navigate]);
 
-
   const handleSubmit = async () => {
-    if (savedReadings.length === 0) {
+    if (savedReadings.length === 0 && tempMessages.length === 0) {
       toast({
-        title: "경고",
-        description: "저장된 측정값이 없습니다.",
+        title: "데이터 없음",
+        description: "저장된 측정값이나 임시저장된 메시지가 없습니다.",
         variant: "destructive",
       });
       return;
     }
 
-    const data = {
-      equipment,
-      class1,
-      class2,
-      readings: savedReadings.map(r => ({ ...r, measure: parseFloat(r.measure) }))
+    if (!user) {
+      toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile?.organization_id) {
+      toast({ title: "오류", description: "사용자 프로필 또는 조직 정보를 찾을 수 없습니다.", variant: "destructive" });
+      console.error("Profile Error:", profileError);
+      return;
+    }
+
+    const payload: any = {
+      timestamp: Date.now(),
+      user_id: user.id,
+      organization_id: profile.organization_id,
     };
 
-    await sendWebhook(data, 'Submitting readings to webhook...');
+    if (savedReadings.length > 0) {
+      payload.readings = savedReadings;
+    }
+
+    if (tempMessages.length > 0) {
+      payload.messages = tempMessages;
+    }
+
+    await sendWebhook(payload);
+    
+    clearSavedReadings();
+    clearTempMessages();
+    setEquipment('');
+    setClass1('');
+    setClass2('');
   };
 
   const handleChatMessage = async (message: string) => {
-    addLogEntry('info', `Sending message to chat: ${message}`);
-    
-    // Simulate API call to chatbot
-    setTimeout(() => {
-      addLogEntry('success', 'Received response from chat.');
-      toast({
-        title: "채팅 응답",
-        description: "AI로부터 응답을 받았습니다.",
-      });
-    }, 1000);
+    // 채팅 메시지는 임시 저장 후 handleSubmit을 통해 전송됩니다.
   };
   
   if (isAuthLoading) {
@@ -111,7 +123,6 @@ const Index = () => {
       </div>
     );
   }
-
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -140,13 +151,16 @@ const Index = () => {
         <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">professional-engineering Insight by SNS</p>
       </header>
 
+      {/* 🔽🔽🔽 빠졌던 연결선(props)들을 모두 다시 연결했어! 🔽🔽🔽 */}
       <MainContent
         equipment={equipment}
         class1={class1}
         class2={class2}
+        equipmentTree={EQUIPMENT_TREE}
         savedReadings={savedReadings}
-        isDark={isDark}
+        logs={logs}
         isProcessing={isProcessing}
+        isDark={isDark}
         tempMessagesCount={tempMessages.length}
         onEquipmentChange={handleEquipmentChange}
         onClass1Change={handleClass1Change}
@@ -155,19 +169,19 @@ const Index = () => {
         onUpdateReading={handleUpdateReading}
         onDeleteReading={handleDeleteReading}
         onSubmit={handleSubmit}
-        equipmentTree={EQUIPMENT_TREE}
-        logs={logs}
-        onDeleteLog={handleDeleteLog}
+        onDeleteLog={(id) => handleDeleteLog(id, setLogs)}
         onDownloadPdf={handleDownloadPdf}
+        onGoogleAuth={handleGoogleAuth}
         onChatOpen={() => setChatOpen(true)}
         onAddLogEntry={addLogEntry}
       />
-      
+      {/* 🔼🔼🔼 여기까지 🔼🔼🔼 */}
+
       <FloatingButtons
         isProcessing={isProcessing}
         class2={class2}
         onChatOpen={() => setChatOpen(true)}
-        onOCRResult={(result) => console.log(result)}
+        onOCRResult={() => {}}
         onAddLogEntry={addLogEntry}
       />
 
@@ -181,8 +195,6 @@ const Index = () => {
         onTempMessageUpdate={updateTempMessage}
         onTempMessageDelete={deleteTempMessage}
       />
-      
-      <LogDisplay logs={logs} isDark={isDark} equipment={equipment} onDeleteLog={handleDeleteLog} />
     </div>
   );
 };
