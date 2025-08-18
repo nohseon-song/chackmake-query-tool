@@ -186,7 +186,7 @@ const Index = () => {
         onUpdateReading={handleUpdateReading}
         onDeleteReading={handleDeleteReading}
         onSubmit={handleSubmit}
-        onDeleteLog={(id) => handleDeleteLog(id)}
+        onDeleteLog={(id) => handleDeleteLog(id, logs, setLogs)}
         onDownloadPdf={handleDownloadPdf}
         onGoogleAuth={handleGoogleAuth}
         onChatOpen={() => setChatOpen(true)}
