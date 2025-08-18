@@ -496,6 +496,47 @@ export type Database = {
           },
         ]
       }
+      monthly_api_billings: {
+        Row: {
+          billing_month: string
+          created_at: string
+          id: number
+          organization_id: string
+          total_cost_usd: number
+          total_requests: number
+          total_tokens_used: number
+          user_id: string
+        }
+        Insert: {
+          billing_month: string
+          created_at?: string
+          id?: number
+          organization_id: string
+          total_cost_usd?: number
+          total_requests?: number
+          total_tokens_used?: number
+          user_id: string
+        }
+        Update: {
+          billing_month?: string
+          created_at?: string
+          id?: number
+          organization_id?: string
+          total_cost_usd?: number
+          total_requests?: number
+          total_tokens_used?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_api_billings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           address: string | null
@@ -707,6 +748,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_and_and_store_monthly_api_billings: {
+        Args: { billing_ref_date: string; company_name?: string }
+        Returns: undefined
+      }
+      calculate_and_store_monthly_api_billings: {
+        Args: { billing_ref_date: string; company_name?: string }
+        Returns: undefined
+      }
       execute_sql: {
         Args: { sql: string }
         Returns: {
@@ -729,6 +778,17 @@ export type Database = {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_user_api_summary_for_billing_cycle: {
+        Args: { billing_reference_date: string; company_name?: string }
+        Returns: {
+          total_cost_usd: number
+          total_requests: number
+          total_tokens_used: number
+          user_email: string
+          user_id: string
+          user_name: string
+        }[]
       }
       get_user_billing: {
         Args: Record<PropertyKey, never>
