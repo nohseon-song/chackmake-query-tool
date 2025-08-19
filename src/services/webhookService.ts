@@ -15,7 +15,7 @@ export const sendWebhookRequest = async (payload: any): Promise<string> => {
   const payloadWithId = { ...payload, request_id: requestId };
 
   // Supabase Edge Function을 통해 Make.com으로 요청을 보냅니다.
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-webhook-to-make`, {
+  const response = await fetch(`https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/send-webhook-to-make`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
