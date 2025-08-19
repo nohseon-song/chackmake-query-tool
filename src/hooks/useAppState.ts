@@ -1,13 +1,13 @@
 // src/hooks/useAppState.ts
 
-import { useState, useEffect, useCallback } from 'react'; // ⭐️ 1. useCallback 추가
+import { useState, useEffect, useCallback } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookRequest } from '@/services/webhookService';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
-import { downloadPdf } from '@/utils/pdfUtils'; // PDF 다운로드 유틸리티 가져오기
+import { useReadings } from '@/hooks/useReadings';
 
 export const useAppState = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -27,6 +27,24 @@ export const useAppState = () => {
   const [tempMessages, setTempMessages] = useState<string[]>([]);
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Initialize reading management functions
+  const {
+    handleSaveReading,
+    handleUpdateReading,
+    handleDeleteReading,
+    handleDownloadPdf
+  } = useReadings(savedReadings, setSavedReadings);
+
+  // Create local handleDeleteLog function
+  const handleDeleteLog = useCallback((id: string) => {
+    const updatedLogs = logs.filter(log => log.id !== id);
+    setLogs(updatedLogs);
+    toast({
+      title: "삭제 완료",
+      description: "진단 결과가 삭제되었습니다.",
+    });
+  }, [logs, setLogs, toast]);
 
   const clearInputs = useCallback(() => {
       setSavedReadings([]);
@@ -100,6 +118,33 @@ export const useAppState = () => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
   
+  const toggleTheme = useCallback(() => {
+    setIsDark(prev => !prev);
+  }, []);
+
+  const handleEquipmentChange = useCallback((value: string) => {
+    setEquipment(value);
+    setClass1('');
+    setClass2('');
+  }, []);
+
+  const handleClass1Change = useCallback((value: string) => {
+    setClass1(value);
+    setClass2('');
+  }, []);
+
+  const addTempMessage = useCallback((message: string) => {
+    setTempMessages(prev => [...prev, message]);
+  }, []);
+
+  const updateTempMessage = useCallback((index: number, message: string) => {
+    setTempMessages(prev => prev.map((msg, idx) => idx === index ? message : msg));
+  }, []);
+
+  const deleteTempMessage = useCallback((index: number) => {
+    setTempMessages(prev => prev.filter((_, idx) => idx !== index));
+  }, []);
+
   const handleSubmit = async (payload: any) => {
     setIsProcessing(true);
     setLogs([]);
@@ -117,10 +162,44 @@ export const useAppState = () => {
     }
   };
   
-  const handleSignOut = async () => { /* ... 이전과 동일 ... */ };
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
+  };
 
   return {
-    user, isAuthLoading, isDark, equipment, setEquipment, class1, setClass1, class2, setClass2, savedReadings, setSavedReadings, logs, setLogs, chatOpen, setChatOpen, isProcessing, tempMessages, setTempMessages,
-    toggleTheme, handleEquipmentChange, handleClass1Change, addLogEntry, handleSubmit, handleSignOut
+    user, 
+    isAuthLoading, 
+    isDark, 
+    equipment, 
+    setEquipment, 
+    class1, 
+    setClass1, 
+    class2, 
+    setClass2, 
+    savedReadings, 
+    setSavedReadings, 
+    logs, 
+    setLogs, 
+    chatOpen, 
+    setChatOpen, 
+    isProcessing, 
+    tempMessages, 
+    setTempMessages,
+    toggleTheme, 
+    handleEquipmentChange, 
+    handleClass1Change, 
+    addLogEntry, 
+    handleSubmit, 
+    handleSignOut,
+    toast,
+    addTempMessage,
+    updateTempMessage,
+    deleteTempMessage,
+    handleSaveReading,
+    handleUpdateReading,
+    handleDeleteReading,
+    handleDeleteLog,
+    handleDownloadPdf
   };
 };
