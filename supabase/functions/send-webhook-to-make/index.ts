@@ -43,7 +43,8 @@ Deno.serve(async (req) => {
       console.error("CRITICAL ERROR: MAKE_WEBHOOK_URL secret not found.");
       throw new Error('Webhook endpoint is not configured.');
     }
-    console.log("Secret found. Preparing to send data to Make.com.");
+    console.log("Secret found:", makeWebhookUrl.substring(0, 50) + "...");
+    console.log("Preparing to send data to Make.com.");
 
     const makeResponse = await fetch(makeWebhookUrl, {
       method: 'POST',
