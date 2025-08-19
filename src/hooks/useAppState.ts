@@ -1,14 +1,14 @@
-// src/hooks/useAppState.ts
-
 import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { sendWebhookData } from '@/services/webhookService';
+// [ ✨ 여기만 수정! ✨ ] sendWebhookData 대신 새로운 스트리밍 함수를 가져옵니다.
+import { sendWebhookDataStream } from '@/services/webhookService'; 
 import { GoogleAuthState, authenticateGoogle, validateGoogleToken, fetchGoogleClientId, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 
+// 여기부터 ...
 export const useAppState = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -69,8 +69,7 @@ export const useAppState = () => {
     setClass2('');
   };
 
-  // 🔽🔽🔽 이 함수를 원래대로 되돌렸어! 🔽🔽🔽
-  const addLogEntry = (tag: string, content: string, isResponse = false) => {
+  const addLogEntry = (tag: string, content: any, isResponse = false) => { // content 타입을 any로 변경
     const logEntry: LogEntry = {
       id: Date.now().toString(),
       tag,
@@ -80,7 +79,6 @@ export const useAppState = () => {
     };
     setLogs(prev => [...prev, logEntry]);
   };
-  // 🔼🔼🔼 여기까지 🔼🔼🔼
 
   const addTempMessage = (message: string) => {
     setTempMessages(prev => [...prev, message]);
@@ -98,16 +96,21 @@ export const useAppState = () => {
     setTempMessages([]);
   };
 
+  // [ ✨ 여기가 핵심 수정 포인트! ✨ ]
+  // 함수 구조는 그대로 두고, 내부 호출만 변경합니다.
   const sendWebhook = async (payload: any) => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
+    // 이전 응답 로그만 지워서 사용자가 요청 내용을 계속 볼 수 있게 함
+    setLogs(prev => prev.filter(log => !log.isResponse));
     
     try {
-      const responseText = await sendWebhookData(payload);
+      // 기존 sendWebhookData 대신 새로운 스트리밍 함수를 호출
+      const responseText = await sendWebhookDataStream(payload);
       addLogEntry('📥 응답', responseText, true);
       
       toast({
-        title: "전송 완료",
+        title: "✅ 전송 완료",
         description: "전문 기술검토가 완료되었습니다.",
       });
     } catch (error) {
@@ -115,7 +118,7 @@ export const useAppState = () => {
       addLogEntry('⚠️ 오류', errorMessage);
       
       toast({
-        title: "전송 실패",
+        title: "❌ 전송 실패",
         description: errorMessage,
         variant: "destructive",
       });
@@ -193,3 +196,4 @@ export const useAppState = () => {
     toast
   };
 };
+// ... 여기까지 너의 코드 구조와 100% 동일합니다.
