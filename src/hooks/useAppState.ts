@@ -7,6 +7,7 @@ import { sendWebhookRequest } from '@/services/webhookService';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
+import { downloadPdf } from '@/utils/pdfUtils'; // PDF 다운로드 유틸리티 가져오기
 
 export const useAppState = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -24,11 +25,30 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [tempMessages, setTempMessages] = useState<string[]>([]);
-
-  // ⭐️ 2. 현재 진행 중인 요청의 ID를 저장할 새로운 상태 변수를 추가합니다.
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
-
   const { toast } = useToast();
+
+  // --- 기존 useReadings 훅의 기능들을 여기에 통합 ---
+  const handleSaveReading = (reading: Reading) => {
+    setSavedReadings(prev => [...prev, reading]);
+  };
+  const handleUpdateReading = (index: number, reading: Reading) => {
+    setSavedReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
+  };
+  const handleDeleteReading = (index: number) => {
+    setSavedReadings(prev => prev.filter((_, idx) => idx !== index));
+  };
+  const clearSavedReadings = () => setSavedReadings([]);
+  const handleDeleteLog = (id: string) => {
+    setLogs(prev => prev.filter(log => log.id !== id));
+    toast({ title: "삭제 완료", description: "진단 결과가 삭제되었습니다." });
+  };
+  const handleDownloadPdf = async () => {
+    // 이 기능은 LogDisplay 컴포넌트에서 직접 처리하도록 변경되었습니다.
+    // 여기서는 빈 함수나 경고를 남길 수 있습니다.
+    console.warn("handleDownloadPdf는 LogDisplay 컴포넌트에서 직접 호출됩니다.");
+  };
+  // --- 여기까지 ---
 
   useEffect(() => {
     const checkUser = async () => {
@@ -43,40 +63,39 @@ export const useAppState = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ⭐️ 3. Supabase Realtime을 구독하는 핵심 로직입니다.
   useEffect(() => {
-    // 구독할 요청 ID가 없으면 아무것도 하지 않습니다.
     if (!currentRequestId) return;
 
     const channel = supabase.channel(`diagnosis_results:${currentRequestId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'diagnosis_results',
-          filter: `request_id=eq.${currentRequestId}`, // 내가 보낸 요청 ID와 일치하는 결과만 받습니다.
-        },
+        { event: 'INSERT', schema: 'public', table: 'diagnosis_results', filter: `request_id=eq.${currentRequestId}` },
         (payload) => {
           console.log('Realtime payload received:', payload);
           const newResult = payload.new as any;
           const content = newResult.content;
 
-          // is_final 플래그로 최종 보고서인지 확인합니다.
           if (newResult.is_final) {
               addLogEntry('📥 최종 보고서', content, true);
-              setIsProcessing(false); // 로딩 종료
+              setIsProcessing(false);
               toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
-              setCurrentRequestId(null); // 요청 ID 초기화
+              setCurrentRequestId(null);
+
+              // ⭐️ 1. 여기가 바로 수정된 핵심 부분!
+              // 최종 결과가 도착한 후에야 상태를 초기화합니다.
+              clearSavedReadings();
+              clearTempMessages();
+              setEquipment('');
+              setClass1('');
+              setClass2('');
+
           } else {
-              addLogEntry(`📥 ${newResult.step_name}`, content); // 중간 결과 로그 추가
+              addLogEntry(`📥 ${newResult.step_name}`, content);
           }
         }
       )
       .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Subscribed to request ID: ${currentRequestId}`);
-        }
+        if (status === 'SUBSCRIBED') console.log(`Subscribed to request ID: ${currentRequestId}`);
         if (err) {
           console.error('Realtime subscription error:', err);
           setIsProcessing(false);
@@ -84,12 +103,10 @@ export const useAppState = () => {
         }
       });
 
-    // 다른 페이지로 이동하거나 앱을 끌 때 구독을 해제합니다.
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentRequestId]); // currentRequestId가 바뀔 때마다 이 로직이 실행됩니다.
-
+  }, [currentRequestId]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -100,7 +117,6 @@ export const useAppState = () => {
   const handleEquipmentChange = (value: string) => { setEquipment(value); setClass1(''); setClass2(''); };
   const handleClass1Change = (value: string) => { setClass1(value); setClass2(''); };
   const addLogEntry = (tag: string, content: any, isResponse = false) => {
-    // content가 이미 객체나 배열이면 JSON.stringify 처리
     const contentString = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
     const logEntry: LogEntry = { id: Date.now().toString(), tag, content: contentString, isResponse, timestamp: Date.now() };
     setLogs(prev => [...prev, logEntry]);
@@ -110,18 +126,17 @@ export const useAppState = () => {
   const deleteTempMessage = (index: number) => setTempMessages(prev => prev.filter((_, idx) => idx !== index));
   const clearTempMessages = () => setTempMessages([]);
 
-  // ⭐️ 4. '진단 받기' 버튼을 눌렀을 때 실행될 함수를 수정합니다.
-  const sendWebhook = async (payload: any) => {
+  const handleSubmit = async (payload: any) => {
     setIsProcessing(true);
-    // 이전 로그는 깨끗하게 비워줍니다.
     setLogs([]);
 
     try {
-      // Make.com으로 요청을 보내고, 고유한 요청 ID를 받아옵니다.
       const requestId = await sendWebhookRequest(payload);
-      // 받아온 요청 ID를 상태에 저장하면, 위에서 만든 Realtime 구독 로직이 자동으로 작동 시작합니다.
       setCurrentRequestId(requestId);
       addLogEntry('📤 전송 시작', { ...payload, request_id: requestId });
+
+      // ⭐️ 2. 여기서 상태를 초기화하던 코드를 삭제했습니다!
+      // 이제 더 이상 요청을 보내자마자 데이터가 사라지지 않습니다.
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
@@ -129,54 +144,6 @@ export const useAppState = () => {
       toast({ title: "❌ 전송 실패", description: errorMessage, variant: "destructive" });
       setIsProcessing(false);
     }
-  };
-
-  // Reading management functions
-  const handleSaveReading = (reading: Reading) => {
-    setSavedReadings(prev => [...prev, reading]);
-  };
-
-  const handleUpdateReading = (index: number, reading: Reading) => {
-    setSavedReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
-  };
-
-  const handleDeleteReading = (index: number) => {
-    setSavedReadings(prev => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleDeleteLog = (id: string, logs: LogEntry[], setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>) => {
-    const updatedLogs = logs.filter(log => log.id !== id);
-    setLogs(updatedLogs);
-    toast({
-      title: "삭제 완료",
-      description: "진단 결과가 삭제되었습니다.",
-    });
-  };
-
-  const handleDownloadPdf = (content: string) => {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `진단결과_${new Date().toLocaleDateString()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast({
-      title: "다운로드 완료",
-      description: "진단 결과가 다운로드되었습니다.",
-    });
-  };
-
-  const clearSavedReadings = () => {
-    setSavedReadings([]);
-  };
-
-  const handleGoogleAuth = async (): Promise<string> => {
-    toast({ title: "Google 인증", description: "Google 인증 기능이 구현될 예정입니다." });
-    return '';
   };
 
   const handleSignOut = async () => {
@@ -193,9 +160,8 @@ export const useAppState = () => {
 
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen, isProcessing, tempMessages,
-    toggleTheme, handleEquipmentChange, handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs, setChatOpen,
-    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, sendWebhook, handleGoogleAuth, handleSignOut, toast,
-    clearSavedReadings, handleSaveReading, handleUpdateReading, handleDeleteReading, handleDeleteLog, handleDownloadPdf,
-    handleSubmit: sendWebhook
+    toggleTheme, handleEquipmentChange, handleClass1Change, setEquipment, setClass1, setClass2, setLogs, setChatOpen,
+    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, handleSubmit, handleSignOut, toast,
+    handleSaveReading, handleUpdateReading, handleDeleteReading, handleDeleteLog, handleDownloadPdf
   };
 };
