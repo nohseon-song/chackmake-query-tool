@@ -97,6 +97,47 @@ export type Database = {
         }
         Relationships: []
       }
+      diagnosis_results: {
+        Row: {
+          content: Json | null
+          created_at: string
+          id: string
+          is_final: boolean | null
+          organization_id: string | null
+          request_id: string
+          step_name: string
+          user_id: string | null
+        }
+        Insert: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          is_final?: boolean | null
+          organization_id?: string | null
+          request_id: string
+          step_name: string
+          user_id?: string | null
+        }
+        Update: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          is_final?: boolean | null
+          organization_id?: string | null
+          request_id?: string
+          step_name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnosis_results_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       equipment: {
         Row: {
           created_at: string | null
