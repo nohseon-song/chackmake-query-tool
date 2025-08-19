@@ -36,9 +36,13 @@ Deno.serve(async (req) => {
       async start(controller) {
         const encoder = new TextEncoder()
 
-        // 30초마다 연결 유지 신호 보내기
+        // 30초마다 연결 유지 신호(ping) 보내기
         const interval = setInterval(() => {
-          controller.enqueue(encoder.encode('{"type":"ping"}\n'))
+          try {
+            controller.enqueue(encoder.encode('{"type":"ping"}\n'))
+          } catch (e) {
+            // 스트림이 닫힌 후에는 enqueue 할 수 없으므로 에러를 무시
+          }
         }, 30000)
 
         try {
