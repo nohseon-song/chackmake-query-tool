@@ -112,7 +112,7 @@ export const useAppState = () => {
   const clearTempMessages = () => setTempMessages([]);
 
   // ⭐️ 4. '진단 받기' 버튼을 눌렀을 때 실행될 함수를 수정합니다.
-  const handleSubmit = async (payload: any) => {
+  const sendWebhook = async (payload: any) => {
     setIsProcessing(true);
     // 이전 로그는 깨끗하게 비워줍니다.
     setLogs([]);
@@ -124,19 +124,21 @@ export const useAppState = () => {
       setCurrentRequestId(requestId);
       addLogEntry('📤 전송 시작', { ...payload, request_id: requestId });
 
-      // 데이터 정리는 Realtime으로 최종 응답을 받은 후에 처리합니다.
-      clearSavedReadings();
-      clearTempMessages();
-      setEquipment('');
-      setClass1('');
-      setClass2('');
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
       addLogEntry('⚠️ 전송 오류', errorMessage);
       toast({ title: "❌ 전송 실패", description: errorMessage, variant: "destructive" });
       setIsProcessing(false);
     }
+  };
+
+  const clearSavedReadings = () => {
+    setSavedReadings([]);
+  };
+
+  const handleGoogleAuth = async (): Promise<string> => {
+    toast({ title: "Google 인증", description: "Google 인증 기능이 구현될 예정입니다." });
+    return '';
   };
 
   const handleSignOut = async () => {
@@ -153,7 +155,7 @@ export const useAppState = () => {
 
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen, isProcessing, tempMessages,
-    toggleTheme, handleEquipmentChange, handleClass1Change, setClass2, setSavedReadings, setLogs, setChatOpen,
-    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, handleSubmit, handleSignOut, toast
+    toggleTheme, handleEquipmentChange, handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs, setChatOpen,
+    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, sendWebhook, handleGoogleAuth, handleSignOut, toast
   };
 };
