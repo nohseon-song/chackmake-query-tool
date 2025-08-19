@@ -1,4 +1,3 @@
-// src/hooks/useAppState.ts
 import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';

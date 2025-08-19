@@ -7,56 +7,45 @@ import MainContent from '@/components/MainContent';
 import FloatingButtons from '@/components/FloatingButtons';
 import ChatModal from '@/components/ChatModal';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
-import useAppState from '@/hooks/useAppState';
-import { useAuth } from '@/hooks/useAuth';
+import { useAppState } from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { LogOut, User } from 'lucide-react';
-import { useState } from 'react';
 
 const Index = () => {
   const navigate = useNavigate();
-  const appState = useAppState();
-  const { user, session, isLoading: isAuthLoading, signOut } = useAuth();
-  
-  // App state
-  const [isDark] = useState(false);
-  const [equipment] = useState('');
-  const [class1] = useState('');
-  const [class2] = useState('');
-  const [savedReadings] = useState([]);
-  const logs = appState.logs;
-  const [chatOpen] = useState(false);
-  const [isProcessing] = useState(false);
-  const [tempMessages] = useState([]);
-  
-  const toggleTheme = () => {};
-  const handleEquipmentChange = (value: string) => {};
-  const handleClass1Change = (value: string) => {};
-  const setEquipment = (value: string) => {};
-  const setClass1 = (value: string) => {};
-  const setClass2 = (value: string) => {};
-  const setSavedReadings = (value: any[]) => {};
-  const setLogs = appState.setLogs;
-  const setChatOpen = (value: boolean) => {};
-  const addTempMessage = (message: string) => {};
-  const updateTempMessage = (index: number, message: string) => {};
-  const deleteTempMessage = (index: number) => {};
-  const clearTempMessages = () => {};
-  const addLogEntry = (entry: any) => {};
-  const sendWebhook = async (payload: any) => {};
-  const handleGoogleAuth = async (): Promise<string> => { return 'dummy-token'; };
-  const toast = (options: any) => {};
-  
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    if (error) {
-      console.error('Sign out error:', error);
-    } else {
-      navigate('/auth');
-    }
-  };
+  const {
+    user,
+    isAuthLoading,
+    isDark,
+    equipment,
+    class1,
+    class2,
+    savedReadings,
+    logs,
+    chatOpen,
+    isProcessing,
+    tempMessages,
+    toggleTheme,
+    handleEquipmentChange,
+    handleClass1Change,
+    setEquipment,
+    setClass1,
+    setClass2,
+    setSavedReadings,
+    setLogs,
+    setChatOpen,
+    addTempMessage,
+    updateTempMessage,
+    deleteTempMessage,
+    clearTempMessages,
+    addLogEntry,
+    sendWebhook,
+    handleGoogleAuth,
+    toast,
+    handleSignOut
+  } = useAppState();
 
   const {
     handleSaveReading,
