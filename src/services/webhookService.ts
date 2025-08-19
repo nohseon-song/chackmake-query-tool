@@ -1,3 +1,4 @@
+// src/services/webhookService.ts
 import { supabase } from '@/integrations/supabase/client';
 
 // 스트리밍을 위한 최종 수정 함수!
@@ -25,23 +26,34 @@ export const sendWebhookDataStream = (payload: any): Promise<string> => {
         throw new Error(`서버 응답 오류: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
+      // 서버가 202 Accepted를 반환하면, 요청은 성공적으로 접수된 것으로 간주하고 즉시 성공 처리
+      // 이 경우, Make.com의 최종 결과는 다른 웹훅(예: Make.com -> Supabase DB -> Realtime Subscription)으로 받아야 한다.
+      if (response.status === 202) {
+        // 여기서 원하는 성공 메시지를 resolve해도 된다.
+        resolve('전문 기술검토 요청이 성공적으로 접수되었습니다. 곧 결과가 도착할 것입니다.');
+        return; 
+      }
+      
+      // 만약 202 외의 다른 정상적인 응답 (예: 200 OK)이 스트림 형태로 올 경우를 대비한 기존 로직
+      // 현재 아키텍처에서는 이 부분이 실행되지 않을 가능성이 높지만, 방어적으로 남겨둠.
       if (!response.body) {
-        return reject(new Error("스트리밍 응답을 사용할 수 없습니다."));
+        return reject(new Error("응답 본문을 사용할 수 없습니다."));
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let resolved = false;
+      let finalResult = ''; // 최종 결과물을 저장할 변수
 
       const processStream = async () => {
         while (true) {
           const { done, value } = await reader.read();
 
           if (done) {
-            if (!resolved) {
-               // 스트림이 최종 데이터를 보내주기 전에 끝나버린 진짜 비정상 상황일 때만 에러 발생
-               reject(new Error("스트림이 데이터를 반환하기 전에 종료되었습니다. Make.com 시나리오 로그를 확인해주세요."));
+            // 스트림이 정상적으로 종료되었지만, 'final' 데이터가 없으면 오류 처리.
+            // 202 Accepted로 이미 처리되었으므로, 이 reject는 다른 비정상 종료 스트림에만 해당된다.
+            if (!finalResult) {
+                reject(new Error("스트림이 최종 데이터를 반환하기 전에 종료되었습니다. Make.com 시나리오 로그를 확인해주세요."));
             }
             break;
           }
@@ -55,14 +67,13 @@ export const sendWebhookDataStream = (payload: any): Promise<string> => {
             try {
               const json = JSON.parse(line);
               if (json.type === 'final' && json.data) {
-                resolved = true;
-                resolve(json.data); // 최종 데이터를 받으면 Promise 성공 처리
-                if (reader) reader.cancel();    // 더 이상 읽을 필요 없으므로 스트림 닫기
+                finalResult = json.data; // 최종 데이터 저장
+                resolve(json.data);     // 최종 데이터를 받으면 Promise 성공 처리
+                reader.cancel();        // 더 이상 읽을 필요 없으므로 스트림 닫기
                 return; 
               } else if (json.type === 'error') {
-                resolved = true;
                 reject(new Error(json.message)); // 서버에서 보낸 에러 처리
-                if (reader) reader.cancel();
+                reader.cancel();
                 return;
               }
             } catch (e) {
