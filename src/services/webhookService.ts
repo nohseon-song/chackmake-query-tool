@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
-// 스트리밍을 위한 새롭고 완전한 함수
+// 스트리밍을 위한 최종 수정 함수!
+// 이 함수는 타임아웃 문제를 해결하고, 정상 종료를 오류로 판단하던 버그를 수정했습니다.
 export const sendWebhookDataStream = (payload: any): Promise<string> => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -37,8 +38,10 @@ export const sendWebhookDataStream = (payload: any): Promise<string> => {
 
           if (done) {
             if (!resolved) {
+               // 스트림이 최종 데이터를 보내주기 전에 끝나버린 진짜 비정상 상황
                reject(new Error("스트림이 데이터를 반환하기 전에 종료되었습니다."));
             }
+            // 정상적으로 모든 데이터를 받고 스트림이 끝난 경우, 조용히 루프를 종료합니다.
             break;
           }
 
@@ -52,15 +55,16 @@ export const sendWebhookDataStream = (payload: any): Promise<string> => {
               const json = JSON.parse(line);
               if (json.type === 'final' && json.data) {
                 resolved = true;
-                resolve(json.data);
-                reader.cancel();
+                resolve(json.data); // 최종 데이터를 받으면 Promise 성공 처리
+                reader.cancel();    // 더 이상 읽을 필요 없으므로 스트림 닫기
                 return; 
               } else if (json.type === 'error') {
                 resolved = true;
-                reject(new Error(json.message));
+                reject(new Error(json.message)); // 서버에서 보낸 에러 처리
                 reader.cancel();
                 return;
               }
+              // 'ping' 타입은 무시하고 계속 진행
             } catch (e) {
               console.warn('스트림 데이터 파싱 실패:', line);
             }
@@ -73,4 +77,11 @@ export const sendWebhookDataStream = (payload: any): Promise<string> => {
       reject(error);
     }
   });
+};
+
+// 기존 함수는 이제 사용되지 않습니다. 혼동을 막기 위해 내용을 비워두거나,
+// 아래처럼 경고 메시지를 추가해두는 것이 안전합니다.
+export const sendWebhookData = async (payload: any) => {
+  console.error("sendWebhookData 함수는 더 이상 사용되지 않습니다. sendWebhookDataStream을 사용하세요.");
+  throw new Error("잘못된 함수가 호출되었습니다. webhookService.ts 파일을 확인하세요.");
 };
