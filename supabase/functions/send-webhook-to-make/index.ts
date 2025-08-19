@@ -1,81 +1,89 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+}
 
 Deno.serve(async (req) => {
-  console.log("Function invoked at:", new Date().toISOString());
-
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const clientPayload = await req.json();
-    console.log("Payload received from client.");
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      console.error("Error: Missing authorization header.");
-      throw new Error('Missing authorization header');
-    }
+    const clientPayload = await req.json()
+    
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) throw new Error('Missing authorization header')
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user } } = await supabase.auth.getUser();
+    )
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      console.error("Error: Invalid token, could not get user.");
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      })
     }
-    console.log("User authenticated successfully.");
 
-    console.log("Attempting to get MAKE_WEBHOOK_URL secret.");
-    const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL');
-    if (!makeWebhookUrl) {
-      console.error("CRITICAL ERROR: MAKE_WEBHOOK_URL secret not found.");
-      throw new Error('Webhook endpoint is not configured.');
-    }
-    console.log("Secret found:", makeWebhookUrl.substring(0, 50) + "...");
-    console.log("Preparing to send data to Make.com.");
+    const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
+    if (!makeWebhookUrl) throw new Error('Webhook endpoint is not configured.')
 
-    const makeResponse = await fetch(makeWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(clientPayload),
-    });
-    console.log("Make.com response status:", makeResponse.status);
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder()
 
-    if (!makeResponse.ok) {
-      const errorText = await makeResponse.text();
-      console.error("Error from Make.com:", errorText);
-      // Return detailed JSON error (still non-2xx so the client can react properly)
-      return new Response(JSON.stringify({ success: false, status: makeResponse.status, error: errorText || 'Unknown error' }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    const responseText = await makeResponse.text();
-    console.log("Successfully received response from Make.com.");
+        // 30초마다 연결 유지 신호 보내기
+        const interval = setInterval(() => {
+          controller.enqueue(encoder.encode('{"type":"ping"}\n'))
+        }, 30000)
 
-    return new Response(JSON.stringify({ success: true, status: makeResponse.status, data: responseText }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+        try {
+          const makeResponse = await fetch(makeWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(clientPayload),
+          })
+
+          if (!makeResponse.ok) {
+            const errorText = await makeResponse.text()
+            throw new Error(`Make.com error: ${makeResponse.status} ${errorText}`)
+          }
+
+          const responseText = await makeResponse.text()
+          const finalPayload = {
+            type: 'final',
+            data: responseText,
+          }
+          controller.enqueue(encoder.encode(JSON.stringify(finalPayload) + '\n'))
+        } catch (e) {
+            const errorPayload = {
+              type: 'error',
+              message: e.message,
+            }
+            controller.enqueue(encoder.encode(JSON.stringify(errorPayload) + '\n'))
+        } finally {
+          clearInterval(interval)
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
 
   } catch (error) {
-    console.error("Error within the function execution:", (error as any).message);
-    return new Response(JSON.stringify({ error: (error as any).message }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    })
   }
-});
+})
