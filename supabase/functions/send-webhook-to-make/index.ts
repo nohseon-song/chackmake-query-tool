@@ -12,10 +12,9 @@ Deno.serve(async (req) => {
 
   try {
     const clientPayload = await req.json()
-    
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) throw new Error('Missing authorization header')
-    
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -32,57 +31,21 @@ Deno.serve(async (req) => {
     const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
     if (!makeWebhookUrl) throw new Error('Webhook endpoint is not configured.')
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-
-        const interval = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode('{"type":"ping"}\n'))
-          } catch (e) {
-            // Stream already closed
-          }
-        }, 30000)
-
-        try {
-          const makeResponse = await fetch(makeWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(clientPayload),
-          })
-
-          if (!makeResponse.ok) {
-            const errorText = await makeResponse.text()
-            throw new Error(`Make.com error: ${makeResponse.status} ${errorText}`)
-          }
-
-          const responseText = await makeResponse.text()
-          const finalPayload = {
-            type: 'final',
-            data: responseText,
-          }
-          controller.enqueue(encoder.encode(JSON.stringify(finalPayload) + '\n'))
-        } catch (e) {
-            const errorPayload = {
-              type: 'error',
-              message: e.message,
-            }
-            controller.enqueue(encoder.encode(JSON.stringify(errorPayload) + '\n'))
-        } finally {
-          clearInterval(interval)
-          controller.close()
-        }
-      },
+    // Make.com을 호출하되, 응답을 기다리지 않음 (Fire and Forget)
+    fetch(makeWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clientPayload),
     })
 
-    return new Response(stream, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json; charset=utf-8',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    })
-
+    // 앱에는 "요청 접수 완료" 메시지를 즉시 보냄
+    return new Response(
+      JSON.stringify({ success: true, message: 'Processing started' }),
+      {
+        status: 202, // 202 Accepted: 요청이 수락되었음을 의미
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
