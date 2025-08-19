@@ -7,7 +7,7 @@ import MainContent from '@/components/MainContent';
 import FloatingButtons from '@/components/FloatingButtons';
 import ChatModal from '@/components/ChatModal';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
-// import useAppState from '@/hooks/useAppState';
+import useAppState from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { useState } from 'react';
 
 const Index = () => {
   const navigate = useNavigate();
+  const appState = useAppState();
   
   // Temporary placeholder state until useAppState is properly restored
   const [user] = useState(null);
@@ -25,7 +26,7 @@ const Index = () => {
   const [class1] = useState('');
   const [class2] = useState('');
   const [savedReadings] = useState([]);
-  const [logs] = useState([]);
+  const logs = appState.logs;
   const [chatOpen] = useState(false);
   const [isProcessing] = useState(false);
   const [tempMessages] = useState([]);
@@ -37,7 +38,7 @@ const Index = () => {
   const setClass1 = (value: string) => {};
   const setClass2 = (value: string) => {};
   const setSavedReadings = (value: any[]) => {};
-  const setLogs = (value: any[]) => {};
+  const setLogs = appState.setLogs;
   const setChatOpen = (value: boolean) => {};
   const addTempMessage = (message: string) => {};
   const updateTempMessage = (index: number, message: string) => {};
