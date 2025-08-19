@@ -8,6 +8,7 @@ import FloatingButtons from '@/components/FloatingButtons';
 import ChatModal from '@/components/ChatModal';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
 import useAppState from '@/hooks/useAppState';
+import { useAuth } from '@/hooks/useAuth';
 import { useReadings } from '@/hooks/useReadings';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -17,10 +18,9 @@ import { useState } from 'react';
 const Index = () => {
   const navigate = useNavigate();
   const appState = useAppState();
+  const { user, session, isLoading: isAuthLoading, signOut } = useAuth();
   
-  // Temporary placeholder state until useAppState is properly restored
-  const [user] = useState(null);
-  const [isAuthLoading] = useState(false);
+  // App state
   const [isDark] = useState(false);
   const [equipment] = useState('');
   const [class1] = useState('');
@@ -48,7 +48,15 @@ const Index = () => {
   const sendWebhook = async (payload: any) => {};
   const handleGoogleAuth = async (): Promise<string> => { return 'dummy-token'; };
   const toast = (options: any) => {};
-  const handleSignOut = () => {};
+  
+  const handleSignOut = async () => {
+    const { error } = await signOut();
+    if (error) {
+      console.error('Sign out error:', error);
+    } else {
+      navigate('/auth');
+    }
+  };
 
   const {
     handleSaveReading,
