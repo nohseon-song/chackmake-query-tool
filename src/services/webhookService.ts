@@ -1,35 +1,53 @@
-import { Reading } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 
-export const sendWebhookData = async (
-  payload: { readings?: Reading[]; chat?: string; timestamp: number } & Record<string, any>
+export const sendWebhookDataStream = async (
+  payload: any,
+  onData: (data: string) => void,
+  onError: (error: string) => void
 ) => {
-  const wrappedPayload = { ...payload } as any;
-  if (wrappedPayload.readings) {
-    wrappedPayload.readings = wrappedPayload.readings.map((r: any) => {
-      const { id, ...rest } = r;
-      return rest;
-    });
-  }
+  const token = (await supabase.auth.getSession()).data.session?.access_token;
 
-  const { data, error } = await supabase.functions.invoke('send-webhook-to-make', {
-    body: wrappedPayload,
+  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-webhook-to-make`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
   });
 
-  if (error) {
-    console.error("Supabase function invocation error:", error);
-    const msg = typeof error.message === 'string' ? error.message : 'Unknown error';
-    throw new Error(`Failed to invoke webhook function: ${msg}`);
-  }
-  
-  // [ ✨ 여기가 핵심 수정 포인트! ✨ ]
-  // Supabase가 보낸 JSON 상자(data)를 열어서
-  // 그 안에 있는 진짜 내용물(data.data)만 꺼내서 반환한다.
-  // 이렇게 하면 너의 소중한 문서 생성 코드는 예전처럼 순수한 HTML만 받게 돼.
-  if (data && data.data) {
-    return data.data;
+  if (!response.body) {
+    onError("Streaming response not available.");
+    return;
   }
 
-  // 만약의 경우를 대비해, 예전 방식의 데이터도 처리
-  return data;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || ''; // 마지막 불완전한 라인은 버퍼에 남김
+
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+      try {
+        const json = JSON.parse(line);
+        if (json.type === 'final' && json.data) {
+          onData(json.data);
+        } else if (json.type === 'error') {
+          onError(json.message);
+        }
+        // 'ping' 타입은 무시
+      } catch (e) {
+        console.warn('Failed to parse stream line:', line);
+      }
+    }
+  }
 };
