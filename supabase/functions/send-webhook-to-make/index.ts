@@ -55,15 +55,19 @@ Deno.serve(async (req) => {
     if (!makeResponse.ok) {
       const errorText = await makeResponse.text();
       console.error("Error from Make.com:", errorText);
-      throw new Error(`Failed to send data to Make.com: Status ${makeResponse.status}`);
+      // Return detailed JSON error (still non-2xx so the client can react properly)
+      return new Response(JSON.stringify({ success: false, status: makeResponse.status, error: errorText || 'Unknown error' }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
-    const responseData = await makeResponse.text();
+    const responseText = await makeResponse.text();
     console.log("Successfully received response from Make.com.");
 
-    return new Response(responseData, {
+    return new Response(JSON.stringify({ success: true, status: makeResponse.status, data: responseText }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {

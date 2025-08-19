@@ -22,8 +22,12 @@ export const sendWebhookData = async (
 
   if (error) {
     console.error("Supabase function invocation error:", error);
-    throw new Error(`Failed to invoke webhook function: ${error.message}`);
+    // Surface a clearer message while preserving original error
+    const msg = typeof error.message === 'string' ? error.message : 'Unknown error';
+    throw new Error(`Failed to invoke webhook function: ${msg}`);
   }
   
-  return data;
+  // Normalize response to string for logging/UI
+  const responseText = typeof data === 'string' ? data : JSON.stringify(data);
+  return responseText;
 };
