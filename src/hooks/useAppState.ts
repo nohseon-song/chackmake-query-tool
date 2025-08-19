@@ -7,7 +7,6 @@ import { sendWebhookRequest } from '@/services/webhookService';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
-import { downloadPdf } from '@/utils/pdfUtils'; // PDF 다운로드 유틸리티 가져오기
 
 export const useAppState = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -28,7 +27,7 @@ export const useAppState = () => {
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // --- 기존 useReadings 훅의 기능들을 여기에 통합 ---
+  // 기존 useReadings 훅의 기능들을 여기에 통합
   const handleSaveReading = (reading: Reading) => {
     setSavedReadings(prev => [...prev, reading]);
   };
@@ -43,12 +42,9 @@ export const useAppState = () => {
     setLogs(prev => prev.filter(log => log.id !== id));
     toast({ title: "삭제 완료", description: "진단 결과가 삭제되었습니다." });
   };
-  const handleDownloadPdf = async () => {
-    // 이 기능은 LogDisplay 컴포넌트에서 직접 처리하도록 변경되었습니다.
-    // 여기서는 빈 함수나 경고를 남길 수 있습니다.
-    console.warn("handleDownloadPdf는 LogDisplay 컴포넌트에서 직접 호출됩니다.");
+  const handleDownloadPdf = () => {
+      console.warn("handleDownloadPdf는 LogDisplay 컴포넌트에서 직접 호출됩니다.");
   };
-  // --- 여기까지 ---
 
   useEffect(() => {
     const checkUser = async () => {
@@ -74,14 +70,13 @@ export const useAppState = () => {
           console.log('Realtime payload received:', payload);
           const newResult = payload.new as any;
           const content = newResult.content;
-
+          
           if (newResult.is_final) {
               addLogEntry('📥 최종 보고서', content, true);
               setIsProcessing(false);
               toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
               setCurrentRequestId(null);
-
-              // ⭐️ 1. 여기가 바로 수정된 핵심 부분!
+              
               // 최종 결과가 도착한 후에야 상태를 초기화합니다.
               clearSavedReadings();
               clearTempMessages();
@@ -129,14 +124,11 @@ export const useAppState = () => {
   const handleSubmit = async (payload: any) => {
     setIsProcessing(true);
     setLogs([]);
-
+    
     try {
       const requestId = await sendWebhookRequest(payload);
       setCurrentRequestId(requestId);
       addLogEntry('📤 전송 시작', { ...payload, request_id: requestId });
-
-      // ⭐️ 2. 여기서 상태를 초기화하던 코드를 삭제했습니다!
-      // 이제 더 이상 요청을 보내자마자 데이터가 사라지지 않습니다.
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
@@ -145,7 +137,7 @@ export const useAppState = () => {
       setIsProcessing(false);
     }
   };
-
+  
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {
@@ -157,7 +149,7 @@ export const useAppState = () => {
       setIsProcessing(false);
     }
   };
-
+  
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen, isProcessing, tempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change, setEquipment, setClass1, setClass2, setLogs, setChatOpen,
