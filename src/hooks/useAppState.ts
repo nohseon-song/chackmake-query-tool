@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// [ ✨ 여기만 수정! ✨ ] sendWebhookData 대신 새로운 스트리밍 함수를 가져옵니다.
 import { sendWebhookDataStream } from '@/services/webhookService'; 
 import { GoogleAuthState, authenticateGoogle, validateGoogleToken, fetchGoogleClientId, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 
-// 여기부터 ...
 export const useAppState = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -68,8 +66,8 @@ export const useAppState = () => {
     setClass1(value);
     setClass2('');
   };
-
-  const addLogEntry = (tag: string, content: any, isResponse = false) => { // content 타입을 any로 변경
+  
+  const addLogEntry = (tag: string, content: any, isResponse = false) => {
     const logEntry: LogEntry = {
       id: Date.now().toString(),
       tag,
@@ -96,16 +94,13 @@ export const useAppState = () => {
     setTempMessages([]);
   };
 
-  // [ ✨ 여기가 핵심 수정 포인트! ✨ ]
-  // 함수 구조는 그대로 두고, 내부 호출만 변경합니다.
   const sendWebhook = async (payload: any) => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
-    // 이전 응답 로그만 지워서 사용자가 요청 내용을 계속 볼 수 있게 함
     setLogs(prev => prev.filter(log => !log.isResponse));
     
     try {
-      // 기존 sendWebhookData 대신 새로운 스트리밍 함수를 호출
+      // 새로운 스트리밍 함수를 호출합니다. 구조는 기존과 동일합니다.
       const responseText = await sendWebhookDataStream(payload);
       addLogEntry('📥 응답', responseText, true);
       
@@ -128,8 +123,7 @@ export const useAppState = () => {
   };
   
   const handleGoogleAuth = async (): Promise<string> => {
-    // ... (이 함수는 변경 없음)
-    return ''; // 실제 구현은 유지
+    return ''; 
   };
 
   const handleSignOut = async () => {
@@ -175,7 +169,6 @@ export const useAppState = () => {
     isProcessing,
     tempMessages,
     googleAuth,
-    
     handleSignOut,
     toggleTheme,
     handleEquipmentChange,
@@ -196,4 +189,3 @@ export const useAppState = () => {
     toast
   };
 };
-// ... 여기까지 너의 코드 구조와 100% 동일합니다.
