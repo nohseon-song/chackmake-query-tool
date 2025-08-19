@@ -23,6 +23,7 @@ export type Database = {
           model_name: string | null
           organization_id: string | null
           prompt_tokens: number | null
+          request_id: string | null
           total_tokens: number | null
           user_id: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           model_name?: string | null
           organization_id?: string | null
           prompt_tokens?: number | null
+          request_id?: string | null
           total_tokens?: number | null
           user_id?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           model_name?: string | null
           organization_id?: string | null
           prompt_tokens?: number | null
+          request_id?: string | null
           total_tokens?: number | null
           user_id?: string | null
         }
