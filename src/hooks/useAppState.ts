@@ -25,9 +25,9 @@ function useAppState() {
                 currentRequestId.current = initialPayload.request_id; // 현재 요청 ID 저장
             } else {
                 // 만약 이곳에서 initialPayload에 request_id가 없다면,
-                // webhookService.ts에서 request_id를 생성한 후,
+                // webhookService에서 request_id를 생성한 후,
                 // 이 함수로 그 request_id를 다시 받아와서 currentRequestId에 저장해야 합니다.
-                // 현재 webhookService.ts는 request_id를 반환하지 않으므로,
+                // 현재 webhookService는 request_id를 반환하지 않으므로,
                 // 이 부분은 Make.com으로 보내는 payload에 request_id가 이미 있다고 가정합니다.
                 console.warn("Payload에 request_id가 없어 Realtime 필터링이 어려울 수 있습니다. Make.com 전송 함수를 확인하세요.");
                 // 임시로 uuid를 여기서도 생성하여 사용 (실제 앱에서는 이 부분이 더 정교해야 함)
