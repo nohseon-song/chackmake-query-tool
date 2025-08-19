@@ -115,11 +115,11 @@ const MainContent: React.FC<MainContentProps> = ({
 
       <LogDisplay 
         logs={logs} 
+        reportContent=""
+        isDownloadReady={false}
+        processingMessage=""
         isDark={isDark} 
         equipment={equipment}
-        onDeleteLog={onDeleteLog}
-        onDownloadPdf={onDownloadPdf}
-        onGoogleAuth={onGoogleAuth}
       />
 
     </main>
