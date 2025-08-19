@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// ⭐️ 1. 방금 수정한 새 함수를 가져옵니다.
 import { sendWebhookRequest } from '@/services/webhookService';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -132,6 +131,45 @@ export const useAppState = () => {
     }
   };
 
+  // Reading management functions
+  const handleSaveReading = (reading: Reading) => {
+    setSavedReadings(prev => [...prev, reading]);
+  };
+
+  const handleUpdateReading = (index: number, reading: Reading) => {
+    setSavedReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
+  };
+
+  const handleDeleteReading = (index: number) => {
+    setSavedReadings(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleDeleteLog = (id: string, logs: LogEntry[], setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>) => {
+    const updatedLogs = logs.filter(log => log.id !== id);
+    setLogs(updatedLogs);
+    toast({
+      title: "삭제 완료",
+      description: "진단 결과가 삭제되었습니다.",
+    });
+  };
+
+  const handleDownloadPdf = (content: string) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `진단결과_${new Date().toLocaleDateString()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "진단 결과가 다운로드되었습니다.",
+    });
+  };
+
   const clearSavedReadings = () => {
     setSavedReadings([]);
   };
@@ -156,6 +194,8 @@ export const useAppState = () => {
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen, isProcessing, tempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs, setChatOpen,
-    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, sendWebhook, handleGoogleAuth, handleSignOut, toast
+    addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages, addLogEntry, sendWebhook, handleGoogleAuth, handleSignOut, toast,
+    clearSavedReadings, handleSaveReading, handleUpdateReading, handleDeleteReading, handleDeleteLog, handleDownloadPdf,
+    handleSubmit: sendWebhook
   };
 };

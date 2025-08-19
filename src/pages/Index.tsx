@@ -186,6 +186,7 @@ const Index = () => {
       <ChatModal
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
+        onSendMessage={(message: string) => {}}
         isDark={isDark}
         tempMessages={tempMessages}
         onTempMessageAdd={addTempMessage}
