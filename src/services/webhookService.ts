@@ -12,14 +12,19 @@ export const sendWebhookRequest = async (payload: any): Promise<string> => {
   const requestId = uuidv4();
   const payloadWithId = { ...payload, request_id: requestId };
 
+  console.log('Sending webhook request with ID:', requestId);
+  console.log('Payload:', payloadWithId);
+
   // Supabase Edge Function을 직접 호출
-  const { error } = await supabase.functions.invoke('send-webhook-to-make', {
+  const { data, error } = await supabase.functions.invoke('send-webhook-to-make', {
     body: payloadWithId,
   });
 
   if (error) {
+    console.error('Webhook error:', error);
     throw new Error(`서버 응답 오류: ${error.message}`);
   }
 
+  console.log('Webhook response:', data);
   return requestId;
 };

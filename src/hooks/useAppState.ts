@@ -182,12 +182,27 @@ export const useAppState = () => {
         filter: `request_id=eq.${currentRequestId}` 
       }, (payload) => {
         const newResult = payload.new as any;
+        console.log('Received diagnosis result:', newResult);
         
         setLogs(prevLogs => {
-          const contentString = typeof newResult.content === 'string' ? newResult.content : JSON.stringify(newResult.content, null, 2);
+          let contentString = '';
+          
+          // Handle different content types
+          if (newResult.content && typeof newResult.content === 'object') {
+            if (newResult.content.final_report_html) {
+              contentString = newResult.content.final_report_html;
+            } else {
+              contentString = JSON.stringify(newResult.content, null, 2);
+            }
+          } else if (typeof newResult.content === 'string') {
+            contentString = newResult.content;
+          } else {
+            contentString = 'No content available';
+          }
+          
           const newLogEntry: LogEntry = {
             id: Date.now().toString(),
-            tag: newResult.is_final ? '📥 최종 보고서' : `📥 ${newResult.step_name}`,
+            tag: newResult.is_final ? '📥 최종 보고서' : `📥 ${newResult.step_name || '진단 단계'}`,
             content: contentString,
             isResponse: newResult.is_final,
             timestamp: Date.now()
@@ -203,7 +218,9 @@ export const useAppState = () => {
         }
       })
       .subscribe((status, err) => {
+        console.log('Subscription status:', status);
         if (err) {
+          console.error('Subscription error:', err);
           setIsProcessing(false);
           toast({ title: "❌ 실시간 연결 실패", description: err.message, variant: "destructive" });
         }
