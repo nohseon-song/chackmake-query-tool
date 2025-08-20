@@ -1,6 +1,5 @@
 // src/hooks/useReadings.ts
 
-import { useState } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { downloadPdf } from '@/utils/pdfUtils';
@@ -9,35 +8,32 @@ import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken } from '@/uti
 
 
 export const useReadings = (
-  initialReadings: Reading[],
-  setInitialReadings: React.Dispatch<React.SetStateAction<Reading[]>>,
-  initialLogs: LogEntry[],
-  setInitialLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>,
+  logs: LogEntry[],
+  setLogs: React.Dispatch<React.SetStateAction<LogEntry[]>>,
+  savedReadings: Reading[],
+  setSavedReadings: React.Dispatch<React.SetStateAction<Reading[]>>,
   equipment?: string
 ) => {
-  const [savedReadings, setSavedReadings] = useState<Reading[]>(initialReadings);
-  const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
-
   const { toast } = useToast();
 
   const handleSaveReading = (reading: Reading) => {
-    setInitialReadings(prev => [...prev, reading]);
+    setSavedReadings(prev => [...prev, reading]);
   };
 
   const handleUpdateReading = (index: number, reading: Reading) => {
-    setInitialReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
+    setSavedReadings(prev => prev.map((item, idx) => idx === index ? reading : item));
   };
 
   const handleDeleteReading = (index: number) => {
-    setInitialReadings(prev => prev.filter((_, idx) => idx !== index));
+    setSavedReadings(prev => prev.filter((_, idx) => idx !== index));
   };
 
   const clearSavedReadings = () => {
-    setInitialReadings([]);
+    setSavedReadings([]);
   };
 
   const handleDeleteLog = (id: string) => {
-    setInitialLogs(prev => prev.filter(log => log.id !== id));
+    setLogs(prev => prev.filter(log => log.id !== id));
     toast({ title: "삭제 완료", description: "진단 결과가 삭제되었습니다." });
   };
   
@@ -52,7 +48,7 @@ export const useReadings = (
   };
   
   const handleGoogleDocsExport = async () => {
-    const finalReportLog = initialLogs.find(log => log.isResponse);
+    const finalReportLog = logs.find(log => log.isResponse);
     if (!finalReportLog) {
       toast({ title: "내보내기 실패", description: "최종 보고서가 없습니다.", variant: "destructive" });
       return;
