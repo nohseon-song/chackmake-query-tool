@@ -21,7 +21,7 @@ export const useAppState = () => {
   // --- 상태 관리 (State Management) ---
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isDark, setIsDark] = useState(false); // 다크 모드 상태
+  const [isDark, setIsDark] = useState(false);
   const [equipment, setEquipment] = useState<string>('');
   const [class1, setClass1] = useState<string>('');
   const [class2, setClass2] = useState<string>('');
@@ -34,7 +34,7 @@ export const useAppState = () => {
 
   // --- 효과 (Effects) ---
 
-  // 1. 앱이 처음 시작될 때 사용자가 로그인했는지 확인
+  // 1. 앱 시작 시 사용자 인증 상태 확인
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -50,21 +50,20 @@ export const useAppState = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. 시스템의 다크 모드 설정을 따라가도록 설정
+  // 2. 시스템 테마 설정 감지 및 적용
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setIsDark(mediaQuery.matches);
-    document.documentElement.classList.toggle('dark', mediaQuery.matches);
-
-    const handler = (e: MediaQueryListEvent) => {
-        setIsDark(e.matches);
-        document.documentElement.classList.toggle('dark', e.matches);
-    };
+    const applyTheme = (matches: boolean) => {
+        setIsDark(matches);
+        document.documentElement.classList.toggle('dark', matches);
+    }
+    applyTheme(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => applyTheme(e.matches);
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // 3. Supabase로부터 실시간으로 결과 받아오기
+  // 3. Supabase 실시간 데이터 구독
   useEffect(() => {
     if (!currentRequestId) return;
 
@@ -89,7 +88,6 @@ export const useAppState = () => {
             precision_verification_html: newResult.content?.precision_verification_html,
             final_summary_html: newResult.content?.final_summary_html,
           };
-          // 중복된 로그가 들어오지 않도록 방지
           if (!prevLogs.some(log => log.id === newLogEntry.id)) {
             return [...prevLogs, newLogEntry];
           }
@@ -118,26 +116,23 @@ export const useAppState = () => {
 
   // --- 함수 (Functions) ---
 
-  const toggleTheme = useCallback(() => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    document.documentElement.classList.toggle('dark', newIsDark);
-  }, [isDark]);
+  const clearReadingsAndMessages = useCallback(() => {
+    setSavedReadings([]);
+    setTempMessages([]);
+  }, []);
+
+  const toggleTheme = useCallback(() => setIsDark(prev => !prev), [isDark]);
 
   const handleEquipmentChange = useCallback((value: string) => {
-    setEquipment(value);
-    setClass1('');
-    setClass2('');
+    setEquipment(value); setClass1(''); setClass2('');
   }, []);
 
   const handleClass1Change = useCallback((value: string) => {
-    setClass1(value);
-    setClass2('');
+    setClass1(value); setClass2('');
   }, []);
 
   const addTempMessage = useCallback((content: string) => {
-    const newMessage: TempMessage = { id: Date.now().toString(), content, timestamp: Date.now() };
-    setTempMessages(prev => [...prev, newMessage]);
+    setTempMessages(prev => [...prev, { id: Date.now().toString(), content, timestamp: Date.now() }]);
   }, []);
 
   const updateTempMessage = useCallback((id: string, content: string) => {
@@ -148,32 +143,38 @@ export const useAppState = () => {
     setTempMessages(prev => prev.filter(msg => msg.id !== id));
   }, []);
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async (payload: any) => {
     if (!user) {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
     }
     
     setIsProcessing(true);
-    setLogs([]); // 이전 로그는 초기화
-    
-    const payload = {
-      readings: savedReadings,
-      messages: tempMessages.map(m => m.content),
-      user_id: user.id,
-      organization_id: (user.user_metadata as any)?.organization_id, // 사용자 메타데이터에서 가져오기
-      timestamp: new Date().toISOString(),
-    };
+    setLogs([]);
     
     try {
-      const requestId = await sendWebhookRequest(payload);
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.organization_id) {
+        throw new Error(`사용자 조직 정보를 찾을 수 없습니다: ${profileError?.message}`);
+      }
+      
+      const completePayload = { ...payload, organization_id: profile.organization_id };
+      
+      const requestId = await sendWebhookRequest(completePayload);
       setCurrentRequestId(requestId);
       toast({ title: "진단 시작됨", description: "데이터를 서버로 전송했습니다." });
+      clearReadingsAndMessages();
+
     } catch (error: any) {
       setIsProcessing(false);
       toast({ title: "전송 실패", description: error.message, variant: "destructive" });
     }
-  }, [savedReadings, tempMessages, user, toast]);
+  }, [user, toast, clearReadingsAndMessages]);
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
