@@ -1,5 +1,3 @@
-// src/hooks/useAppState.ts
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
@@ -39,7 +37,7 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [tempMessages, setTempMessages] = useState<TempMessage[]>([]);
   
-  // [수정] 웹훅 준비 상태를 추적하는 상태 추가
+  // [수정됨] 웹훅 준비 상태를 추적하는 상태 추가
   const [isWebhookReady, setIsWebhookReady] = useState(false);
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
 
@@ -66,7 +64,7 @@ export const useAppState = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // [수정] 웹훅 생성 로직을 별도의 함수로 분리하고 상태 업데이트 추가
+  // [수정됨] 웹훅 생성 로직을 별도의 함수로 분리하고 상태 업데이트 추가
   const createNewWebhook = useCallback(() => {
     if (window.lovable && typeof window.lovable.createWebhook === 'function') {
       setIsWebhookReady(false); // 새로 만들기 시작
@@ -95,7 +93,7 @@ export const useAppState = () => {
       }).then(createdWebhook => {
         console.log("새로운 Webhook 생성됨:", createdWebhook.url);
         webhookRef.current = createdWebhook;
-        setIsWebhookReady(true); // [수정] 웹훅 준비 완료 상태로 변경
+        setIsWebhookReady(true); // [수정됨] 웹훅 준비 완료 상태로 변경
       }).catch(err => {
         console.error("Webhook 생성 실패:", err);
         toast({ title: "오류", description: "데이터 수신 채널 생성에 실패했습니다.", variant: "destructive" });
@@ -104,7 +102,7 @@ export const useAppState = () => {
     }
   }, [toast]);
 
-  // [수정] 앱 로드 시 최초 웹훅 생성
+  // [수정됨] 앱 로드 시 최초 웹훅 생성
   useEffect(() => {
     createNewWebhook();
     // 컴포넌트 언마운트 시 웹훅 정리
@@ -119,7 +117,7 @@ export const useAppState = () => {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
     }
-    // [수정] isWebhookReady 상태를 확인하여 채널 준비 여부 판단
+    // [수정됨] isWebhookReady 상태를 확인하여 채널 준비 여부 판단
     if (!isWebhookReady || !webhookRef.current) {
       toast({ title: "준비 오류", description: "데이터 수신 채널이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
       return;
@@ -152,7 +150,6 @@ export const useAppState = () => {
     }
   }, [user, savedReadings, tempMessages, toast, isWebhookReady]);
   
-  // 나머지 함수들...
   const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
   const handleClass1Change = useCallback((value: string) => { setClass1(value); setClass2(''); }, []);
@@ -167,6 +164,6 @@ export const useAppState = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut, isWebhookReady, // [수정] isWebhookReady를 반환값에 추가
+    handleSubmit, handleSignOut, isWebhookReady, // [수정됨] isWebhookReady를 반환값에 추가
   };
 };
