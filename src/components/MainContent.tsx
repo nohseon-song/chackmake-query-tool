@@ -21,7 +21,8 @@ interface MainContentProps {
   isDark: boolean;
   tempMessagesCount: number;
   logs: LogEntry[];
-  isWebhookReady: boolean; // [수정됨] 이 줄 추가
+  isWebhookReady: boolean;
+  onChatOpen: () => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -38,7 +39,8 @@ const MainContent: React.FC<MainContentProps> = ({
   isDark,
   tempMessagesCount,
   logs,
-  isWebhookReady, // [수정됨] 이 줄 추가
+  isWebhookReady,
+  onChatOpen,
 }) => {
   return (
     <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
@@ -53,7 +55,7 @@ const MainContent: React.FC<MainContentProps> = ({
               onEquipmentChange={setEquipment}
               onClass1Change={setClass1}
               onClass2Change={setClass2}
-              onChatOpen={() => {}}
+              onChatOpen={onChatOpen}
               onOCRResult={() => {}}
               onAddLogEntry={() => {}}
               isDark={isDark}

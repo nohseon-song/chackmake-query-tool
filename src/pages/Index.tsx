@@ -39,7 +39,8 @@ const Index = () => {
         isDark={isDark}
         tempMessagesCount={tempMessages.length}
         logs={logs}
-        isWebhookReady={isWebhookReady} // [수정됨] 이 줄 추가
+        isWebhookReady={isWebhookReady}
+        onChatOpen={() => setChatOpen(true)}
       />
       <FloatingButtons 
         isProcessing={isProcessing}
