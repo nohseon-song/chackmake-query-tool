@@ -1,42 +1,48 @@
-// src/utils/markdownTransform.ts
-import { Reading } from '@/types';
+// src/utils/markdownUtils.ts
 
-export const buildMarkdownFromData = (readings: Reading[], messages: string[]): string => {
-  const groups = new Map<string, { class2: string; design: string; measure: string }[]>();
+interface Reading {
+  equipment: string;
+  class1: string;
+  class2: string;
+  design: string;
+  measure: string;
+}
 
-  for (const r of readings || []) {
-    const key = r.equipment || '기타';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push({
-      class2: r.class2 ?? '',
-      design: r.design ?? '',
-      measure: r.measure ?? '',
+export const generateMarkdownReport = (readings: Reading[], messages: string[]): string => {
+  if (readings.length === 0 && messages.length === 0) {
+    return "제출된 데이터가 없습니다.";
+  }
+
+  // 1. equipment(대상설비) 기준으로 데이터 그룹화
+  const groupedReadings = readings.reduce((acc, reading) => {
+    const { equipment } = reading;
+    if (!acc[equipment]) {
+      acc[equipment] = [];
+    }
+    acc[equipment].push(reading);
+    return acc;
+  }, {} as Record<string, Reading[]>);
+
+  let markdownString = '';
+
+  // 2. 그룹화된 데이터를 바탕으로 설비별 마크다운 테이블 생성
+  for (const equipment in groupedReadings) {
+    markdownString += `## ${equipment}\n\n`;
+    markdownString += `| 세부 점검 항목 | 설계값 | 측정값 |\n`;
+    markdownString += `| :--- | :--- | :--- |\n`;
+    groupedReadings[equipment].forEach(r => {
+      markdownString += `| ${r.class2} | ${r.design} | ${r.measure} |\n`;
+    });
+    markdownString += `\n`;
+  }
+
+  // 3. Agent Team 메시지가 있으면 마크다운 목록으로 추가
+  if (messages.length > 0) {
+    markdownString += `## 📝 Agent Team 의견\n`;
+    messages.forEach(msg => {
+      markdownString += `- ${msg}\n`;
     });
   }
 
-  const sections: string[] = [];
-
-  for (const [equipment, rows] of groups.entries()) {
-    const tableRows = rows
-      .map(row => `| ${row.class2} | ${row.design} | ${row.measure} |`)
-      .join('\n');
-
-    const section = [
-      `## ${equipment}`,
-      '',
-      '| 세부 점검 항목 | 설계값 | 측정값 |',
-      '| :--- | :--- | :--- |',
-      tableRows,
-      '',
-    ].join('\n');
-
-    sections.push(section);
-  }
-
-  const messagesBlock = [
-    '## 📝 Agent Team 의견',
-    ...(messages || []).map(m => `- ${m}`),
-  ].join('\n');
-
-  return [sections.join('\n'), messagesBlock].join('\n');
+  return markdownString.trim();
 };
