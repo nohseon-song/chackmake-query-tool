@@ -39,7 +39,8 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [tempMessages, setTempMessages] = useState<TempMessage[]>([]);
   
-  // useRef를 사용하여 webhook 객체를 안정적으로 관리
+  // [수정] 웹훅 준비 상태를 추적하는 상태 추가
+  const [isWebhookReady, setIsWebhookReady] = useState(false);
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
 
   useEffect(() => {
@@ -65,54 +66,61 @@ export const useAppState = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // Lovable Webhook 생성 및 관리
-  useEffect(() => {
-    // 앱이 로드될 때 한 번만 웹훅을 생성
-    if (window.lovable && typeof window.lovable.createWebhook === 'function' && !webhookRef.current) {
+  // [수정] 웹훅 생성 로직을 별도의 함수로 분리하고 상태 업데이트 추가
+  const createNewWebhook = useCallback(() => {
+    if (window.lovable && typeof window.lovable.createWebhook === 'function') {
+      setIsWebhookReady(false); // 새로 만들기 시작
+      webhookRef.current?.close(); // 기존 웹훅이 있다면 닫기
+
       window.lovable.createWebhook((data) => {
         console.log('Lovable Webhook을 통해 데이터 수신:', data);
         const newResult = data;
 
         setLogs(prevLogs => {
           const newLogEntry: LogEntry = {
-            id: uuidv4(), // 고유 ID 생성
+            id: uuidv4(),
             tag: newResult.is_final ? '📥 최종 보고서' : `📥 ${newResult.step_name || '진단 단계'}`,
             content: newResult.content,
             isResponse: true,
             timestamp: Date.now(),
           };
-          // 시간순으로 정렬하여 로그를 업데이트
           return [...prevLogs, newLogEntry].sort((a, b) => a.timestamp - b.timestamp);
         });
 
         if (newResult.is_final) {
           setIsProcessing(false);
           toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
-          // 작업 완료 후 웹훅을 닫고 새로 생성 준비
-          webhookRef.current?.close();
-          webhookRef.current = null;
+          createNewWebhook(); // 작업 완료 후 다음 작업을 위해 새 웹훅 생성
         }
       }).then(createdWebhook => {
         console.log("새로운 Webhook 생성됨:", createdWebhook.url);
         webhookRef.current = createdWebhook;
+        setIsWebhookReady(true); // [수정] 웹훅 준비 완료 상태로 변경
       }).catch(err => {
         console.error("Webhook 생성 실패:", err);
         toast({ title: "오류", description: "데이터 수신 채널 생성에 실패했습니다.", variant: "destructive" });
+        setIsWebhookReady(false);
       });
     }
+  }, [toast]);
 
-    // 컴포넌트가 언마운트될 때 웹훅 정리
+  // [수정] 앱 로드 시 최초 웹훅 생성
+  useEffect(() => {
+    createNewWebhook();
+    // 컴포넌트 언마운트 시 웹훅 정리
     return () => {
       webhookRef.current?.close();
     };
-  }, [toast]);
+  }, [createNewWebhook]);
+
 
   const handleSubmit = useCallback(async () => {
     if (!user) {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
     }
-    if (!webhookRef.current) {
+    // [수정] isWebhookReady 상태를 확인하여 채널 준비 여부 판단
+    if (!isWebhookReady || !webhookRef.current) {
       toast({ title: "준비 오류", description: "데이터 수신 채널이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
       return;
     }
@@ -127,7 +135,7 @@ export const useAppState = () => {
         user_id: user.id,
         timestamp: new Date().toISOString(),
         request_id: uuidv4(),
-        delivery_webhook_url: webhookRef.current.url, // 생성된 Lovable Webhook URL을 전달
+        delivery_webhook_url: webhookRef.current.url, 
       };
       
       const { error } = await supabase.functions.invoke('send-webhook-to-make', { body: payload });
@@ -142,10 +150,9 @@ export const useAppState = () => {
       setIsProcessing(false);
       toast({ title: "전송 실패", description: error.message, variant: "destructive" });
     }
-  }, [user, savedReadings, tempMessages, toast]);
+  }, [user, savedReadings, tempMessages, toast, isWebhookReady]);
   
   // 나머지 함수들...
-  const clearReadingsAndMessages = useCallback(() => { setSavedReadings([]); setTempMessages([]); }, []);
   const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
   const handleClass1Change = useCallback((value: string) => { setClass1(value); setClass2(''); }, []);
@@ -160,6 +167,6 @@ export const useAppState = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut,
+    handleSubmit, handleSignOut, isWebhookReady, // [수정] isWebhookReady를 반환값에 추가
   };
 };
