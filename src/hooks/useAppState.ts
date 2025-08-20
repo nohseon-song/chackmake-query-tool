@@ -186,6 +186,6 @@ export const useAppState = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut,
+    handleSubmit, handleSignOut, toast,
   };
 };
