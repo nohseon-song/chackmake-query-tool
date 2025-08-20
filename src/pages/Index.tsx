@@ -87,11 +87,38 @@ const Index = () => {
         onDeleteLog={handleDeleteLog}
         onDownloadPdf={() => handleDownloadPdf(reportContentRef.current)}
         onGoogleDocsExport={handleGoogleDocsExport}
-        isWebhookReady={isWebhookReady} // [수정] isWebhookReady 전달
+        isWebhookReady={isWebhookReady}
         reportContentRef={reportContentRef}
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={(result) => addTempMessage(result)}
+        onAddLogEntry={(tag, content) => {
+          const newLogEntry = {
+            id: Date.now().toString(),
+            tag,
+            content,
+            isResponse: false,
+            timestamp: Date.now()
+          };
+          setLogs(prev => [...prev, newLogEntry]);
+        }}
       />
 
-      <FloatingButtons onChatOpen={() => setChatOpen(true)} />
+      <FloatingButtons 
+        isProcessing={isProcessing}
+        class2={class2}
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={(result) => addTempMessage(result)}
+        onAddLogEntry={(tag, content) => {
+          const newLogEntry = {
+            id: Date.now().toString(),
+            tag,
+            content,
+            isResponse: false,
+            timestamp: Date.now()
+          };
+          setLogs(prev => [...prev, newLogEntry]);
+        }}
+      />
       
       <ChatModal
         isOpen={chatOpen} 

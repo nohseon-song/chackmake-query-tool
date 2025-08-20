@@ -28,15 +28,18 @@ interface MainContentProps {
   onDeleteLog: (id: string) => void;
   onDownloadPdf: () => void;
   onGoogleDocsExport: () => void;
-  isWebhookReady: boolean; // [수정] isWebhookReady 추가
+  isWebhookReady: boolean;
   reportContentRef: React.RefObject<HTMLDivElement>;
+  onChatOpen: () => void;
+  onOCRResult: (result: string) => void;
+  onAddLogEntry: (tag: string, content: string) => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
   equipment, class1, class2, equipmentTree, savedReadings, logs, isProcessing, isDark,
   tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change, onSaveReading,
   onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf, onGoogleDocsExport,
-  isWebhookReady, reportContentRef // [수정] isWebhookReady 받기
+  isWebhookReady, reportContentRef, onChatOpen, onOCRResult, onAddLogEntry
 }) => {
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
   const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
@@ -55,6 +58,9 @@ const MainContent: React.FC<MainContentProps> = ({
               onEquipmentChange={onEquipmentChange}
               onClass1Change={onClass1Change}
               onClass2Change={onClass2Change}
+              onChatOpen={onChatOpen}
+              onOCRResult={onOCRResult}
+              onAddLogEntry={onAddLogEntry}
               isDark={isDark}
             />
 
@@ -63,11 +69,13 @@ const MainContent: React.FC<MainContentProps> = ({
                 equipment={equipment}
                 class1={class1}
                 class2={class2}
+                showInputs={showInputs}
                 savedReadings={savedReadings}
                 onSaveReading={onSaveReading}
                 onUpdateReading={onUpdateReading}
                 onDeleteReading={onDeleteReading}
                 isDark={isDark}
+                logs={logs}
               />
             )}
             
@@ -76,8 +84,8 @@ const MainContent: React.FC<MainContentProps> = ({
               isProcessing={isProcessing}
               onSubmit={onSubmit}
               isDark={isDark}
-              tempMessagesCount={tempMessages.length}
-              isWebhookReady={isWebhookReady} // [수정] isWebhookReady 전달
+              tempMessagesCount={tempMessagesCount}
+              isWebhookReady={isWebhookReady}
             />
           </CardContent>
         </Card>
@@ -88,8 +96,6 @@ const MainContent: React.FC<MainContentProps> = ({
             isDark={isDark}
             equipment={equipment}
             onDeleteLog={onDeleteLog}
-            onDownloadPdf={onDownloadPdf}
-            onGoogleDocsExport={onGoogleDocsExport}
           />
         </div>
       )}
