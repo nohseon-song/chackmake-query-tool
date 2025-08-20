@@ -53,7 +53,7 @@ const Index = () => {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${isDark ? 'dark' : ''}`}>
+    <div className="min-h-screen flex flex-col">
       <header className="p-4 bg-card shadow-sm border-b">
         <div className="flex flex-col space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

@@ -103,9 +103,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
       <div
         id="report-container"
         ref={logRef}
-        className={`p-4 rounded-lg border-l-4 border-blue-500 ${
-          isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
-        } shadow-sm`}
+        className="p-4 rounded-lg border-l-4 border-primary bg-card text-card-foreground shadow-sm"
         style={{
           fontFamily: 'system-ui, -apple-system, sans-serif',
           lineHeight: '1.6',
