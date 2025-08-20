@@ -1,3 +1,4 @@
+// src/components/LogDisplay.tsx
 
 import React, { useRef, useState, useEffect } from 'react';
 import ReportHeader from './ReportHeader';
@@ -5,37 +6,23 @@ import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
 import { getReportStyles } from '@/styles/reportStyles';
 import { getCombinedHtml } from '@/utils/htmlUtils';
-import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
+import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken, fetchGoogleClientId, setGoogleClientId } from '@/utils/googleDocsUtils';
 import { useToast } from '@/hooks/use-toast';
-
-interface LogEntry {
-  id: string;
-  tag: string;
-  content: string;
-  isResponse?: boolean;
-  timestamp: number;
-  diagnosis_summary_html?: string;
-  complementary_summary_html?: string;
-  precision_verification_html?: string;
-  final_summary_html?: string;
-}
+import { LogEntry } from '@/types';
 
 interface LogDisplayProps {
   logs: LogEntry[];
   isDark: boolean;
   equipment?: string;
   onDeleteLog?: (id: string) => void;
-  onDownloadPdf?: (content: string) => void;
-  onGoogleAuth?: () => Promise<string>;
 }
 
-const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDeleteLog, onGoogleAuth }) => {
+const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDeleteLog }) => {
   const logRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGoogleDocsDownloading, setIsGoogleDocsDownloading] = useState(false);
   const { toast } = useToast();
   
-  // 마지막으로 선택된 설비명을 기억 (제출 후 상태 초기화되어도 사용)
   const equipmentRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (equipment && equipment.trim()) {
@@ -43,26 +30,19 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
     }
   }, [equipment]);
   
-  // 응답 로그만 필터링
   const responseLogs = logs.filter(log => log.isResponse);
   
   if (responseLogs.length === 0) return null;
 
   const handlePdfDownload = async () => {
     if (!logRef.current || isDownloading) return;
-    
     try {
       setIsDownloading(true);
-      console.log('PDF 다운로드 버튼 클릭됨');
-      
-      // 약간의 지연을 주어 UI 업데이트가 반영되도록 함
-      setTimeout(async () => {
-        await downloadPdf(logRef.current!);
-        setIsDownloading(false);
-      }, 100);
-      
+      await downloadPdf(logRef.current!);
     } catch (error) {
-      console.error('PDF 다운로드 핸들러 오류:', error);
+       console.error("PDF 다운로드 실패:", error);
+       toast({ title: "PDF 다운로드 실패", description: "오류가 발생했습니다.", variant: "destructive" });
+    } finally {
       setIsDownloading(false);
     }
   };
@@ -70,52 +50,43 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
   const handleGoogleDocsDownload = async () => {
     if (isGoogleDocsDownloading) return;
     
+    const finalReportLog = responseLogs.find(log => log.tag === '📥 최종 보고서');
+    if (!finalReportLog) {
+      toast({ title: "내보내기 실패", description: "최종 보고서가 없습니다.", variant: "destructive" });
+      return;
+    }
+
     try {
-      setIsGoogleDocsDownloading(true);
-      console.log('🚀 Google Docs 다운로드 시작 (Authorization Code Flow)');
-      
-      // Google 인증 (Authorization Code Flow)
-      const code = await authenticateGoogle();
-      console.log('✅ 인증 코드 획득 성공');
-      
-      // 코드를 액세스 토큰으로 교환
-      const { accessToken } = await exchangeCodeForToken(code);
-      console.log('✅ 토큰 교환 성공');
-      
-      // HTML 콘텐츠 가져오기
-      const combinedHtml = responseLogs.map(log => getCombinedHtml(log)).join('\n\n');
-      
-      if (!combinedHtml.trim()) {
-        throw new Error('내보낼 콘텐츠가 없습니다.');
-      }
-      
-      // Google Docs 문서 생성
-      console.log('📱 LogDisplay에서 createGoogleDoc 호출', {
-        equipment: equipment || '',
-        hasEquipment: !!equipment
-      });
-      
-      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipmentRef.current || equipment || undefined);
-      
-      toast({
-        title: "Google Docs 문서가 생성되었습니다",
-        description: "새 탭에서 문서를 확인하세요.",
-      });
-      
-      // 새 탭에서 문서 열기
-      window.open(documentUrl, '_blank');
-      
+        setIsGoogleDocsDownloading(true);
+        await fetchGoogleClientId();
+        const code = await authenticateGoogle();
+        const { accessToken } = await exchangeCodeForToken(code);
+        
+        // 모든 HTML 조각을 하나로 합칩니다.
+        const combinedHtml = responseLogs
+            .sort((a, b) => a.timestamp - b.timestamp) // 시간순으로 정렬
+            .map(log => getCombinedHtml(log))
+            .join('<br><hr><br>');
+
+        if (!combinedHtml.trim()) {
+            throw new Error('내보낼 콘텐츠가 없습니다.');
+        }
+
+        const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipmentRef.current || equipment || undefined);
+        
+        toast({
+            title: "Google Docs 문서가 생성되었습니다",
+            description: "새 탭에서 문서를 확인하세요.",
+        });
+        
+        window.open(documentUrl, '_blank');
+        
     } catch (error) {
-      console.error('Google Docs 생성 오류:', error);
-      const errorMessage = error instanceof Error ? error.message : '문서 생성에 실패했습니다.';
-      
-      toast({
-        title: "문서 생성 실패",
-        description: errorMessage,
-        variant: "destructive",
-      });
+        console.error("Google Docs 생성 오류:", error);
+        const errorMessage = error instanceof Error ? error.message : "문서 생성에 실패했습니다.";
+        toast({ title: "문서 생성 실패", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsGoogleDocsDownloading(false);
+        setIsGoogleDocsDownloading(false);
     }
   };
 
@@ -130,7 +101,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
   return (
     <div className="mt-4 space-y-2">
       <div
-        id="chat-log"
+        id="report-container"
         ref={logRef}
         className={`p-4 rounded-lg border-l-4 border-blue-500 ${
           isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
@@ -150,7 +121,7 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
           isGoogleDocsDownloading={isGoogleDocsDownloading}
         />
         
-        <ReportContent logs={responseLogs} />
+        <ReportContent logs={responseLogs.sort((a, b) => a.timestamp - b.timestamp)} />
       </div>
       
       <style>{getReportStyles(isDark)}</style>
