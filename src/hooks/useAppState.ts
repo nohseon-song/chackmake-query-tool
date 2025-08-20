@@ -14,7 +14,6 @@ interface TempMessage {
   timestamp: number;
 }
 
-// Lovable Webhook을 사용하기 위한 타입 정의
 declare global {
   interface Window {
     lovable: {
@@ -65,7 +64,7 @@ export const useAppState = () => {
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
-
+  
   // [수정] 웹훅 생성 로직을 별도의 함수로 분리하고 상태 업데이트 추가
   const createNewWebhook = useCallback(() => {
     if (window.lovable && typeof window.lovable.createWebhook === 'function') {
@@ -168,5 +167,6 @@ export const useAppState = () => {
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
     handleSubmit, handleSignOut, isWebhookReady, // [수정] isWebhookReady를 반환값에 추가
+    toast
   };
 };
