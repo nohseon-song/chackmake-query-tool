@@ -53,17 +53,17 @@ const Index = () => {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <header className={`p-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
+    <div className={`min-h-screen flex flex-col ${isDark ? 'dark' : ''}`}>
+      <header className="p-4 bg-card shadow-sm border-b">
         <div className="flex flex-col space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-center sm:text-left">
               <h1 className="text-lg sm:text-xl font-bold">CheckMake Pro-Ultra 2.0</h1>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 현장 기술 진단 App</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">기계설비 성능점검 + 유지관리 현장 기술 진단 App</p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
               {user && (
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 order-3 sm:order-1">
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground order-3 sm:order-1">
                   <User className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span className="truncate max-w-[150px] sm:max-w-none">{user.email}</span>
                 </div>
@@ -78,7 +78,7 @@ const Index = () => {
             </div>
           </div>
           <div className="text-center sm:text-left">
-            <p className="text-xs text-gray-500 dark:text-gray-500">professional-engineering Insight by SNS</p>
+            <p className="text-xs text-muted-foreground">professional-engineering Insight by SNS</p>
           </div>
         </div>
       </header>
@@ -92,7 +92,6 @@ const Index = () => {
         onSaveReading={handleSaveReading} onUpdateReading={handleUpdateReading} onDeleteReading={handleDeleteReading}
         onSubmit={handleSubmission}
         onDeleteLog={handleDeleteLog}
-        onDownloadPdf={() => handleDownloadPdf(reportContentRef.current)}
         onChatOpen={() => setChatOpen(true)}
         onAddLogEntry={(tag: string, content: string) => {
           setLogs(prev => [...prev, { 

@@ -39,7 +39,7 @@ interface MainContentProps {
   onDeleteReading: (index: number) => void;
   onSubmit: () => void;
   onDeleteLog: (id: string) => void;
-  onDownloadPdf: (content: string) => void;
+  
   onChatOpen: () => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
@@ -62,7 +62,6 @@ const MainContent: React.FC<MainContentProps> = ({
   onDeleteReading,
   onSubmit,
   onDeleteLog,
-  onDownloadPdf,
   onChatOpen,
   onAddLogEntry
 }) => {
@@ -72,7 +71,7 @@ const MainContent: React.FC<MainContentProps> = ({
 
   return (
     <main className="flex-1 overflow-y-auto p-3 pb-24">
-      <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+      <Card className="mt-4">
         <CardContent className="p-4 space-y-4">
           <EquipmentSelection
             equipment={equipment}
@@ -116,7 +115,6 @@ const MainContent: React.FC<MainContentProps> = ({
         isDark={isDark} 
         equipment={equipment}
         onDeleteLog={onDeleteLog}
-        onDownloadPdf={onDownloadPdf}
       />
 
     </main>
