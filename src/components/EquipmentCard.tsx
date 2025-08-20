@@ -6,22 +6,20 @@ interface EquipmentCardProps {
   name: string;
   isSelected: boolean;
   onClick: () => void;
-  isDark: boolean;
 }
 
 const EquipmentCard: React.FC<EquipmentCardProps> = ({
   name,
   isSelected,
-  onClick,
-  isDark
+  onClick
 }) => {
   return (
     <Card 
-      className={`cursor-pointer transition-all duration-200 ${
+      className={`cursor-pointer transition-all duration-200 bg-card hover:bg-accent ${
         isSelected 
-          ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+          ? 'ring-2 ring-primary bg-accent' 
           : 'hover:shadow-md hover:scale-105'
-      } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
+      }`}
       onClick={onClick}
     >
       <CardContent className="p-3">
