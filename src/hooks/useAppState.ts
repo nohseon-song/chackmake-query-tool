@@ -142,21 +142,11 @@ export const useAppState = () => {
     setLogs([]);
     
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile?.organization_id) {
-        throw new Error(`사용자 조직 정보를 찾을 수 없습니다: ${profileError?.message || '프로필 없음'}`);
-      }
-      
+      // payload를 여기서 직접 생성
       const payload = {
         readings: savedReadings,
         messages: tempMessages.map(m => m.content),
         user_id: user.id,
-        organization_id: profile.organization_id, // 여기서만 organization_id를 추가합니다.
         timestamp: new Date().toISOString(),
       };
       
