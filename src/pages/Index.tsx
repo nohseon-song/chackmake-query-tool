@@ -93,7 +93,6 @@ const Index = () => {
       </header>
       
       <MainContent
-        ref={reportContentRef}
         equipment={equipment} class1={class1} class2={class2}
         equipmentTree={EQUIPMENT_TREE} savedReadings={savedReadings}
         logs={logs} isProcessing={isProcessing} isDark={isDark}
@@ -103,19 +102,61 @@ const Index = () => {
         onSubmit={handleSubmission}
         onDeleteLog={handleDeleteLog}
         onDownloadPdf={() => handleDownloadPdf(reportContentRef.current)}
-        onGoogleDocsExport={handleGoogleDocsExport}
         onChatOpen={() => setChatOpen(true)}
+        onAddLogEntry={(tag: string, content: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag, 
+            content, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
+        }}
       />
 
-      <FloatingButtons isProcessing={isProcessing} class2={class2} onChatOpen={() => setChatOpen(true)} />
+      <FloatingButtons 
+        isProcessing={isProcessing} 
+        class2={class2} 
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={(result: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag: 'OCR 결과', 
+            content: result, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
+        }}
+        onAddLogEntry={(tag: string, content: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag, 
+            content, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
+        }}
+      />
       
       <ChatModal
-        isOpen={chatOpen} onClose={() => setChatOpen(false)}
+        isOpen={chatOpen} 
+        onClose={() => setChatOpen(false)}
+        onSendMessage={(message: string) => addTempMessage(message)}
         isDark={isDark}
-        tempMessages={tempMessages}
+        tempMessages={tempMessages.map(msg => msg.content)}
         onTempMessageAdd={addTempMessage}
-        onTempMessageUpdate={updateTempMessage}
-        onTempMessageDelete={deleteTempMessage}
+        onTempMessageUpdate={(index: number, newMessage: string) => {
+          const messageId = tempMessages[index]?.id;
+          if (messageId) {
+            updateTempMessage(messageId, newMessage);
+          }
+        }}
+        onTempMessageDelete={(index: number) => {
+          const messageId = tempMessages[index]?.id;
+          if (messageId) {
+            deleteTempMessage(messageId);
+          }
+        }}
       />
     </div>
   );

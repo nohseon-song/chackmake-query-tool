@@ -71,3 +71,9 @@ export const EQUIPMENT_TREE = {
     "급탕 온도": ["급탕 온도 [℃]"]
   }
 };
+
+// Transform EQUIPMENT_TREE into equipmentData format
+export const equipmentData = Object.keys(EQUIPMENT_TREE).map((name, index) => ({
+  id: `eq_${index}`,
+  name
+}));
