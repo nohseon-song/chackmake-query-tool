@@ -44,7 +44,7 @@ export const useAppState = () => {
   // Lovable SDK 안전 대기 유틸 (최대 15초, 더 안정적)
   const waitForLovableSDK = useCallback(async (): Promise<boolean> => {
     console.log('Lovable SDK 로딩 대기 시작...');
-    const maxWaitTime = 15000; // 15초
+    const maxWaitTime = 3000; // 3초로 단축하여 빠르게 폴백
     const checkInterval = 200; // 200ms 간격
     const startTime = Date.now();
     
@@ -102,11 +102,10 @@ export const useAppState = () => {
     try {
       const sdkReady = await waitForLovableSDK();
       if (!sdkReady) {
-        console.error('❌ SDK 준비 실패');
+        console.warn('⚠️ Lovable SDK 미탑재 - 스트리밍 없이 진행합니다.');
         toast({ 
-          title: "시스템 준비 중", 
-          description: "잠시 기다린 후 다시 시도해주세요.", 
-          variant: "destructive" 
+          title: "스트리밍 업데이트 비활성화", 
+          description: "브라우저 제한으로 SDK 없이 진행하지만, 요청은 정상 전송됩니다.", 
         });
         return null;
       }
@@ -172,12 +171,13 @@ export const useAppState = () => {
       return;
     }
 
-    // 전송 직전에 웹훅 주소가 성공적으로 만들어졌는지 확인하고, 없으면 즉시 생성 시도
-    if (!webhookRef.current?.url) {
+    // 전송 직전에 웹훅 주소가 준비되지 않았으면 생성 시도하되, 실패해도 계속 진행(스트리밍 없이)
+    let deliveryUrl = webhookRef.current?.url;
+    if (!deliveryUrl) {
       console.log('🔄 웹훅이 준비되지 않아 즉시 생성 시도');
-      const url = await createWebhookOnDemand();
-      if (!url) {
-        return; // createWebhookOnDemand에서 이미 에러 토스트를 표시했음
+      deliveryUrl = await createWebhookOnDemand();
+      if (!deliveryUrl) {
+        console.log('⏭️ SDK 없이 진행: 스트리밍 업데이트는 제공되지 않습니다.');
       }
     }
 
@@ -186,20 +186,22 @@ export const useAppState = () => {
     setLogs([]);
 
     try {
-      // payload에 'delivery_webhook_url'을 담아서 보냄
-      const payload = {
+      // payload에 'delivery_webhook_url'은 있을 때만 포함합니다.
+      const payload: any = {
         readings: savedReadings,
         messages: tempMessages.map(m => m.content),
         user_id: user.id,
         timestamp: new Date().toISOString(),
         request_id: uuidv4(),
-        delivery_webhook_url: webhookRef.current!.url,
       };
+      if (deliveryUrl) {
+        payload.delivery_webhook_url = deliveryUrl;
+      }
 
       console.log('📤 서버로 데이터 전송 중...', { 
         readingsCount: savedReadings.length, 
         messagesCount: tempMessages.length,
-        webhookUrl: webhookRef.current!.url 
+        webhookUrl: deliveryUrl ?? 'none' 
       });
 
       const { error } = await supabase.functions.invoke('send-webhook-to-make', { body: payload });
