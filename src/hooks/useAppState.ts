@@ -18,7 +18,6 @@ export const useAppState = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  // --- 상태 관리 (State Management) ---
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDark, setIsDark] = useState(false);
@@ -32,9 +31,6 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [tempMessages, setTempMessages] = useState<TempMessage[]>([]);
 
-  // --- 효과 (Effects) ---
-
-  // 1. 앱 시작 시 사용자 인증 상태 확인
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -42,15 +38,12 @@ export const useAppState = () => {
       setIsAuthLoading(false);
     };
     getSession();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. 시스템 테마 설정 감지 및 적용
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const applyTheme = (matches: boolean) => {
@@ -63,7 +56,6 @@ export const useAppState = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // 3. Supabase 실시간 데이터 구독
   useEffect(() => {
     if (!currentRequestId) return;
 
@@ -75,7 +67,6 @@ export const useAppState = () => {
         filter: `request_id=eq.${currentRequestId}` 
       }, (payload) => {
         const newResult = payload.new as any;
-        
         setLogs(prevLogs => {
           const newLogEntry: LogEntry = {
             id: newResult.id || Date.now().toString(),
@@ -114,14 +105,12 @@ export const useAppState = () => {
     };
   }, [currentRequestId, toast]);
 
-  // --- 함수 (Functions) ---
-
   const clearReadingsAndMessages = useCallback(() => {
     setSavedReadings([]);
     setTempMessages([]);
   }, []);
 
-  const toggleTheme = useCallback(() => setIsDark(prev => !prev), [isDark]);
+  const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
 
   const handleEquipmentChange = useCallback((value: string) => {
     setEquipment(value); setClass1(''); setClass2('');
@@ -143,7 +132,7 @@ export const useAppState = () => {
     setTempMessages(prev => prev.filter(msg => msg.id !== id));
   }, []);
 
-  const handleSubmit = useCallback(async (payload: any) => {
+  const handleSubmit = useCallback(async () => {
     if (!user) {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
@@ -160,12 +149,18 @@ export const useAppState = () => {
         .single();
 
       if (profileError || !profile?.organization_id) {
-        throw new Error(`사용자 조직 정보를 찾을 수 없습니다: ${profileError?.message}`);
+        throw new Error(`사용자 조직 정보를 찾을 수 없습니다: ${profileError?.message || '프로필 없음'}`);
       }
       
-      const completePayload = { ...payload, organization_id: profile.organization_id };
+      const payload = {
+        readings: savedReadings,
+        messages: tempMessages.map(m => m.content),
+        user_id: user.id,
+        organization_id: profile.organization_id, // 여기서만 organization_id를 추가합니다.
+        timestamp: new Date().toISOString(),
+      };
       
-      const requestId = await sendWebhookRequest(completePayload);
+      const requestId = await sendWebhookRequest(payload);
       setCurrentRequestId(requestId);
       toast({ title: "진단 시작됨", description: "데이터를 서버로 전송했습니다." });
       clearReadingsAndMessages();
@@ -174,7 +169,7 @@ export const useAppState = () => {
       setIsProcessing(false);
       toast({ title: "전송 실패", description: error.message, variant: "destructive" });
     }
-  }, [user, toast, clearReadingsAndMessages]);
+  }, [user, savedReadings, tempMessages, toast, clearReadingsAndMessages]);
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
