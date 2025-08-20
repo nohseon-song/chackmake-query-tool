@@ -19,10 +19,11 @@ const Index = () => {
   return (
     <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''}`}>
       <ReportHeader
-        user={user}
-        isDark={isDark}
-        toggleTheme={toggleTheme}
-        handleSignOut={handleSignOut}
+        onPdfDownload={() => {}}
+        onGoogleDocsDownload={() => {}}
+        onDeleteAll={() => {}}
+        isDownloading={false}
+        isGoogleDocsDownloading={false}
       />
       <MainContent
         equipment={equipment}
@@ -40,14 +41,28 @@ const Index = () => {
         logs={logs}
         isWebhookReady={isWebhookReady} // [수정됨] 이 줄 추가
       />
-      <FloatingButtons onChatClick={() => setChatOpen(true)} />
+      <FloatingButtons 
+        isProcessing={isProcessing}
+        class2={class2}
+        onChatOpen={() => setChatOpen(true)}
+        onOCRResult={() => {}}
+        onAddLogEntry={() => {}}
+      />
       <ChatModal
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        messages={tempMessages}
-        onAddMessage={addTempMessage}
-        onUpdateMessage={updateTempMessage}
-        onDeleteMessage={deleteTempMessage}
+        onSendMessage={() => {}}
+        isDark={isDark}
+        tempMessages={tempMessages.map(m => m.content)}
+        onTempMessageAdd={addTempMessage}
+        onTempMessageUpdate={(index, content) => {
+          const msgId = tempMessages[index]?.id;
+          if (msgId) updateTempMessage(msgId, content);
+        }}
+        onTempMessageDelete={(index) => {
+          const msgId = tempMessages[index]?.id;
+          if (msgId) deleteTempMessage(msgId);
+        }}
       />
     </div>
   );

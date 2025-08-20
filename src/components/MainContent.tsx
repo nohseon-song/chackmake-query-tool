@@ -5,6 +5,7 @@ import ReadingsManagement from './ReadingsManagement';
 import ActionButtons from './ActionButtons';
 import LogDisplay from './LogDisplay';
 import { Reading, LogEntry } from '@/types';
+import { EQUIPMENT_TREE } from '@/constants/equipment';
 
 interface MainContentProps {
   equipment: string;
@@ -46,22 +47,43 @@ const MainContent: React.FC<MainContentProps> = ({
           <>
             <EquipmentSelection
               equipment={equipment}
-              setEquipment={setEquipment}
               class1={class1}
-              setClass1={setClass1}
               class2={class2}
-              setClass2={setClass2}
+              equipmentTree={EQUIPMENT_TREE}
+              onEquipmentChange={setEquipment}
+              onClass1Change={setClass1}
+              onClass2Change={setClass2}
+              onChatOpen={() => {}}
+              onOCRResult={() => {}}
+              onAddLogEntry={() => {}}
+              isDark={isDark}
             />
             {equipment && (
               <div className="mt-6">
                 <EquipmentCard
+                  name={equipment}
+                  isSelected={true}
+                  onClick={() => {}}
+                  isDark={isDark}
+                />
+                <ReadingsManagement
                   equipment={equipment}
                   class1={class1}
                   class2={class2}
-                />
-                <ReadingsManagement
+                  showInputs={true}
                   savedReadings={savedReadings}
-                  setSavedReadings={setSavedReadings}
+                  onSaveReading={(reading) => setSavedReadings([...savedReadings, reading])}
+                  onUpdateReading={(index, reading) => {
+                    const updated = [...savedReadings];
+                    updated[index] = reading;
+                    setSavedReadings(updated);
+                  }}
+                  onDeleteReading={(index) => {
+                    const filtered = savedReadings.filter((_, i) => i !== index);
+                    setSavedReadings(filtered);
+                  }}
+                  isDark={isDark}
+                  logs={logs}
                 />
               </div>
             )}
@@ -75,7 +97,7 @@ const MainContent: React.FC<MainContentProps> = ({
             />
           </>
         ) : (
-          <LogDisplay logs={logs} />
+          <LogDisplay logs={logs} isDark={isDark} />
         )}
       </div>
     </main>
