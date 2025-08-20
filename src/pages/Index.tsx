@@ -9,6 +9,7 @@ import ChatModal from '@/components/ChatModal';
 import { EQUIPMENT_TREE } from '@/constants/equipment';
 import { useAppState } from '@/hooks/useAppState';
 import { useReadings } from '@/hooks/useReadings';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { LogOut, User } from 'lucide-react';
 
@@ -20,13 +21,12 @@ const Index = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut, toast,
-    isWebhookReady // [수정] isWebhookReady 추가
+    handleSubmit, handleSignOut, toast
   } = useAppState();
 
   const {
     handleSaveReading, handleUpdateReading, handleDeleteReading,
-    handleDeleteLog, handleDownloadPdf, handleGoogleDocsExport
+    handleDeleteLog, handleDownloadPdf
   } = useReadings(logs, setLogs, savedReadings, setSavedReadings, equipment);
   
   const reportContentRef = useRef<HTMLDivElement>(null);
@@ -37,10 +37,17 @@ const Index = () => {
     }
   }, [user, isAuthLoading, navigate]);
 
+  // handleSubmit을 useAppState에서 직접 가져와 사용
+  const handleSubmission = async () => {
+    await handleSubmit();
+  };
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center"><p>사용자 정보를 불러오는 중입니다...</p></div>
+        <div className="text-center">
+          <p>사용자 정보를 불러오는 중입니다...</p>
+        </div>
       </div>
     );
   }
@@ -83,58 +90,64 @@ const Index = () => {
         tempMessagesCount={tempMessages.length}
         onEquipmentChange={handleEquipmentChange} onClass1Change={handleClass1Change} onClass2Change={setClass2}
         onSaveReading={handleSaveReading} onUpdateReading={handleUpdateReading} onDeleteReading={handleDeleteReading}
-        onSubmit={handleSubmit}
+        onSubmit={handleSubmission}
         onDeleteLog={handleDeleteLog}
         onDownloadPdf={() => handleDownloadPdf(reportContentRef.current)}
-        onGoogleDocsExport={handleGoogleDocsExport}
-        isWebhookReady={isWebhookReady}
-        reportContentRef={reportContentRef}
         onChatOpen={() => setChatOpen(true)}
-        onOCRResult={(result) => addTempMessage(result)}
-        onAddLogEntry={(tag, content) => {
-          const newLogEntry = {
-            id: Date.now().toString(),
-            tag,
-            content,
-            isResponse: false,
-            timestamp: Date.now()
-          };
-          setLogs(prev => [...prev, newLogEntry]);
+        onAddLogEntry={(tag: string, content: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag, 
+            content, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
         }}
       />
 
       <FloatingButtons 
-        isProcessing={isProcessing}
-        class2={class2}
+        isProcessing={isProcessing} 
+        class2={class2} 
         onChatOpen={() => setChatOpen(true)}
-        onOCRResult={(result) => addTempMessage(result)}
-        onAddLogEntry={(tag, content) => {
-          const newLogEntry = {
-            id: Date.now().toString(),
-            tag,
-            content,
-            isResponse: false,
-            timestamp: Date.now()
-          };
-          setLogs(prev => [...prev, newLogEntry]);
+        onOCRResult={(result: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag: 'OCR 결과', 
+            content: result, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
+        }}
+        onAddLogEntry={(tag: string, content: string) => {
+          setLogs(prev => [...prev, { 
+            id: Date.now().toString(), 
+            tag, 
+            content, 
+            isResponse: false, 
+            timestamp: Date.now() 
+          }]);
         }}
       />
       
       <ChatModal
         isOpen={chatOpen} 
         onClose={() => setChatOpen(false)}
+        onSendMessage={(message: string) => addTempMessage(message)}
         isDark={isDark}
         tempMessages={tempMessages.map(msg => msg.content)}
         onTempMessageAdd={addTempMessage}
-        onTempMessageUpdate={(index, newMessage) => {
+        onTempMessageUpdate={(index: number, newMessage: string) => {
           const messageId = tempMessages[index]?.id;
-          if (messageId) updateTempMessage(messageId, newMessage);
+          if (messageId) {
+            updateTempMessage(messageId, newMessage);
+          }
         }}
-        onTempMessageDelete={(index) => {
+        onTempMessageDelete={(index: number) => {
           const messageId = tempMessages[index]?.id;
-          if (messageId) deleteTempMessage(messageId);
+          if (messageId) {
+            deleteTempMessage(messageId);
+          }
         }}
-        onSendMessage={addTempMessage}
       />
     </div>
   );

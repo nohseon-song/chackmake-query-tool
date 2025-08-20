@@ -1,4 +1,3 @@
-// src/components/MainContent.tsx
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,7 +5,21 @@ import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
-import { Reading, LogEntry } from '@/types';
+interface Reading {
+  equipment: string;
+  class1: string;
+  class2: string;
+  design: string;
+  measure: string;
+}
+
+interface LogEntry {
+  id: string;
+  tag: string;
+  content: string;
+  isResponse?: boolean;
+  timestamp: number;
+}
 
 interface MainContentProps {
   equipment: string;
@@ -26,20 +39,32 @@ interface MainContentProps {
   onDeleteReading: (index: number) => void;
   onSubmit: () => void;
   onDeleteLog: (id: string) => void;
-  onDownloadPdf: () => void;
-  onGoogleDocsExport: () => void;
-  isWebhookReady: boolean;
-  reportContentRef: React.RefObject<HTMLDivElement>;
+  onDownloadPdf: (content: string) => void;
   onChatOpen: () => void;
-  onOCRResult: (result: string) => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
-  equipment, class1, class2, equipmentTree, savedReadings, logs, isProcessing, isDark,
-  tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change, onSaveReading,
-  onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf, onGoogleDocsExport,
-  isWebhookReady, reportContentRef, onChatOpen, onOCRResult, onAddLogEntry
+  equipment,
+  class1,
+  class2,
+  equipmentTree,
+  savedReadings,
+  logs,
+  isProcessing,
+  isDark,
+  tempMessagesCount,
+  onEquipmentChange,
+  onClass1Change,
+  onClass2Change,
+  onSaveReading,
+  onUpdateReading,
+  onDeleteReading,
+  onSubmit,
+  onDeleteLog,
+  onDownloadPdf,
+  onChatOpen,
+  onAddLogEntry
 }) => {
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
   const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
@@ -47,58 +72,53 @@ const MainContent: React.FC<MainContentProps> = ({
 
   return (
     <main className="flex-1 overflow-y-auto p-3 pb-24">
-      {!isProcessing ? (
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
-          <CardContent className="p-4 space-y-4">
-            <EquipmentSelection
-              equipment={equipment}
-              class1={class1}
-              class2={class2}
-              equipmentTree={equipmentTree}
-              onEquipmentChange={onEquipmentChange}
-              onClass1Change={onClass1Change}
-              onClass2Change={onClass2Change}
-              onChatOpen={onChatOpen}
-              onOCRResult={onOCRResult}
-              onAddLogEntry={onAddLogEntry}
-              isDark={isDark}
-            />
-
-            {showInputs && (
-              <ReadingsManagement
-                equipment={equipment}
-                class1={class1}
-                class2={class2}
-                showInputs={showInputs}
-                savedReadings={savedReadings}
-                onSaveReading={onSaveReading}
-                onUpdateReading={onUpdateReading}
-                onDeleteReading={onDeleteReading}
-                isDark={isDark}
-                logs={logs}
-              />
-            )}
-            
-            <ActionButtons
-              savedReadingsCount={savedReadings.length}
-              isProcessing={isProcessing}
-              onSubmit={onSubmit}
-              isDark={isDark}
-              tempMessagesCount={tempMessagesCount}
-              isWebhookReady={isWebhookReady}
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <div ref={reportContentRef}>
-          <LogDisplay
-            logs={logs}
-            isDark={isDark}
+      <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+        <CardContent className="p-4 space-y-4">
+          <EquipmentSelection
             equipment={equipment}
-            onDeleteLog={onDeleteLog}
+            class1={class1}
+            class2={class2}
+            equipmentTree={equipmentTree}
+            onEquipmentChange={onEquipmentChange}
+            onClass1Change={onClass1Change}
+            onClass2Change={onClass2Change}
+            onChatOpen={onChatOpen}
+            onOCRResult={() => {}}
+            onAddLogEntry={onAddLogEntry}
+            isDark={isDark}
           />
-        </div>
-      )}
+
+          <ReadingsManagement
+            equipment={equipment}
+            class1={class1}
+            class2={class2}
+            showInputs={showInputs}
+            savedReadings={savedReadings}
+            onSaveReading={onSaveReading}
+            onUpdateReading={onUpdateReading}
+            onDeleteReading={onDeleteReading}
+            isDark={isDark}
+            logs={logs}
+          />
+        </CardContent>
+      </Card>
+
+      <ActionButtons
+        savedReadingsCount={savedReadings.length}
+        isProcessing={isProcessing}
+        onSubmit={onSubmit}
+        isDark={isDark}
+        tempMessagesCount={tempMessagesCount}
+      />
+
+      <LogDisplay 
+        logs={logs} 
+        isDark={isDark} 
+        equipment={equipment}
+        onDeleteLog={onDeleteLog}
+        onDownloadPdf={onDownloadPdf}
+      />
+
     </main>
   );
 };
