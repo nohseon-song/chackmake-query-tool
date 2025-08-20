@@ -39,8 +39,9 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
   onChatOpen,
   isDark
 }) => {
-  const selectedEquipment = equipmentTree[equipment];
-  const selectedClass1 = selectedEquipment?.[class1];
+  // Add null checks to prevent undefined access
+  const selectedEquipment = equipmentTree && equipment ? equipmentTree[equipment] : undefined;
+  const selectedClass1 = selectedEquipment && class1 ? selectedEquipment[class1] : undefined;
 
   return (
     <>
