@@ -60,10 +60,9 @@ export const useAppState = () => {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const applyTheme = (matches: boolean) => {
-      setIsDark(matches);
-      document.documentElement.classList.toggle('dark', matches);
-    };
-    
+        setIsDark(matches);
+        document.documentElement.classList.toggle('dark', matches);
+    }
     applyTheme(mediaQuery.matches);
     const handler = (e: MediaQueryListEvent) => applyTheme(e.matches);
     mediaQuery.addEventListener('change', handler);
@@ -132,13 +131,7 @@ export const useAppState = () => {
     setTempMessages([]);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    setIsDark(prev => {
-      const newValue = !prev;
-      document.documentElement.classList.toggle('dark', newValue);
-      return newValue;
-    });
-  }, []);
+  const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
   const handleClass1Change = useCallback((value: string) => { setClass1(value); setClass2(''); }, []);
   const addTempMessage = useCallback((content: string) => { setTempMessages(prev => [...prev, { id: Date.now().toString(), content, timestamp: Date.now() }]); }, []);
@@ -193,6 +186,6 @@ export const useAppState = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut, toast,
+    handleSubmit, handleSignOut,
   };
 };
