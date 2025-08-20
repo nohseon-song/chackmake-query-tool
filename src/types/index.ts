@@ -19,6 +19,4 @@ export interface LogEntry {
   complementary_summary_html?: string;
   precision_verification_html?: string;
   final_summary_html?: string;
-  // Markdown 필드
-  markdown_content?: string;
 }

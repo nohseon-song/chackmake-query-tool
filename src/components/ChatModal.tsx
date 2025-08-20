@@ -65,11 +65,11 @@ const ChatModal: React.FC<ChatModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
-      <div className="bg-card border-border w-full max-h-[70%] rounded-t-2xl flex flex-col border-t">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-end">
+      <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} w-full max-h-[70%] rounded-t-2xl flex flex-col border-t`}>
         {/* Header with close button */}
-        <div className="flex justify-between items-center p-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">채팅</h3>
+        <div className={`flex justify-between items-center p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <h3 className="text-lg font-semibold">채팅</h3>
           <Button
             onClick={onClose}
             variant="ghost"
@@ -81,14 +81,16 @@ const ChatModal: React.FC<ChatModalProps> = ({
         </div>
         
         {/* 임시저장 영역 */}
-        <div className="p-3 border-b border-border bg-muted max-h-60 overflow-y-auto">
-          <h4 className="text-sm font-medium mb-2 text-muted-foreground">임시저장</h4>
+        <div className={`p-3 border-b ${isDark ? 'border-gray-700 bg-gray-700' : 'border-gray-200 bg-gray-50'} max-h-60 overflow-y-auto`}>
+          <h4 className="text-sm font-medium mb-2 text-gray-600 dark:text-gray-400">임시저장</h4>
           {tempMessages.length > 0 ? (
             <div className="space-y-2">
               {tempMessages.map((message, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center gap-2 p-2 rounded text-sm bg-card border border-border"
+                  className={`flex items-center gap-2 p-2 rounded text-sm ${
+                    isDark ? 'bg-gray-600' : 'bg-white'
+                  } border`}
                 >
                   {editingIndex === idx ? (
                     <>
@@ -109,7 +111,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
                         onClick={() => handleEditSave(idx)}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 flex-shrink-0"
+                        className="h-6 w-6 p-0 text-green-600 hover:text-green-700 flex-shrink-0"
                       >
                         <Check className="h-3 w-3" />
                       </Button>
@@ -117,19 +119,19 @@ const ChatModal: React.FC<ChatModalProps> = ({
                         onClick={handleEditCancel}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground flex-shrink-0"
+                        className="h-6 w-6 p-0 text-gray-600 hover:text-gray-700 flex-shrink-0"
                       >
                         <XIcon className="h-3 w-3" />
                       </Button>
                     </>
                   ) : (
                     <>
-                      <span className="flex-1 break-words pr-2 text-foreground">{message}</span>
+                      <span className="flex-1 break-words pr-2">{message}</span>
                       <Button
                         onClick={() => handleEditStart(idx, message)}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-primary hover:text-primary/80 flex-shrink-0"
+                        className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 flex-shrink-0"
                       >
                         <Edit3 className="h-3 w-3" />
                       </Button>
@@ -137,7 +139,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
                         onClick={() => onTempMessageDelete(idx)}
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0 text-destructive hover:text-destructive/80 flex-shrink-0"
+                        className="h-6 w-6 p-0 text-red-600 hover:text-red-700 flex-shrink-0"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -147,7 +149,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
               ))}
             </div>
           ) : (
-            <div className="text-center text-muted-foreground text-sm py-4">
+            <div className="text-center text-gray-500 text-sm py-4">
               임시저장된 메시지가 없습니다.
             </div>
           )}
@@ -155,7 +157,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
         
         {/* 메인 콘텐츠 영역 */}
         <div className="flex-1 overflow-y-auto p-3">
-          <div className="text-center text-muted-foreground text-sm">
+          <div className="text-center text-gray-500 text-sm">
             메시지를 입력하고 전송 버튼을 클릭하면 임시저장됩니다.
             <br />
             임시저장된 메시지는 편집 버튼을 클릭하여 수정할 수 있습니다.
@@ -165,7 +167,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
         </div>
         
         {/* Input form */}
-        <form onSubmit={handleSubmit} className="flex p-3 border-t border-border">
+        <form onSubmit={handleSubmit} className={`flex p-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
           <Input
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}

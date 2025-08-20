@@ -1,25 +1,4 @@
-# supabase/config.toml
-
 project_id = "rigbiqjmszdlacjdkhep"
-[api]
-  port = 54321
-  schemas = ["public", "storage", "graphql"]
-  extra_search_path = ["public"]
-  max_rows = 1000
-
-[db]
-  port = 54322
-  major_version = 15
-
-[studio]
-  port = 54323
-
-[auth]
-  enable_signup = true
-  email_signin_enabled = true
-  password_min_length = 8
-  # 여기에 필요한 다른 auth 설정을 추가할 수 있어
-
 # [send-webhook-to-make] 함수의 타임아웃을 900초(15분)로 설정
 [functions.send-webhook-to-make]
   timeout_secs = 900
