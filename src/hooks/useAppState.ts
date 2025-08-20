@@ -41,10 +41,16 @@ export const useAppState = () => {
 
   // [추가] Lovable Webhook 객체를 저장하기 위한 ref
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
-  // Lovable SDK 안전 대기 유틸 (최대 15초, 더 안정적)
+  
+  // =================================================================
+  // [수정된 부분] Lovable SDK 대기 로직 (더욱 안정적으로 변경)
+  // =================================================================
   const waitForLovableSDK = useCallback(async (): Promise<boolean> => {
     console.log('Lovable SDK 로딩 대기 시작...');
-    const maxWaitTime = 3000; // 3초로 단축하여 빠르게 폴백
+    
+    // 이 값을 15초로 넉넉하게 변경하여 안정성을 확보한다.
+    const maxWaitTime = 15000; 
+    
     const checkInterval = 200; // 200ms 간격
     const startTime = Date.now();
     
@@ -71,6 +77,7 @@ export const useAppState = () => {
       checkSDK();
     });
   }, []);
+  // =================================================================
 
   useEffect(() => {
     const getSession = async () => {
