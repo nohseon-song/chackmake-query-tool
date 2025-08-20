@@ -124,7 +124,13 @@ export const useAppState = () => {
     setTempMessages([]);
   }, []);
 
-  const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
+  const toggleTheme = useCallback(() => {
+    setIsDark(prev => {
+      const newDarkMode = !prev;
+      document.documentElement.classList.toggle('dark', newDarkMode);
+      return newDarkMode;
+    });
+  }, []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
   const handleClass1Change = useCallback((value: string) => { setClass1(value); setClass2(''); }, []);
   const addTempMessage = useCallback((content: string) => { setTempMessages(prev => [...prev, { id: Date.now().toString(), content, timestamp: Date.now() }]); }, []);
