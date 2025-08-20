@@ -1,87 +1,98 @@
 // src/components/MainContent.tsx
 
 import React from 'react';
-import EquipmentSelection from './EquipmentSelection';
-import EquipmentCard from './EquipmentCard';
-import ReadingsManagement from './ReadingsManagement';
-import ActionButtons from './ActionButtons';
-import LogDisplay from './LogDisplay';
+import { Card, CardContent } from '@/components/ui/card';
+import EquipmentSelection from '@/components/EquipmentSelection';
+import ReadingsManagement from '@/components/ReadingsManagement';
+import ActionButtons from '@/components/ActionButtons';
+import LogDisplay from '@/components/LogDisplay';
 import { Reading, LogEntry } from '@/types';
 
 interface MainContentProps {
   equipment: string;
-  setEquipment: (value: string) => void;
   class1: string;
-  setClass1: (value: string) => void;
   class2: string;
-  setClass2: (value: string) => void;
+  equipmentTree: Record<string, any>;
   savedReadings: Reading[];
-  setSavedReadings: (readings: Reading[]) => void;
+  logs: LogEntry[];
   isProcessing: boolean;
-  handleSubmit: () => void;
   isDark: boolean;
   tempMessagesCount: number;
-  logs: LogEntry[];
-  isWebhookReady: boolean;
+  onEquipmentChange: (value: string) => void;
+  onClass1Change: (value: string) => void;
+  onClass2Change: (value: string) => void;
+  onSaveReading: (reading: Reading) => void;
+  onUpdateReading: (index: number, reading: Reading) => void;
+  onDeleteReading: (index: number) => void;
+  onSubmit: () => void;
+  onDeleteLog: (id: string) => void;
+  onDownloadPdf: () => void;
+  onGoogleDocsExport: () => void;
+  isWebhookReady: boolean; // [수정] isWebhookReady 추가
+  reportContentRef: React.RefObject<HTMLDivElement>;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
-  equipment,
-  setEquipment,
-  class1,
-  setClass1,
-  class2,
-  setClass2,
-  savedReadings,
-  setSavedReadings,
-  isProcessing,
-  handleSubmit,
-  isDark,
-  tempMessagesCount,
-  logs,
-  isWebhookReady,
+  equipment, class1, class2, equipmentTree, savedReadings, logs, isProcessing, isDark,
+  tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change, onSaveReading,
+  onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf, onGoogleDocsExport,
+  isWebhookReady, reportContentRef // [수정] isWebhookReady 받기
 }) => {
+  const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
+  const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
+  const showInputs = class2 && selectedClass1;
+
   return (
-    <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
-        {!isProcessing ? (
-          <>
+    <main className="flex-1 overflow-y-auto p-3 pb-24">
+      {!isProcessing ? (
+        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+          <CardContent className="p-4 space-y-4">
             <EquipmentSelection
               equipment={equipment}
-              onEquipmentChange={(value) => { setEquipment(value); setClass1(''); setClass2(''); }}
               class1={class1}
-              onClass1Change={(value) => { setClass1(value); setClass2(''); }}
               class2={class2}
-              onClass2Change={setClass2}
+              equipmentTree={equipmentTree}
+              onEquipmentChange={onEquipmentChange}
+              onClass1Change={onClass1Change}
+              onClass2Change={onClass2Change}
+              isDark={isDark}
             />
-            
-            {equipment && (
-              <div className="mt-6">
-                <EquipmentCard
-                  equipment={equipment}
-                  class1={class1}
-                  class2={class2}
-                />
-                <ReadingsManagement
-                  savedReadings={savedReadings}
-                  setSavedReadings={setSavedReadings}
-                />
-              </div>
+
+            {showInputs && (
+              <ReadingsManagement
+                equipment={equipment}
+                class1={class1}
+                class2={class2}
+                savedReadings={savedReadings}
+                onSaveReading={onSaveReading}
+                onUpdateReading={onUpdateReading}
+                onDeleteReading={onDeleteReading}
+                isDark={isDark}
+              />
             )}
             
             <ActionButtons
               savedReadingsCount={savedReadings.length}
               isProcessing={isProcessing}
-              onSubmit={handleSubmit}
+              onSubmit={onSubmit}
               isDark={isDark}
-              tempMessagesCount={tempMessagesCount}
-              isWebhookReady={isWebhookReady}
+              tempMessagesCount={tempMessages.length}
+              isWebhookReady={isWebhookReady} // [수정] isWebhookReady 전달
             />
-          </>
-        ) : (
-          <LogDisplay logs={logs} />
-        )}
-      </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div ref={reportContentRef}>
+          <LogDisplay
+            logs={logs}
+            isDark={isDark}
+            equipment={equipment}
+            onDeleteLog={onDeleteLog}
+            onDownloadPdf={onDownloadPdf}
+            onGoogleDocsExport={onGoogleDocsExport}
+          />
+        </div>
+      )}
     </main>
   );
 };
