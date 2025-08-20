@@ -41,6 +41,14 @@ export const useAppState = () => {
 
   // [추가] Lovable Webhook 객체를 저장하기 위한 ref
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
+  // [추가] Lovable 객체 로드 대기 유틸 (최대 6초 대기)
+  const waitForLovable = useCallback(async (timeoutMs = 6000, intervalMs = 150): Promise<void> => {
+    const start = Date.now();
+    while (!(window.lovable && typeof window.lovable.createWebhook === 'function')) {
+      if (Date.now() - start > timeoutMs) throw new Error('Lovable SDK가 준비되지 않았습니다.');
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }, []);
 
   useEffect(() => {
     const getSession = async () => {
@@ -66,14 +74,16 @@ export const useAppState = () => {
   }, []);
 
   // [추가] 앱이 시작될 때 Lovable Webhook을 생성하고, 결과를 수신하는 로직
-  const createNewWebhook = useCallback(() => {
-    if (window.lovable && typeof window.lovable.createWebhook === 'function') {
-      webhookRef.current?.close(); // 만약 기존 웹훅이 있다면 정리
+  const createNewWebhook = useCallback(async (): Promise<string | null> => {
+    try {
+      await waitForLovable();
+      // 기존 웹훅이 있으면 정리 후 새로 생성
+      webhookRef.current?.close();
 
-      window.lovable.createWebhook((data) => {
+      const createdWebhook = await window.lovable.createWebhook((data) => {
         console.log('Lovable Webhook을 통해 데이터 수신:', data);
         const newResult = data;
-        
+
         setLogs(prevLogs => {
           const newLogEntry: LogEntry = {
             id: uuidv4(),
@@ -88,17 +98,20 @@ export const useAppState = () => {
         if (newResult.is_final) {
           setIsProcessing(false);
           toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
-          createNewWebhook(); // 작업 완료 후 다음 작업을 위해 새 웹훅 생성
+          // 다음 작업을 위해 새 웹훅을 미리 준비
+          createNewWebhook();
         }
-      }).then(createdWebhook => {
-        console.log("새로운 Webhook 생성 성공:", createdWebhook.url);
-        webhookRef.current = createdWebhook;
-      }).catch(err => {
-        console.error("Webhook 생성 실패:", err);
-        toast({ title: "❌ 채널 생성 실패", description: "결과 수신 채널 생성에 실패했습니다. 새로고침 해주세요.", variant: "destructive" });
       });
+
+      console.log("새로운 Webhook 생성 성공:", createdWebhook.url);
+      webhookRef.current = createdWebhook;
+      return createdWebhook.url;
+    } catch (err) {
+      console.error("Webhook 생성 실패:", err);
+      toast({ title: "❌ 채널 생성 실패", description: "결과 수신 채널 생성에 실패했습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
+      return null;
     }
-  }, [toast]);
+  }, [toast, waitForLovable]);
 
   // [추가] 앱이 로드될 때 웹훅을 생성하도록 함
   useEffect(() => {
@@ -113,30 +126,33 @@ export const useAppState = () => {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
     }
-    
-    // [추가] 전송 직전에 웹훅 주소가 성공적으로 만들어졌는지 확인
+
+    // 전송 직전에 웹훅 주소가 성공적으로 만들어졌는지 확인하고, 없으면 즉시 생성 시도
     if (!webhookRef.current?.url) {
-      toast({ title: "준비 오류", description: "결과를 수신할 주소가 준비되지 않았습니다. 잠시 후 다시 시도하거나 새로고침 해주세요.", variant: "destructive" });
-      return;
+      const url = await createNewWebhook();
+      if (!url) {
+        toast({ title: "준비 오류", description: "결과를 수신할 주소가 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
+        return;
+      }
     }
-    
+
     setIsProcessing(true);
     setLogs([]);
-    
+
     try {
-      // [수정] payload에 'delivery_webhook_url'을 담아서 보냄
+      // payload에 'delivery_webhook_url'을 담아서 보냄
       const payload = {
         readings: savedReadings,
         messages: tempMessages.map(m => m.content),
         user_id: user.id,
         timestamp: new Date().toISOString(),
         request_id: uuidv4(),
-        delivery_webhook_url: webhookRef.current.url, // 핵심: 생성된 주소를 함께 보냄
+        delivery_webhook_url: webhookRef.current!.url,
       };
-      
+
       const { error } = await supabase.functions.invoke('send-webhook-to-make', { body: payload });
       if (error) throw error;
-      
+
       toast({ title: "진단 시작됨", description: "데이터를 서버로 전송했습니다." });
       setSavedReadings([]);
       setTempMessages([]);
@@ -145,7 +161,7 @@ export const useAppState = () => {
       setIsProcessing(false);
       toast({ title: "전송 실패", description: error.message, variant: "destructive" });
     }
-  }, [user, savedReadings, tempMessages, toast]);
+  }, [user, savedReadings, tempMessages, toast, createNewWebhook]);
 
   const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
@@ -161,6 +177,6 @@ export const useAppState = () => {
     isProcessing, tempMessages, setTempMessages,
     toggleTheme, handleEquipmentChange, handleClass1Change,
     addTempMessage, updateTempMessage, deleteTempMessage,
-    handleSubmit, handleSignOut,
+    handleSubmit, handleSignOut, toast,
   };
 };
