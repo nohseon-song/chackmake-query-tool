@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { buildMarkdownFromData } from '@/utils/markdownTransform';
+import { generateMarkdownReport } from '@/utils/markdownUtils';
 
 // [추가] Lovable Webhook 타입을 사용하기 위한 정의
 declare global {
@@ -194,10 +195,15 @@ export const useAppState = () => {
     setLogs([]);
 
     try {
-      // payload에 'delivery_webhook_url'은 있을 때만 포함합니다.
+      // 1. Generate the final Markdown content
+      const markdownContent = generateMarkdownReport(
+        savedReadings, 
+        tempMessages.map(m => m.content)
+      );
+
+      // 2. Create the new, simplified payload
       const payload: any = {
-        readings: savedReadings,
-        messages: tempMessages.map(m => m.content),
+        content: markdownContent, // Send the formatted Markdown string
         user_id: user.id,
         timestamp: new Date().toISOString(),
         request_id: uuidv4(),
