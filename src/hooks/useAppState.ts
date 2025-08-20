@@ -7,6 +7,7 @@ import { LogEntry, Reading } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import { buildMarkdownFromData } from '@/utils/markdownTransform';
 
 // [추가] Lovable Webhook 타입을 사용하기 위한 정의
 declare global {
@@ -204,6 +205,19 @@ export const useAppState = () => {
       if (deliveryUrl) {
         payload.delivery_webhook_url = deliveryUrl;
       }
+
+      // 로컬에서 바로 Markdown으로 요약 미리보기 생성 (입력 구조 변경 없음)
+      const markdownPreview = buildMarkdownFromData(savedReadings, tempMessages.map(m => m.content));
+      setLogs(prev => [
+        ...prev,
+        {
+          id: uuidv4(),
+          tag: '🧩 데이터 요약 (Markdown)',
+          content: '',
+          markdown_content: markdownPreview,
+          timestamp: Date.now(),
+        },
+      ]);
 
       console.log('📤 서버로 데이터 전송 중...', { 
         readingsCount: savedReadings.length, 
