@@ -10,10 +10,11 @@ export const sendWebhookRequest = async (payload: any): Promise<string> => {
   }
 
   const requestId = uuidv4();
+  // 여기서 request_id만 추가하고, organization_id는 더 이상 추가하지 않습니다.
   const payloadWithId = { ...payload, request_id: requestId };
 
   console.log('Sending webhook request with ID:', requestId);
-  console.log('Payload:', payloadWithId);
+  console.log('Final Payload:', payloadWithId);
 
   // Supabase Edge Function을 직접 호출
   const { data, error } = await supabase.functions.invoke('send-webhook-to-make', {
@@ -22,7 +23,9 @@ export const sendWebhookRequest = async (payload: any): Promise<string> => {
 
   if (error) {
     console.error('Webhook error:', error);
-    throw new Error(`서버 응답 오류: ${error.message}`);
+    // Edge Function에서 반환된 구체적인 에러 메시지를 포함하도록 수정
+    const errorMessage = data?.error || error.message;
+    throw new Error(`서버 응답 오류: ${errorMessage}`);
   }
 
   console.log('Webhook response:', data);
