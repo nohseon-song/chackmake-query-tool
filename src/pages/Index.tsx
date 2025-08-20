@@ -26,40 +26,31 @@ const Index = () => {
 
   const {
     handleSaveReading, handleUpdateReading, handleDeleteReading,
-    handleDeleteLog, handleDownloadPdf, handleGoogleDocsExport
+    handleDeleteLog, handleDownloadPdf
   } = useReadings(logs, setLogs, savedReadings, setSavedReadings, equipment);
   
   const reportContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isAuthLoading && !user) navigate('/auth');
+    if (!isAuthLoading && !user) {
+      navigate('/auth');
+    }
   }, [user, isAuthLoading, navigate]);
 
+  // handleSubmit을 useAppState에서 직접 가져와 사용
   const handleSubmission = async () => {
-    if (savedReadings.length === 0 && tempMessages.length === 0) {
-      toast({ title: "데이터 없음", description: "저장된 측정값이나 메시지가 없습니다.", variant: "destructive" });
-      return;
-    }
-    if (!user) {
-      toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
-      return;
-    }
-    const { data: profile, error } = await supabase.from('user_profiles').select('organization_id').eq('id', user.id).single();
-    if (error || !profile) {
-      toast({ title: "오류", description: "사용자 프로필을 찾을 수 없습니다.", variant: "destructive" });
-      return;
-    }
-    const payload = {
-      timestamp: Date.now(),
-      user_id: user.id,
-      organization_id: profile.organization_id,
-      readings: savedReadings,
-      messages: tempMessages,
-    };
-    await handleSubmit(payload);
+    await handleSubmit();
   };
 
-  if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center">로딩 중...</div>;
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p>사용자 정보를 불러오는 중입니다...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
