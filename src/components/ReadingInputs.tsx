@@ -76,7 +76,7 @@ const ReadingInputs: React.FC<ReadingInputsProps> = ({
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="design" className="text-base font-semibold text-foreground mb-2 block">
+        <Label htmlFor="design" className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
           📐 설계값 입력
         </Label>
         <Input
@@ -84,11 +84,11 @@ const ReadingInputs: React.FC<ReadingInputsProps> = ({
           value={design}
           onChange={(e) => setDesign(e.target.value)}
           placeholder="설계값"
-          className="bg-input"
+          className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
         />
       </div>
       <div>
-        <Label htmlFor="measure" className="text-base font-semibold text-foreground mb-2 block">
+        <Label htmlFor="measure" className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
           📏 측정값 입력
         </Label>
         <Input
@@ -96,7 +96,7 @@ const ReadingInputs: React.FC<ReadingInputsProps> = ({
           value={measure}
           onChange={(e) => setMeasure(e.target.value)}
           placeholder="측정값"
-          className="bg-input"
+          className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
         />
       </div>
       <div className="flex gap-2 justify-end">

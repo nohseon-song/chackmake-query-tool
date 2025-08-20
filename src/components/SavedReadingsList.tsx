@@ -65,12 +65,12 @@ const SavedReadingsList: React.FC<SavedReadingsListProps> = ({
   if (savedReadings.length === 0) return null;
 
   return (
-    <div className="bg-muted rounded-lg p-4 text-base space-y-3">
+    <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4 text-base space-y-3`}>
       {savedReadings.map((reading, idx) => (
-        <div key={idx} className="bg-card rounded-lg p-3 border">
+        <div key={idx} className={`${isDark ? 'bg-gray-600' : 'bg-white'} rounded-lg p-3 border`}>
           {editingIndex === idx ? (
             <div className="space-y-3">
-              <div className="text-sm font-medium text-muted-foreground">
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 {idx + 1}. [{reading.equipment}{'>'}{reading.class1}{'>'}{reading.class2}]
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -79,7 +79,7 @@ const SavedReadingsList: React.FC<SavedReadingsListProps> = ({
                   <Input
                     value={editingReading?.design || ''}
                     onChange={(e) => setEditingReading(prev => prev ? {...prev, design: e.target.value} : null)}
-                    className="bg-input"
+                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
                   />
                 </div>
                 <div>
@@ -87,7 +87,7 @@ const SavedReadingsList: React.FC<SavedReadingsListProps> = ({
                   <Input
                     value={editingReading?.measure || ''}
                     onChange={(e) => setEditingReading(prev => prev ? {...prev, measure: e.target.value} : null)}
-                    className="bg-input"
+                    className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}
                   />
                 </div>
               </div>
@@ -118,7 +118,7 @@ const SavedReadingsList: React.FC<SavedReadingsListProps> = ({
                 <div className="font-medium">
                   {idx + 1}. [{reading.equipment}{'>'}{reading.class1}{'>'}{reading.class2}]
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   설계: {reading.design} / 측정: {reading.measure}
                 </div>
               </div>
