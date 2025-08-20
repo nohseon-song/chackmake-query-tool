@@ -17,7 +17,7 @@ interface TempMessage {
 export const useAppState = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  
+
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDark, setIsDark] = useState(false);
@@ -99,7 +99,7 @@ export const useAppState = () => {
           toast({ title: "❌ 실시간 연결 실패", description: `결과를 받아올 수 없습니다: ${err.message}`, variant: "destructive" });
         }
       });
-      
+
     return () => { 
       supabase.removeChannel(channel); 
     };
@@ -137,19 +137,20 @@ export const useAppState = () => {
       toast({ title: "인증 오류", description: "로그인이 필요합니다.", variant: "destructive" });
       return;
     }
-    
+
     setIsProcessing(true);
     setLogs([]);
-    
+
     try {
-      // payload를 여기서 직접 생성
+      // 이제 organization_id를 여기서 보내지 않습니다.
+      // Edge Function이 user_id를 기반으로 직접 조회합니다.
       const payload = {
         readings: savedReadings,
         messages: tempMessages.map(m => m.content),
-        user_id: user.id,
+        user_id: user.id, // user_id만 전달
         timestamp: new Date().toISOString(),
       };
-      
+
       const requestId = await sendWebhookRequest(payload);
       setCurrentRequestId(requestId);
       toast({ title: "진단 시작됨", description: "데이터를 서버로 전송했습니다." });
