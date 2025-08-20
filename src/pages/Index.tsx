@@ -1,6 +1,6 @@
 // src/pages/Index.tsx
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ThemeToggle from '@/components/ThemeToggle';
 import MainContent from '@/components/MainContent';
@@ -27,7 +27,9 @@ const Index = () => {
   const {
     handleSaveReading, handleUpdateReading, handleDeleteReading,
     handleDeleteLog, handleDownloadPdf, handleGoogleDocsExport
-  } = useReadings(savedReadings, setSavedReadings, logs, setLogs, equipment);
+  } = useReadings(logs, setLogs, savedReadings, setSavedReadings, equipment);
+  
+  const reportContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isAuthLoading && !user) navigate('/auth');
@@ -91,6 +93,7 @@ const Index = () => {
       </header>
       
       <MainContent
+        ref={reportContentRef}
         equipment={equipment} class1={class1} class2={class2}
         equipmentTree={EQUIPMENT_TREE} savedReadings={savedReadings}
         logs={logs} isProcessing={isProcessing} isDark={isDark}
@@ -99,7 +102,7 @@ const Index = () => {
         onSaveReading={handleSaveReading} onUpdateReading={handleUpdateReading} onDeleteReading={handleDeleteReading}
         onSubmit={handleSubmission}
         onDeleteLog={handleDeleteLog}
-        onDownloadPdf={handleDownloadPdf}
+        onDownloadPdf={() => handleDownloadPdf(reportContentRef.current)}
         onGoogleDocsExport={handleGoogleDocsExport}
         onChatOpen={() => setChatOpen(true)}
       />
