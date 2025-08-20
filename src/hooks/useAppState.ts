@@ -141,11 +141,17 @@ export const useAppState = () => {
     setLogs([]);
     
     try {
+      // 여기에 delivery_webhook_url을 추가하는 부분이 들어갈 거야.
       const payload = {
         readings: savedReadings,
         messages: tempMessages.map(m => m.content),
         user_id: user.id,
         timestamp: new Date().toISOString(),
+        // Make.com이 처리 완료 후 결과를 다시 받을 URL을 여기에 추가
+        // 이 URL은 네 앱의 백엔드에서 Make.com의 응답을 처리할 수 있는 유효한 엔드포인트여야 해.
+        // TODO: 실제 앱의 콜백 URL로 변경해야 합니다. 
+        // 예시: "https://your-app-domain.com/api/makecom-callback"
+        delivery_webhook_url: `${window.location.origin}/api/makecom-callback`, // 현재 앱의 도메인을 기반으로 콜백 URL 생성
       };
       
       const requestId = await sendWebhookRequest(payload);
