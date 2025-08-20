@@ -31,7 +31,7 @@ const ReadingsManagement: React.FC<ReadingsManagementProps> = ({
 }) => {
   return (
     <>
-      {showInputs && (
+      {showInputs && equipment && class1 && class2 && (
         <ReadingInputs
           equipment={equipment}
           class1={class1}
