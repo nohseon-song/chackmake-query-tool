@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Loader2, Wand2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 
 interface ActionButtonsProps {
   savedReadingsCount: number;
@@ -8,7 +8,7 @@ interface ActionButtonsProps {
   onSubmit: () => void;
   isDark: boolean;
   tempMessagesCount: number;
-  isWebhookReady: boolean; // [수정됨] 이 줄 추가
+  isWebhookReady: boolean; // 웹훅 준비 상태를 받도록 추가
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = ({
@@ -17,44 +17,84 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
   onSubmit,
   isDark,
   tempMessagesCount,
-  isWebhookReady, // [수정됨] 이 줄 추가
+  isWebhookReady, // 웹훅 준비 상태 받기
 }) => {
   const hasDataToSubmit = savedReadingsCount > 0 || tempMessagesCount > 0;
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState('');
+
+  const steps = [
+    '데이터 준비 중...',
+    '전문가 시스템 연결 중...',
+    '기술 분석 진행 중...',
+    '진단 결과 생성 중...',
+    '최종 검토 중...'
+  ];
 
   useEffect(() => {
-    if (!hasDataToSubmit && !isProcessing) {
-      const timer = setTimeout(() => setShowTooltip(true), 1000);
-      return () => clearTimeout(timer);
+    if (isProcessing) {
+      setProgress(0);
+      setCurrentStep(steps[0]);
+      
+      const interval = setInterval(() => {
+        setProgress(prev => {
+          const newProgress = Math.min(prev + Math.random() * 8 + 2, 95);
+          
+          if (newProgress < 20) setCurrentStep(steps[0]);
+          else if (newProgress < 40) setCurrentStep(steps[1]);
+          else if (newProgress < 60) setCurrentStep(steps[2]);
+          else if (newProgress < 80) setCurrentStep(steps[3]);
+          else setCurrentStep(steps[4]);
+          
+          return newProgress;
+        });
+      }, 300);
+
+      return () => clearInterval(interval);
     } else {
-      setShowTooltip(false);
+      setProgress(0);
+      setCurrentStep('');
     }
-  }, [hasDataToSubmit, isProcessing]);
+  }, [isProcessing]);
 
   const getButtonText = () => {
-    if (isProcessing) return "분석 중...";
-    if (!isWebhookReady) return "채널 준비 중..."; // [수정됨] 준비 중 텍스트 추가
+    if (isProcessing) return `처리 중... ${Math.round(progress)}%`;
+    if (!isWebhookReady) return "채널 준비 중...";
     return "전문 기술검토 및 진단 받기";
   };
-
+  
   return (
-    <div className="mt-4 relative">
+    <div className="mt-4">
       <Button
         onClick={onSubmit}
-        disabled={!hasDataToSubmit || isProcessing || !isWebhookReady} // [수정됨] disabled 조건에 !isWebhookReady 추가
-        className="w-full text-lg py-6 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={!hasDataToSubmit || isProcessing || !isWebhookReady} // 비활성화 조건 추가
+        className="w-full bg-primary hover:bg-primary/80 text-primary-foreground py-3 rounded-full transition-all duration-300 border-2 border-primary font-semibold shadow-lg"
       >
-        {isProcessing || !isWebhookReady ? (
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        ) : (
-          <Wand2 className="mr-2 h-5 w-5" />
+        {isProcessing && (
+          <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
         )}
         {getButtonText()}
       </Button>
-      {showTooltip && (
-        <div className={`absolute bottom-full mb-2 w-full text-center text-sm p-2 rounded-md ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-black'}`}>
-          계측값을 추가하거나 간단한 메모를 작성하여 진단을 시작하세요.
+      
+      {isProcessing && (
+        <div className="mt-3 space-y-2">
+          <Progress value={progress} className="w-full h-2" />
+          <p className="text-sm text-muted-foreground text-center animate-pulse">
+            {currentStep}
+          </p>
         </div>
+      )}
+      
+      {!isProcessing && !hasDataToSubmit && (
+         <p className="text-xs text-muted-foreground mt-2 text-center">
+           계측값을 추가하거나 간단한 메모를 작성하여 진단을 시작하세요.
+         </p>
+      )}
+
+      {tempMessagesCount > 0 && !isProcessing && (
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          임시저장된 메시지 {tempMessagesCount}개가 함께 전송됩니다.
+        </p>
       )}
     </div>
   );
