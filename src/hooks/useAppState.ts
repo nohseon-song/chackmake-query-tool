@@ -24,12 +24,6 @@ export const useAppState = () => {
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const addLogEntry = useCallback((tag: string, content: any, isResponse = false) => {
-    const contentString = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-    const logEntry: LogEntry = { id: Date.now().toString(), tag, content: contentString, isResponse, timestamp: Date.now() };
-    setLogs(prev => [...prev, logEntry]);
-  }, []);
-
   const clearAllInputs = useCallback(() => {
     setSavedReadings([]);
     setTempMessages([]);
@@ -56,14 +50,26 @@ export const useAppState = () => {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'diagnosis_results', filter: `request_id=eq.${currentRequestId}` },
         (payload) => {
           const newResult = payload.new as any;
+          
+          // ⭐️ '기억력 좋은 점원' 로직: setLogs의 함수형 업데이트를 사용합니다.
+          // 이렇게 하면 항상 최신 'logs' 장바구니에 새 아이템을 추가하게 됩니다.
+          setLogs(prevLogs => {
+            const contentString = typeof newResult.content === 'string' ? newResult.content : JSON.stringify(newResult.content, null, 2);
+            const newLogEntry: LogEntry = {
+              id: Date.now().toString(),
+              tag: newResult.is_final ? '📥 최종 보고서' : `📥 ${newResult.step_name}`,
+              content: contentString,
+              isResponse: newResult.is_final,
+              timestamp: Date.now()
+            };
+            return [...prevLogs, newLogEntry];
+          });
+
           if (newResult.is_final) {
-            addLogEntry('📥 최종 보고서', newResult.content, true);
             setIsProcessing(false);
             toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
             setCurrentRequestId(null);
             clearAllInputs();
-          } else {
-            addLogEntry(`📥 ${newResult.step_name}`, newResult.content);
           }
         }
       )
@@ -74,7 +80,7 @@ export const useAppState = () => {
         }
       });
     return () => { supabase.removeChannel(channel); };
-  }, [currentRequestId, addLogEntry, toast, clearAllInputs]);
+  }, [currentRequestId, toast, clearAllInputs]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -94,10 +100,16 @@ export const useAppState = () => {
     try {
       const requestId = await sendWebhookRequest(payload);
       setCurrentRequestId(requestId);
-      addLogEntry('📤 전송 시작', { ...payload, request_id: requestId });
+      setLogs([{
+          id: Date.now().toString(),
+          tag: '📤 전송 시작',
+          content: JSON.stringify({ ...payload, request_id: requestId }, null, 2),
+          isResponse: false,
+          timestamp: Date.now()
+      }]);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
-      addLogEntry('⚠️ 전송 오류', errorMessage);
+      setLogs(prev => [...prev, { id: Date.now().toString(), tag: '⚠️ 전송 오류', content: errorMessage, isResponse: false, timestamp: Date.now() }]);
       toast({ title: "❌ 전송 실패", description: errorMessage, variant: "destructive" });
       setIsProcessing(false);
     }
