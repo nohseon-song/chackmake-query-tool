@@ -1,16 +1,15 @@
 // src/hooks/useAppState.ts
 
-import { useState, useEffect, useCallback, useRef } from 'react'; // useRef 추가
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
 import { LogEntry, Reading } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
-import { buildMarkdownFromData } from '@/utils/markdownTransform';
-import { generateMarkdownReport } from '@/utils/markdownUtils';
+// [수정 1] 방금 만든 마크다운 변환 유틸리티를 가져온다.
+import { generateMarkdownReport } from '@/utils/markdownUtils'; 
 
-// [추가] Lovable Webhook 타입을 사용하기 위한 정의
 declare global {
   interface Window {
     lovable: {
@@ -41,19 +40,12 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [tempMessages, setTempMessages] = useState<TempMessage[]>([]);
 
-  // [추가] Lovable Webhook 객체를 저장하기 위한 ref
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
-  
-  // =================================================================
-  // [수정된 부분] Lovable SDK 대기 로직 (더욱 안정적으로 변경)
-  // =================================================================
+
   const waitForLovableSDK = useCallback(async (): Promise<boolean> => {
     console.log('Lovable SDK 로딩 대기 시작...');
-    
-    // 이 값을 15초로 넉넉하게 변경하여 안정성을 확보한다.
-    const maxWaitTime = 15000; 
-    
-    const checkInterval = 200; // 200ms 간격
+    const maxWaitTime = 15000;
+    const checkInterval = 200;
     const startTime = Date.now();
     
     return new Promise((resolve) => {
@@ -75,11 +67,9 @@ export const useAppState = () => {
         
         setTimeout(checkSDK, checkInterval);
       };
-      
       checkSDK();
     });
   }, []);
-  // =================================================================
 
   useEffect(() => {
     const getSession = async () => {
@@ -104,71 +94,48 @@ export const useAppState = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // 필요 시점에 웹훅 생성하는 함수
   const createWebhookOnDemand = useCallback(async (): Promise<string | null> => {
     console.log('📡 웹훅 생성 요청됨');
-    
     try {
       const sdkReady = await waitForLovableSDK();
       if (!sdkReady) {
         console.warn('⚠️ Lovable SDK 미탑재 - 스트리밍 없이 진행합니다.');
-        toast({ 
-          title: "스트리밍 업데이트 비활성화", 
-          description: "브라우저 제한으로 SDK 없이 진행하지만, 요청은 정상 전송됩니다.", 
-        });
+        toast({ title: "스트리밍 업데이트 비활성화", description: "요청은 정상 전송됩니다." });
         return null;
       }
-
-      // 기존 웹훅이 있으면 정리
       if (webhookRef.current) {
-        console.log('🧹 기존 웹훅 정리 중...');
         webhookRef.current.close();
-        webhookRef.current = null;
       }
-
-      console.log('🔄 새 웹훅 생성 중...');
       const createdWebhook = await window.lovable.createWebhook((data) => {
         console.log('📨 웹훅 데이터 수신:', data);
-        const newResult = data;
-
         setLogs(prevLogs => {
           const newLogEntry: LogEntry = {
             id: uuidv4(),
-            tag: newResult.is_final ? '📥 최종 보고서' : `📥 ${newResult.step_name || '진단 단계'}`,
-            content: newResult.content,
+            tag: data.is_final ? '📥 최종 보고서' : `📥 ${data.step_name || '진단 단계'}`,
+            content: data.content,
             isResponse: true,
             timestamp: Date.now(),
           };
           return [...prevLogs, newLogEntry].sort((a, b) => a.timestamp - b.timestamp);
         });
-
-        if (newResult.is_final) {
+        if (data.is_final) {
           console.log('✅ 진단 프로세스 완료');
           setIsProcessing(false);
           toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
         }
       });
-
-      console.log('✅ 웹훅 생성 성공:', createdWebhook.url);
       webhookRef.current = createdWebhook;
       return createdWebhook.url;
-      
     } catch (error: any) {
       console.error('❌ 웹훅 생성 실패:', error);
-      toast({ 
-        title: "연결 실패", 
-        description: `시스템 연결에 실패했습니다: ${error.message}`, 
-        variant: "destructive" 
-      });
+      toast({ title: "연결 실패", description: `시스템 연결에 실패했습니다: ${error.message}`, variant: "destructive" });
       return null;
     }
   }, [toast, waitForLovableSDK]);
 
-  // 앱 종료 시 정리
   useEffect(() => {
     return () => {
       if (webhookRef.current) {
-        console.log('🧹 앱 종료 시 웹훅 정리');
         webhookRef.current.close();
       }
     };
@@ -180,14 +147,9 @@ export const useAppState = () => {
       return;
     }
 
-    // 전송 직전에 웹훅 주소가 준비되지 않았으면 생성 시도하되, 실패해도 계속 진행(스트리밍 없이)
     let deliveryUrl = webhookRef.current?.url;
     if (!deliveryUrl) {
-      console.log('🔄 웹훅이 준비되지 않아 즉시 생성 시도');
       deliveryUrl = await createWebhookOnDemand();
-      if (!deliveryUrl) {
-        console.log('⏭️ SDK 없이 진행: 스트리밍 업데이트는 제공되지 않습니다.');
-      }
     }
 
     console.log('🚀 진단 프로세스 시작');
@@ -195,41 +157,32 @@ export const useAppState = () => {
     setLogs([]);
 
     try {
-      // 1. Generate the final Markdown content
+      // =================================================================
+      // [수정 2] 여기서부터가 핵심! 데이터를 보내기 전에 마크다운으로 변환한다.
+      // =================================================================
+      
+      // 1. 방금 만든 유틸리티로 완벽하게 포맷된 마크다운 문자열을 생성한다.
       const markdownContent = generateMarkdownReport(
         savedReadings, 
         tempMessages.map(m => m.content)
       );
 
-      // 2. Create the new, simplified payload
+      // 2. 최종 전송할 payload를 새롭게 정의한다.
       const payload: any = {
-        content: markdownContent, // Send the formatted Markdown string
+        content: markdownContent, // 가공된 마크다운 최종본만 보낸다.
         user_id: user.id,
         timestamp: new Date().toISOString(),
         request_id: uuidv4(),
       };
+
       if (deliveryUrl) {
         payload.delivery_webhook_url = deliveryUrl;
       }
+      
+      // =================================================================
 
-      // 로컬에서 바로 Markdown으로 요약 미리보기 생성 (입력 구조 변경 없음)
-      const markdownPreview = buildMarkdownFromData(savedReadings, tempMessages.map(m => m.content));
-      setLogs(prev => [
-        ...prev,
-        {
-          id: uuidv4(),
-          tag: '🧩 데이터 요약 (Markdown)',
-          content: '',
-          markdown_content: markdownPreview,
-          timestamp: Date.now(),
-        },
-      ]);
-
-      console.log('📤 서버로 데이터 전송 중...', { 
-        readingsCount: savedReadings.length, 
-        messagesCount: tempMessages.length,
-        webhookUrl: deliveryUrl ?? 'none' 
-      });
+      console.log('📤 서버로 최종 데이터 전송 중...');
+      console.log('Final Payload Content:', payload.content);
 
       const { error } = await supabase.functions.invoke('send-webhook-to-make', { body: payload });
       if (error) throw error;
