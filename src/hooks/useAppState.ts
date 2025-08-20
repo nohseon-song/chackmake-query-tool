@@ -41,13 +41,35 @@ export const useAppState = () => {
 
   // [추가] Lovable Webhook 객체를 저장하기 위한 ref
   const webhookRef = useRef<{ url: string; close: () => void } | null>(null);
-  // [추가] Lovable 객체 로드 대기 유틸 (최대 6초 대기)
-  const waitForLovable = useCallback(async (timeoutMs = 6000, intervalMs = 150): Promise<void> => {
-    const start = Date.now();
-    while (!(window.lovable && typeof window.lovable.createWebhook === 'function')) {
-      if (Date.now() - start > timeoutMs) throw new Error('Lovable SDK가 준비되지 않았습니다.');
-      await new Promise((r) => setTimeout(r, intervalMs));
-    }
+  // Lovable SDK 안전 대기 유틸 (최대 15초, 더 안정적)
+  const waitForLovableSDK = useCallback(async (): Promise<boolean> => {
+    console.log('Lovable SDK 로딩 대기 시작...');
+    const maxWaitTime = 15000; // 15초
+    const checkInterval = 200; // 200ms 간격
+    const startTime = Date.now();
+    
+    return new Promise((resolve) => {
+      const checkSDK = () => {
+        const elapsed = Date.now() - startTime;
+        console.log(`SDK 체크 중... (${elapsed}ms 경과)`);
+        
+        if (window.lovable && typeof window.lovable.createWebhook === 'function') {
+          console.log('✅ Lovable SDK 로딩 완료!');
+          resolve(true);
+          return;
+        }
+        
+        if (elapsed >= maxWaitTime) {
+          console.log('⚠️ Lovable SDK 로딩 타임아웃');
+          resolve(false);
+          return;
+        }
+        
+        setTimeout(checkSDK, checkInterval);
+      };
+      
+      checkSDK();
+    });
   }, []);
 
   useEffect(() => {
@@ -73,15 +95,32 @@ export const useAppState = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // [추가] 앱이 시작될 때 Lovable Webhook을 생성하고, 결과를 수신하는 로직
-  const createNewWebhook = useCallback(async (): Promise<string | null> => {
+  // 필요 시점에 웹훅 생성하는 함수
+  const createWebhookOnDemand = useCallback(async (): Promise<string | null> => {
+    console.log('📡 웹훅 생성 요청됨');
+    
     try {
-      await waitForLovable();
-      // 기존 웹훅이 있으면 정리 후 새로 생성
-      webhookRef.current?.close();
+      const sdkReady = await waitForLovableSDK();
+      if (!sdkReady) {
+        console.error('❌ SDK 준비 실패');
+        toast({ 
+          title: "시스템 준비 중", 
+          description: "잠시 기다린 후 다시 시도해주세요.", 
+          variant: "destructive" 
+        });
+        return null;
+      }
 
+      // 기존 웹훅이 있으면 정리
+      if (webhookRef.current) {
+        console.log('🧹 기존 웹훅 정리 중...');
+        webhookRef.current.close();
+        webhookRef.current = null;
+      }
+
+      console.log('🔄 새 웹훅 생성 중...');
       const createdWebhook = await window.lovable.createWebhook((data) => {
-        console.log('Lovable Webhook을 통해 데이터 수신:', data);
+        console.log('📨 웹훅 데이터 수신:', data);
         const newResult = data;
 
         setLogs(prevLogs => {
@@ -96,30 +135,36 @@ export const useAppState = () => {
         });
 
         if (newResult.is_final) {
+          console.log('✅ 진단 프로세스 완료');
           setIsProcessing(false);
           toast({ title: "✅ 진단 완료", description: "모든 기술검토가 완료되었습니다." });
-          // 다음 작업을 위해 새 웹훅을 미리 준비
-          createNewWebhook();
         }
       });
 
-      console.log("새로운 Webhook 생성 성공:", createdWebhook.url);
+      console.log('✅ 웹훅 생성 성공:', createdWebhook.url);
       webhookRef.current = createdWebhook;
       return createdWebhook.url;
-    } catch (err) {
-      console.error("Webhook 생성 실패:", err);
-      toast({ title: "❌ 채널 생성 실패", description: "결과 수신 채널 생성에 실패했습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
+      
+    } catch (error: any) {
+      console.error('❌ 웹훅 생성 실패:', error);
+      toast({ 
+        title: "연결 실패", 
+        description: `시스템 연결에 실패했습니다: ${error.message}`, 
+        variant: "destructive" 
+      });
       return null;
     }
-  }, [toast, waitForLovable]);
+  }, [toast, waitForLovableSDK]);
 
-  // [추가] 앱이 로드될 때 웹훅을 생성하도록 함
+  // 앱 종료 시 정리
   useEffect(() => {
-    createNewWebhook();
     return () => {
-      webhookRef.current?.close(); // 앱을 나갈 때 웹훅 정리
+      if (webhookRef.current) {
+        console.log('🧹 앱 종료 시 웹훅 정리');
+        webhookRef.current.close();
+      }
     };
-  }, [createNewWebhook]);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!user) {
@@ -129,13 +174,14 @@ export const useAppState = () => {
 
     // 전송 직전에 웹훅 주소가 성공적으로 만들어졌는지 확인하고, 없으면 즉시 생성 시도
     if (!webhookRef.current?.url) {
-      const url = await createNewWebhook();
+      console.log('🔄 웹훅이 준비되지 않아 즉시 생성 시도');
+      const url = await createWebhookOnDemand();
       if (!url) {
-        toast({ title: "준비 오류", description: "결과를 수신할 주소가 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", variant: "destructive" });
-        return;
+        return; // createWebhookOnDemand에서 이미 에러 토스트를 표시했음
       }
     }
 
+    console.log('🚀 진단 프로세스 시작');
     setIsProcessing(true);
     setLogs([]);
 
@@ -150,18 +196,26 @@ export const useAppState = () => {
         delivery_webhook_url: webhookRef.current!.url,
       };
 
+      console.log('📤 서버로 데이터 전송 중...', { 
+        readingsCount: savedReadings.length, 
+        messagesCount: tempMessages.length,
+        webhookUrl: webhookRef.current!.url 
+      });
+
       const { error } = await supabase.functions.invoke('send-webhook-to-make', { body: payload });
       if (error) throw error;
 
+      console.log('✅ 서버 전송 성공');
       toast({ title: "진단 시작됨", description: "데이터를 서버로 전송했습니다." });
       setSavedReadings([]);
       setTempMessages([]);
 
     } catch (error: any) {
+      console.error('❌ 서버 전송 실패:', error);
       setIsProcessing(false);
       toast({ title: "전송 실패", description: error.message, variant: "destructive" });
     }
-  }, [user, savedReadings, tempMessages, toast, createNewWebhook]);
+  }, [user, savedReadings, tempMessages, toast, createWebhookOnDemand]);
 
   const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
   const handleEquipmentChange = useCallback((value: string) => { setEquipment(value); setClass1(''); setClass2(''); }, []);
