@@ -31,41 +31,21 @@ Deno.serve(async (req) => {
     const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
     if (!makeWebhookUrl) throw new Error('Webhook endpoint is not configured.')
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-        const interval = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode('{"type":"ping"}\n'))
-          } catch (e) { /* Stream already closed */ }
-        }, 30000)
-
-        try {
-          const makeResponse = await fetch(makeWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(clientPayload),
-          })
-
-          if (!makeResponse.ok) {
-            const errorText = await makeResponse.text()
-            throw new Error(`Make.com error: ${makeResponse.status} ${errorText}`)
-          }
-
-          const responseText = await makeResponse.text()
-          controller.enqueue(encoder.encode(JSON.stringify({ type: 'final', data: responseText }) + '\n'))
-        } catch (e) {
-          controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', message: e.message }) + '\n'))
-        } finally {
-          clearInterval(interval)
-          controller.close()
-        }
-      },
+    // Make.com을 호출하되, await로 응답을 기다리지 않습니다. (Fire and Forget)
+    fetch(makeWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clientPayload),
     })
 
-    return new Response(stream, {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
-    })
+    // 앱에는 "요청 접수 완료" 메시지를 즉시 보냅니다.
+    return new Response(
+      JSON.stringify({ success: true, message: 'Processing started' }),
+      {
+        status: 202, // 202 Accepted: 요청이 성공적으로 접수되었음을 의미
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
