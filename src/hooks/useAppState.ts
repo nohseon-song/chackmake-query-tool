@@ -38,9 +38,12 @@ export const useAppState = () => {
     checkUser();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (_event === 'SIGNED_OUT') {
+        navigate('/auth');
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -59,7 +62,7 @@ export const useAppState = () => {
           window.history.replaceState({}, document.title, window.location.pathname);
         });
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -88,7 +91,7 @@ export const useAppState = () => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
     setLogs(prev => prev.filter(log => !log.isResponse));
-    
+
     try {
       const responseText = await sendWebhookData(payload);
       addLogEntry('📥 응답', responseText, true);
@@ -101,22 +104,29 @@ export const useAppState = () => {
       setIsProcessing(false);
     }
   };
-  
+
   const handleGoogleAuth = async () => await authenticateGoogle();
+
+  // 최종 수정된 로그아웃 함수
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        throw error;
+      }
+      // 로그아웃 성공 시 상태 초기화
       setEquipment(''); setClass1(''); setClass2(''); setSavedReadings([]); setLogs([]); setTempMessages([]);
       toast({ title: "로그아웃 성공" });
-      navigate('/auth');
+      // 중요: 여기서 navigate('/auth')를 제거했습니다.
+      // 페이지 이동은 onAuthStateChange 감시자가 전적으로 담당합니다.
     } catch (error: any) {
-      toast({ title: "로그아웃 실패", variant: "destructive" });
+      toast({ title: "로그아웃 실패", description: error.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
-  
+
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen,
     isProcessing, tempMessages, googleAuth, handleSignOut, toggleTheme, handleEquipmentChange,
