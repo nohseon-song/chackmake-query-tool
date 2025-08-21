@@ -2,4 +2,4 @@ project_id = "rigbiqjmszdlacjdkhep"
 
 # [send-webhook-to-make] 함수의 타임아웃을 900초(15분)로 설정
 [functions.send-webhook-to-make]
-  timeout_secs = 900
+  timeout-secs = 900
