@@ -1,5 +1,21 @@
+# supabase/config.toml
+
 project_id = "rigbiqjmszdlacjdkhep"
 
-# [send_webhook_to_make] 함수의 타임아웃을 900초(15분)로 설정
+[functions.exchange-code-for-tokens]
+
+[functions.get-google-config]
+
+[functions.get-webhook-url]
+
+[functions.google-token-exchange]
+
+[functions.refresh-token]
+
+# [send-webhook-to-make] 함수의 타임아웃을 900초(15분)로 설정
 [functions.send_webhook_to_make]
   timeout-secs = 900
+
+[functions.test-auth]
+
+[functions.bright-action]
