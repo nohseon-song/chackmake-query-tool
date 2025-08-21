@@ -1,72 +1,139 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-import { exchangeCodeForToken } from '@/utils/googleDocsUtils';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [message, setMessage] = useState('처리 중...');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleAuthCallback = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const error = urlParams.get('error');
+  // 입력값 변경 처리
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setError(null);
+  };
+
+  // 로그인 처리
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.email || !formData.password) {
+      setError('이메일과 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
 
       if (error) {
-        setMessage(`인증 오류: ${error}`);
-        toast({
-          title: "구글 인증 실패",
-          description: "사용자가 인증을 거부했거나 오류가 발생했습니다.",
-          variant: "destructive",
-        });
-        setTimeout(() => { window.location.href = '/'; }, 3000);
+        // Supabase 에러 메시지를 사용자 친화적으로 변환
+        let errorMessage = error.message;
+        
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다.';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = '이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.';
+        }
+
+        setError(errorMessage);
         return;
       }
 
-      if (code) {
-        setMessage('구글 인증 코드를 받았으며, 토큰으로 교환하는 중입니다...');
-        try {
-          const { accessToken, refreshToken } = await exchangeCodeForToken(code);
-          localStorage.setItem('google_access_token', accessToken);
-          if (refreshToken) {
-            localStorage.setItem('google_refresh_token', refreshToken);
-          }
+      // 로그인 성공 시 메인 페이지로 이동
+      navigate('/');
 
-          setMessage('인증에 성공했습니다! 메인 페이지로 돌아갑니다.');
-          toast({
-            title: "구글 인증 성공",
-            description: "Google Docs에 성공적으로 연결되었습니다.",
-          });
-
-          window.location.href = '/';
-
-        } catch (exchangeError) {
-          console.error('토큰 교환 실패:', exchangeError);
-          setMessage(`토큰 교환에 실패했습니다: ${exchangeError instanceof Error ? exchangeError.message : String(exchangeError)}`);
-          toast({
-            title: "토큰 교환 실패",
-            description: "인증 코드를 토큰으로 바꾸는 데 실패했습니다. 다시 시도해주세요.",
-            variant: "destructive",
-          });
-          setTimeout(() => { window.location.href = '/'; }, 5000);
-        }
-      } else {
-        navigate('/');
-      }
-    };
-
-    handleAuthCallback();
-  }, [navigate, toast]);
+    } catch (error) {
+      console.error('로그인 오류:', error);
+      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-4">Google 인증 처리 중...</h1>
-        <p className="text-muted-foreground">{message}</p>
-        <div className="mt-4 w-16 h-16 border-4 border-dashed rounded-full animate-spin border-primary mx-auto"></div>
-      </div>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">로그인</CardTitle>
+          <CardDescription>
+            CheckMake Pro-Ultra 2.0에 로그인하세요
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSignIn} className="space-y-4">
+            {/* 이메일 입력 필드 */}
+            <div className="space-y-2">
+              <Label htmlFor="email">이메일</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="user@example.com"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+              />
+            </div>
+
+            {/* 비밀번호 입력 필드 */}
+            <div className="space-y-2">
+              <Label htmlFor="password">비밀번호</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="비밀번호를 입력하세요"
+                value={formData.password}
+                onChange={(e) => handleInputChange('password', e.target.value)}
+              />
+            </div>
+
+            {/* 에러 메시지 표시 */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* 로그인 버튼 */}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? '로그인 중...' : '로그인'}
+            </Button>
+
+            {/* 회원가입 페이지 링크 */}
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">
+                계정이 없으신가요?{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate('/signup')}
+                  className="text-primary hover:underline"
+                >
+                  회원가입하기
+                </button>
+              </p>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };
