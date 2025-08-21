@@ -18,7 +18,7 @@ serve(async (req) => {
     const redirectUri = isLocal
       ? Deno.env.get('GOOGLE_REDIRECT_URI_DEV')
       : Deno.env.get('GOOGLE_REDIRECT_URI_PROD');
-    
+
     const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
 
