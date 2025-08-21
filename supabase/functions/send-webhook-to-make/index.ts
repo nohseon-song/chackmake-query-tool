@@ -15,6 +15,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) throw new Error('Missing authorization header')
 
+    // 인증 과정은 그대로 유지
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -31,25 +32,22 @@ Deno.serve(async (req) => {
     const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
     if (!makeWebhookUrl) throw new Error('Webhook endpoint is not configured.')
 
-    // [ ✨ 핵심 수정 ✨ ] Make.com의 응답을 끝까지 기다립니다.
-    const makeResponse = await fetch(makeWebhookUrl, {
+    // [ ✨ 핵심 수정 ✨ ] 
+    // Make.com을 호출하되, await로 응답을 기다리지 않습니다. (Fire and Forget)
+    fetch(makeWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(clientPayload),
     })
 
-    if (!makeResponse.ok) {
-      const errorText = await makeResponse.text()
-      throw new Error(`Make.com error: ${makeResponse.status} ${errorText}`)
-    }
-
-    const responseText = await makeResponse.text()
-    
-    // 최종 결과물(HTML)을 앱에 그대로 전달합니다.
-    return new Response(responseText, {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    // 앱에는 "요청 접수 완료" 메시지를 즉시 보냅니다.
+    return new Response(
+      JSON.stringify({ success: true, message: 'Processing started' }),
+      {
+        status: 202, // 202 Accepted: 요청이 성공적으로 접수되었음을 의미
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
