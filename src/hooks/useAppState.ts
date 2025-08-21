@@ -1,5 +1,3 @@
-// src/hooks/useAppState.ts
-
 import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -38,39 +36,23 @@ export const useAppState = () => {
       setUser(session?.user ?? null);
       setIsAuthLoading(false);
     };
-
     checkUser();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
-
     return () => subscription.unsubscribe();
   }, []);
-
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-  };
-
-  const handleEquipmentChange = (value: string) => {
-    setEquipment(value);
-    setClass1('');
-    setClass2('');
-  };
-
-  const handleClass1Change = (value: string) => {
-    setClass1(value);
-    setClass2('');
-  };
-
-  // 🔽🔽🔽 이 함수를 원래대로 되돌렸어! 🔽🔽🔽
-  const addLogEntry = (tag: string, content: string, isResponse = false) => {
+  const toggleTheme = () => setIsDark(!isDark);
+  const handleEquipmentChange = (value: string) => { setEquipment(value); setClass1(''); setClass2(''); };
+  const handleClass1Change = (value: string) => { setClass1(value); setClass2(''); };
+  
+  const addLogEntry = (tag: string, content: any, isResponse = false) => {
     const logEntry: LogEntry = {
       id: Date.now().toString(),
       tag,
@@ -80,34 +62,24 @@ export const useAppState = () => {
     };
     setLogs(prev => [...prev, logEntry]);
   };
-  // 🔼🔼🔼 여기까지 🔼🔼🔼
 
-  const addTempMessage = (message: string) => {
-    setTempMessages(prev => [...prev, message]);
-  };
-  
-  const updateTempMessage = (index: number, newMessage: string) => {
-    setTempMessages(prev => prev.map((msg, idx) => idx === index ? newMessage : msg));
-  };
-  
-  const deleteTempMessage = (index: number) => {
-    setTempMessages(prev => prev.filter((_, idx) => idx !== index));
-  };
-  
-  const clearTempMessages = () => {
-    setTempMessages([]);
-  };
+  const addTempMessage = (message: string) => setTempMessages(prev => [...prev, message]);
+  const updateTempMessage = (index: number, newMessage: string) => setTempMessages(prev => prev.map((msg, idx) => idx === index ? newMessage : msg));
+  const deleteTempMessage = (index: number) => setTempMessages(prev => prev.filter((_, idx) => idx !== index));
+  const clearTempMessages = () => setTempMessages([]);
 
+  // [ ✨ 핵심 수정 ✨ ] 원래의 단순한 async/await 구조로 되돌립니다.
   const sendWebhook = async (payload: any) => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
+    setLogs(prev => prev.filter(log => !log.isResponse));
     
     try {
       const responseText = await sendWebhookData(payload);
       addLogEntry('📥 응답', responseText, true);
       
       toast({
-        title: "전송 완료",
+        title: "✅ 전송 완료",
         description: "전문 기술검토가 완료되었습니다.",
       });
     } catch (error) {
@@ -115,7 +87,7 @@ export const useAppState = () => {
       addLogEntry('⚠️ 오류', errorMessage);
       
       toast({
-        title: "전송 실패",
+        title: "❌ 전송 실패",
         description: errorMessage,
         variant: "destructive",
       });
@@ -124,72 +96,26 @@ export const useAppState = () => {
     }
   };
   
-  const handleGoogleAuth = async (): Promise<string> => {
-    // ... (이 함수는 변경 없음)
-    return ''; // 실제 구현은 유지
-  };
-
+  const handleGoogleAuth = async (): Promise<string> => { return ''; };
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        throw error;
-      }
-      setEquipment('');
-      setClass1('');
-      setClass2('');
-      setSavedReadings([]);
-      setLogs([]);
-      setTempMessages([]);
-      
-      toast({
-        title: "로그아웃 성공",
-        description: "성공적으로 로그아웃되었습니다.",
-      });
+      await supabase.auth.signOut();
+      setEquipment(''); setClass1(''); setClass2(''); setSavedReadings([]); setLogs([]); setTempMessages([]);
+      toast({ title: "로그아웃 성공", description: "성공적으로 로그아웃되었습니다." });
       navigate('/auth');
     } catch (error: any) {
-      toast({
-        title: "로그아웃 실패",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "로그아웃 실패", description: error.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
   
   return {
-    user,
-    isAuthLoading,
-    isDark,
-    equipment,
-    class1,
-    class2,
-    savedReadings,
-    logs,
-    chatOpen,
-    isProcessing,
-    tempMessages,
-    googleAuth,
-    
-    handleSignOut,
-    toggleTheme,
-    handleEquipmentChange,
-    handleClass1Change,
-    setEquipment,
-    setClass1,
-    setClass2,
-    setSavedReadings,
-    setLogs,
-    setChatOpen,
-    addTempMessage,
-    updateTempMessage,
-    deleteTempMessage,
-    clearTempMessages,
-    addLogEntry,
-    sendWebhook,
-    handleGoogleAuth,
-    toast
+    user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen,
+    isProcessing, tempMessages, googleAuth, handleSignOut, toggleTheme, handleEquipmentChange,
+    handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs,
+    setChatOpen, addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages,
+    addLogEntry, sendWebhook, handleGoogleAuth, toast
   };
 };
