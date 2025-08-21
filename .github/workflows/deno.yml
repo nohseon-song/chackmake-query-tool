@@ -4,7 +4,7 @@ name: Deploy Supabase Edge Functions
 on:
   push:
     branches:
-      - main # main 브랜치에 변경사항이 생길 때만 실행
+      - main
   workflow_dispatch:
 
 jobs:
@@ -20,13 +20,13 @@ jobs:
           version: latest
 
       - name: Deploy Edge Function get-google-config
-        run: |
-          supabase functions deploy get-google-config --project-ref rigbiqjmszdlacjdkhep
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy get-google-config --project-ref rigbiqjmszdlacjdkhep --no-verify-jwt
 
       - name: Deploy Edge Function exchange-code-for-tokens
-        run: |
-          supabase functions deploy exchange-code-for-tokens --project-ref rigbiqjmszdlacjdkhep
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy exchange-code-for-tokens --project-ref rigbiqjmszdlacjdkhep --no-verify-jwt
