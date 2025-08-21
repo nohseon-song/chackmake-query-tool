@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
-// [ ✨ 여기 수정! ✨ ] 필요한 모든 함수를 가져옵니다.
 import { GoogleAuthState, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 
 export const useAppState = () => {
-  // --- 기존 코드와 동일한 부분 ---
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const navigate = useNavigate();
@@ -29,6 +27,7 @@ export const useAppState = () => {
     isAuthenticated: false,
     accessToken: null
   });
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -38,40 +37,30 @@ export const useAppState = () => {
       setIsAuthLoading(false);
     };
     checkUser();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (!session) { // 로그아웃 시 구글 인증 정보도 초기화
-        setGoogleAuth({ isAuthenticated: false, accessToken: null });
-      }
     });
     return () => subscription.unsubscribe();
   }, []);
-  
-  // [ ✨ 여기가 핵심 수정 포인트! ✨ ]
-  // 페이지가 로드될 때 URL에 구글이 보내준 '인증 코드'가 있는지 확인합니다.
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-
     if (code) {
-      const exchange = async () => {
-        try {
-          const { accessToken } = await exchangeCodeForToken(code);
-          setGoogleAuth({ isAuthenticated: true, accessToken: accessToken });
+      exchangeCodeForToken(code)
+        .then(({ accessToken }) => {
+          setGoogleAuth({ isAuthenticated: true, accessToken });
           toast({ title: "✅ 구글 인증 성공", description: "Google Docs에 연결되었습니다." });
-        } catch (error) {
+        })
+        .catch(error => {
           console.error(error);
-          toast({ title: "❌ 구글 인증 실패", description: "토큰 교환에 실패했습니다.", variant: "destructive" });
-        } finally {
-          // URL에서 코드를 지워서 깔끔하게 만듭니다.
+          toast({ title: "❌ 구글 인증 실패", variant: "destructive" });
+        })
+        .finally(() => {
           window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      };
-      exchange();
+        });
     }
   }, []);
-
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -82,17 +71,25 @@ export const useAppState = () => {
   const handleEquipmentChange = (value: string) => { setEquipment(value); setClass1(''); setClass2(''); };
   const handleClass1Change = (value: string) => { setClass1(value); setClass2(''); };
   const addLogEntry = (tag: string, content: any, isResponse = false) => {
-    const logEntry: LogEntry = { id: Date.now().toString(), tag, content: typeof content === 'string' ? content : JSON.stringify(content, null, 2), isResponse, timestamp: Date.now() };
+    const logEntry: LogEntry = {
+      id: Date.now().toString(),
+      tag,
+      content: typeof content === 'string' ? content : JSON.stringify(content, null, 2),
+      isResponse,
+      timestamp: Date.now()
+    };
     setLogs(prev => [...prev, logEntry]);
   };
   const addTempMessage = (message: string) => setTempMessages(prev => [...prev, message]);
   const updateTempMessage = (index: number, newMessage: string) => setTempMessages(prev => prev.map((msg, idx) => idx === index ? newMessage : msg));
   const deleteTempMessage = (index: number) => setTempMessages(prev => prev.filter((_, idx) => idx !== index));
   const clearTempMessages = () => setTempMessages([]);
+
   const sendWebhook = async (payload: any) => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
     setLogs(prev => prev.filter(log => !log.isResponse));
+    
     try {
       const responseText = await sendWebhookData(payload);
       addLogEntry('📥 응답', responseText, true);
@@ -106,21 +103,16 @@ export const useAppState = () => {
     }
   };
   
-  // 구글 인증 시작 함수
-  const handleGoogleAuth = async () => {
-    // 이제 이 함수는 단순히 구글 로그인 페이지로 보내는 역할만 합니다.
-    await authenticateGoogle();
-  };
-
+  const handleGoogleAuth = async () => await authenticateGoogle();
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {
       await supabase.auth.signOut();
       setEquipment(''); setClass1(''); setClass2(''); setSavedReadings([]); setLogs([]); setTempMessages([]);
-      toast({ title: "로그아웃 성공", description: "성공적으로 로그아웃되었습니다." });
+      toast({ title: "로그아웃 성공" });
       navigate('/auth');
     } catch (error: any) {
-      toast({ title: "로그아웃 실패", description: error.message, variant: "destructive" });
+      toast({ title: "로그아웃 실패", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
