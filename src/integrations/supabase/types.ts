@@ -23,6 +23,7 @@ export type Database = {
           model_name: string | null
           organization_id: string | null
           prompt_tokens: number | null
+          request_id: string | null
           total_tokens: number | null
           user_id: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           model_name?: string | null
           organization_id?: string | null
           prompt_tokens?: number | null
+          request_id?: string | null
           total_tokens?: number | null
           user_id?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           model_name?: string | null
           organization_id?: string | null
           prompt_tokens?: number | null
+          request_id?: string | null
           total_tokens?: number | null
           user_id?: string | null
         }
@@ -93,6 +96,47 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      diagnosis_results: {
+        Row: {
+          content: Json | null
+          created_at: string
+          id: string
+          is_final: boolean | null
+          organization_id: string | null
+          request_id: string
+          step_name: string
+          user_id: string | null
+        }
+        Insert: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          is_final?: boolean | null
+          organization_id?: string | null
+          request_id: string
+          step_name: string
+          user_id?: string | null
+        }
+        Update: {
+          content?: Json | null
+          created_at?: string
+          id?: string
+          is_final?: boolean | null
+          organization_id?: string | null
+          request_id?: string
+          step_name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnosis_results_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       equipment: {
         Row: {
@@ -340,17 +384,66 @@ export type Database = {
           },
         ]
       }
+      inspector_contacts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          inspector_id: string
+          organization_id: string
+          phone: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          inspector_id: string
+          organization_id: string
+          phone?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          inspector_id?: string
+          organization_id?: string
+          phone?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspector_contacts_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
+            referencedRelation: "inspectors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspector_contacts_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
+            referencedRelation: "inspectors_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspectors: {
         Row: {
           created_at: string | null
           created_by: string | null
-          email: string | null
           id: string
           is_team_leader: boolean | null
           location_id: string | null
           name: string
           organization_id: string | null
-          phone: string | null
           position: string | null
           technical_grade: string[] | null
           updated_at: string | null
@@ -359,13 +452,11 @@ export type Database = {
         Insert: {
           created_at?: string | null
           created_by?: string | null
-          email?: string | null
           id?: string
           is_team_leader?: boolean | null
           location_id?: string | null
           name: string
           organization_id?: string | null
-          phone?: string | null
           position?: string | null
           technical_grade?: string[] | null
           updated_at?: string | null
@@ -374,13 +465,11 @@ export type Database = {
         Update: {
           created_at?: string | null
           created_by?: string | null
-          email?: string | null
           id?: string
           is_team_leader?: boolean | null
           location_id?: string | null
           name?: string
           organization_id?: string | null
-          phone?: string | null
           position?: string | null
           technical_grade?: string[] | null
           updated_at?: string | null
@@ -632,6 +721,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "performance_inspections_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
+            referencedRelation: "inspectors_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "performance_inspections_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
@@ -745,7 +841,63 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      inspectors_public: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string | null
+          is_team_leader: boolean | null
+          location_id: string | null
+          name: string | null
+          organization_id: string | null
+          position: string | null
+          technical_grade: string[] | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          is_team_leader?: boolean | null
+          location_id?: string | null
+          name?: string | null
+          organization_id?: string | null
+          position?: string | null
+          technical_grade?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          is_team_leader?: boolean | null
+          location_id?: string | null
+          name?: string | null
+          organization_id?: string | null
+          position?: string | null
+          technical_grade?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspectors_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspectors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_and_and_store_monthly_api_billings: {
