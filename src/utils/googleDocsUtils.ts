@@ -17,7 +17,7 @@ export const authenticateGoogle = async () => {
   
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
   
-  window.top.location.href = authUrl;
+  window.open(authUrl, '_blank');
 };
 
 // 2. 구글이 보내준 '인증 코드'를 진짜 '액세스 토큰'으로 교환하는 함수
