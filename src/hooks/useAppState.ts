@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 
 export const useAppState = () => {
+  // --- 너의 모든 상태 변수와 로직은 그대로 유지 ---
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const navigate = useNavigate();
@@ -27,7 +28,6 @@ export const useAppState = () => {
     isAuthenticated: false,
     accessToken: null
   });
-  
   const { toast } = useToast();
 
   useEffect(() => {
