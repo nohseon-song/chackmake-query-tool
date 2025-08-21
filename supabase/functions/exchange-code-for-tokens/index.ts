@@ -1,46 +1,32 @@
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { corsHeaders } from '../_shared/cors.ts';
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight requests
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { code, clientId } = await req.json()
-    
-    if (!code || !clientId) {
-      return new Response(
-        JSON.stringify({ error: 'Missing code or clientId' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+    const { code } = await req.json();
+    if (!code) {
+      throw new Error('Authorization code not provided.');
     }
 
-    // Get Google Client Secret from environment
-    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const isLocal = supabaseUrl.includes('localhost');
+
+    const redirectUri = isLocal
+      ? Deno.env.get('GOOGLE_REDIRECT_URI_DEV')
+      : Deno.env.get('GOOGLE_REDIRECT_URI_PROD');
     
-    if (!clientSecret) {
-      console.error('GOOGLE_CLIENT_SECRET not found in environment variables')
-      return new Response(
-        JSON.stringify({ error: 'Google Client Secret not configured' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+    const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error('Google API credentials are not set in Supabase secrets.');
     }
 
-    // Exchange authorization code for access token
-    const tokenUrl = 'https://oauth2.googleapis.com/token'
-    const redirectUri = `${req.headers.get('origin') || 'http://localhost:3000'}`
-    
-    const tokenResponse = await fetch(tokenUrl, {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -52,43 +38,21 @@ Deno.serve(async (req) => {
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
-    })
+    });
 
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text()
-      console.error('Token exchange failed:', errorText)
-      return new Response(
-        JSON.stringify({ error: 'Token exchange failed' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+    const tokens = await response.json();
+    if (!response.ok) {
+      throw new Error(tokens.error_description || 'Failed to exchange code for tokens.');
     }
 
-    const tokenData = await tokenResponse.json()
-    
-    return new Response(
-      JSON.stringify({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_in: tokenData.expires_in,
-        success: true
-      }),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
-    
+    return new Response(JSON.stringify(tokens), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
   } catch (error) {
-    console.error('Error in exchange-code-for-tokens function:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
   }
-})
+});
