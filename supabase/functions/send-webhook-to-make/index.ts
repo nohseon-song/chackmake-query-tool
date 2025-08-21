@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const clientPayload = await req.json()
+    // 보안을 위해 요청한 사용자가 로그인된 사용자인지 확인합니다.
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) throw new Error('Missing authorization header')
 
@@ -28,21 +28,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    const makeWebhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
-    if (!makeWebhookUrl) throw new Error('Webhook endpoint is not configured.')
+    // 환경 변수(Secrets)에 저장된 Make.com 웹훅 주소를 가져옵니다.
+    const webhookUrl = Deno.env.get('MAKE_WEBHOOK_URL')
+    if (!webhookUrl) {
+      throw new Error('MAKE_WEBHOOK_URL is not set in Supabase secrets.')
+    }
 
-    // Make.com을 호출하되, await로 응답을 기다리지 않습니다. (Fire and Forget)
-    fetch(makeWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(clientPayload),
-    })
-
-    // 앱에는 "요청 접수 완료" 메시지를 즉시 보냅니다.
+    // 앱(프론트엔드)에 웹훅 주소를 전달합니다.
     return new Response(
-      JSON.stringify({ success: true, message: 'Processing started' }),
+      JSON.stringify({ webhookUrl }),
       {
-        status: 202, // 202 Accepted: 요청이 성공적으로 접수되었음을 의미
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
