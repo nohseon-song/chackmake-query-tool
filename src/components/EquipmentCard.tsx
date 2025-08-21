@@ -19,13 +19,13 @@ const EquipmentCard: React.FC<EquipmentCardProps> = ({
     <Card 
       className={`cursor-pointer transition-all duration-200 ${
         isSelected 
-          ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+          ? 'ring-2 ring-ring bg-accent' 
           : 'hover:shadow-md hover:scale-105'
-      } ${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'}`}
+      }`}
       onClick={onClick}
     >
       <CardContent className="p-3">
-        <div className="text-sm font-medium text-center leading-tight">
+        <div className="text-sm font-medium text-center leading-tight text-foreground">
           {name}
         </div>
       </CardContent>
