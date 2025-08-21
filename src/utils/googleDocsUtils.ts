@@ -1,5 +1,3 @@
-// src/utils/googleDocsUtils.ts
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GoogleAuthState {
@@ -7,95 +5,38 @@ export interface GoogleAuthState {
   accessToken: string | null;
 }
 
-let GOOGLE_CLIENT_ID = '';
+// 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수
+export const authenticateGoogle = async () => {
+  const { data, error } = await supabase.functions.invoke('get-google-config');
+  if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
+  
+  const { clientId, redirectUri } = data;
+  if (!clientId || !redirectUri) throw new Error('Google Client ID 또는 Redirect URI를 찾을 수 없습니다.');
+  
+  const scope = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file";
+  
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+  
+  // 팝업 대신 현재 창에서 구글 로그인 페이지로 이동
+  window.location.href = authUrl;
+};
 
-// --- 인증 관련 함수 (수정 없음) ---
-export const fetchGoogleClientId = async (): Promise<string> => {
-  if (GOOGLE_CLIENT_ID) return GOOGLE_CLIENT_ID;
-  try {
-    const { data, error } = await supabase.functions.invoke('get-google-config');
-    if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
-    const clientId = (data as any)?.clientId;
-    if (!clientId) throw new Error('Google Client ID를 응답에서 찾을 수 없습니다.');
-    GOOGLE_CLIENT_ID = clientId;
-    return clientId;
-  } catch (error) {
-    console.error('Google Client ID 가져오기 오류:', error);
-    if (typeof window !== 'undefined') {
-      const storedClientId = localStorage.getItem('GOOGLE_CLIENT_ID');
-      if (storedClientId) {
-        console.warn('Supabase 함수 실패, 로컬 스토리지에서 Client ID를 사용합니다.');
-        GOOGLE_CLIENT_ID = storedClientId;
-        return storedClientId;
-      }
-    }
-    throw new Error('Google Client ID를 가져올 수 없습니다. API 설정을 확인하세요.');
-  }
-};
-export const setGoogleClientId = (clientId: string) => { GOOGLE_CLIENT_ID = clientId; };
-export const getGoogleClientId = (): string => GOOGLE_CLIENT_ID;
-export const authenticateGoogle = async (): Promise<string> => {
-  try {
-    let clientId = getGoogleClientId();
-    if (!clientId) clientId = await fetchGoogleClientId();
-    if (!clientId) throw new Error('Google Client ID를 가져올 수 없습니다.');
-    const scope = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file'].join(' ');
-    const redirectUri = `${window.location.protocol}//${window.location.host}`;
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.append('client_id', clientId);
-    authUrl.searchParams.append('redirect_uri', redirectUri);
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('scope', scope);
-    authUrl.searchParams.append('include_granted_scopes', 'true');
-    authUrl.searchParams.append('access_type', 'offline');
-    const popup = window.open(authUrl.toString(), 'google-auth', 'width=500,height=650');
-    if (!popup) throw new Error('팝업이 차단되었습니다.');
-    return new Promise<string>((resolve, reject) => {
-      const timer = setInterval(() => {
-        try {
-          if (popup.location.href.startsWith(redirectUri)) {
-            const url = new URL(popup.location.href);
-            const code = url.searchParams.get('code');
-            clearInterval(timer);
-            popup.close();
-            if (code) resolve(code);
-            else reject(new Error('Google 인증에 실패했습니다.'));
-          }
-        } catch (error) { /* Cross-origin error, ignore */ }
-        if (popup.closed) {
-          clearInterval(timer);
-          reject(new Error('인증 창이 닫혔습니다.'));
-        }
-      }, 500);
-    });
-  } catch (error: any) {
-    console.error('❌ 인증 실패:', error);
-    throw new Error(`Google 인증에 실패했습니다: ${error.message}`);
-  }
-};
-export const validateGoogleToken = async (accessToken: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
-    return response.ok;
-  } catch (error) {
-    console.error('토큰 검증 실패:', error);
-    return false;
-  }
-};
+// 2. 구글이 보내준 '인증 코드'를 진짜 '액세스 토큰'으로 교환하는 함수
 export const exchangeCodeForToken = async (code: string): Promise<{ accessToken: string; refreshToken?: string }> => {
-  const clientId = getGoogleClientId();
-  if (!clientId) throw new Error('Google Client ID가 설정되지 않았습니다.');
-  const { data, error } = await supabase.functions.invoke('exchange-code-for-tokens', { body: { code, clientId } });
-  if (error) throw new Error(`토큰 교환 실패: ${error.message || error}`);
-  const access_token = (data as any)?.access_token as string | undefined;
-  const refresh_token = (data as any)?.refresh_token as string | undefined;
-  if (!access_token) throw new Error('올바른 토큰 응답을 받지 못했습니다.');
-  return { accessToken: access_token, refreshToken: refresh_token };
-};
+  const { data, error } = await supabase.functions.invoke('exchange-code-for-tokens', { 
+    body: { code } 
+  });
 
+  if (error) throw new Error(`토큰 교환 실패: ${error.message || error}`);
+  
+  const access_token = data?.access_token as string | undefined;
+  if (!access_token) throw new Error('올바른 토큰 응답을 받지 못했습니다.');
+  
+  return { accessToken: access_token, refreshToken: data?.refresh_token };
+};
 
 // =================================================================
-// [The Perfection] 최종 완성판 변환 엔진
+// [The Perfection] 최종 완성판 변환 엔진 ( ✨ 너의 소중한 코드 그대로 유지! ✨ )
 // =================================================================
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     let processedHtml = htmlContent;
@@ -145,7 +86,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
             return;
         }
 
-        // *** 최종 수정: 번호 목록 제목 앞에만 선별적으로 공백 추가 ***
         const isNumberedHeading = trimmedLine.match(/^\d+\.\s/);
         if (isNumberedHeading && !isFirstLine) {
             requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
@@ -164,8 +104,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 
         const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' }, bold: false };
         let fields = 'fontSize,bold';
-
-        // 스타일 적용
+        
         if (trimmedLine.match(/^기술검토 및 진단 종합 보고서$/)) {
             textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true;
         } else if (trimmedLine.match(/^(\d\.\s|AI 전문가 패널 소개|4\.\s)/)) {
@@ -190,8 +129,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     return requests;
 };
 
-
-// --- 나머지 함수 (수정 없음) ---
 const FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7';
 
 const generateReportFileName = (equipmentName?: string): string => {
@@ -208,9 +145,6 @@ export const createGoogleDoc = async (
   accessToken: string,
   equipmentName?: string
 ): Promise<string> => {
-  const isValid = await validateGoogleToken(accessToken);
-  if (!isValid) throw new Error('Google API 토큰이 유효하지 않습니다.');
-
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
