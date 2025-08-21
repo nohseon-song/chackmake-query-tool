@@ -30,6 +30,7 @@ serve(async (req) => {
       throw new Error('Google API credentials are not set in Supabase secrets.');
     }
 
+    console.log('[exchange-code-for-tokens] exchanging code', { redirectUriUsed: redirectUri?.slice(0, 100) });
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
@@ -44,9 +45,23 @@ serve(async (req) => {
       }),
     });
 
-    const tokens = await response.json();
+    const raw = await response.text();
+    let tokens: any = {};
+    try {
+      tokens = JSON.parse(raw);
+    } catch (_) {
+      tokens = { raw };
+    }
+
     if (!response.ok) {
-      throw new Error(tokens.error_description || 'Failed to exchange code for tokens.');
+      console.error('[exchange-code-for-tokens] Google token endpoint error', { status: response.status, body: raw });
+      return new Response(JSON.stringify({
+        error: 'token_exchange_failed',
+        details: tokens.error_description || tokens.error || raw
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
     }
 
     return new Response(JSON.stringify(tokens), {

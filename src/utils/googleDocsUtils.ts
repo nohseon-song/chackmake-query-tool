@@ -6,7 +6,7 @@ export interface GoogleAuthState {
 }
 
 // 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수
-export const authenticateGoogle = async () => {
+export const authenticateGoogle = async (): Promise<string> => {
   const { data, error } = await supabase.functions.invoke('get-google-config');
   if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
   
@@ -14,10 +14,51 @@ export const authenticateGoogle = async () => {
   if (!clientId || !redirectUri) throw new Error('Google Client ID 또는 Redirect URI를 찾을 수 없습니다.');
   
   const scope = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file";
-  
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
-  
-  window.open(authUrl, '_blank');
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+
+  const width = 520; const height = 640;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+  const popup = window.open(
+    authUrl,
+    'google-oauth',
+    `width=${width},height=${height},left=${left},top=${top}`
+  );
+  if (!popup) throw new Error('팝업이 차단되었습니다. 팝업을 허용해 주세요.');
+
+  const redirectOrigin = new URL(redirectUri).origin;
+  return await new Promise<string>((resolve, reject) => {
+    const start = Date.now();
+    const timeoutMs = 120000; // 2분 타임아웃
+
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        reject(new Error('인증 창이 닫혔습니다.'));
+        return;
+      }
+      try {
+        const href = popup.location.href;
+        const sameOrigin = href && new URL(href).origin === redirectOrigin;
+        if (sameOrigin) {
+          const url = new URL(href);
+          const code = url.searchParams.get('code');
+          if (code) {
+            clearInterval(timer);
+            popup.close();
+            resolve(code);
+          }
+        }
+      } catch (_) {
+        // Cross-origin 단계에서는 접근 불가. Redirect 되면 접근 가능해짐.
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(timer);
+        popup.close();
+        reject(new Error('인증 시간이 초과되었습니다. 다시 시도해 주세요.'));
+      }
+    }, 500);
+  });
 };
 
 // 2. 구글이 보내준 '인증 코드'를 진짜 '액세스 토큰'으로 교환하는 함수
