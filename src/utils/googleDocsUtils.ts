@@ -36,8 +36,19 @@ export const authenticateGoogle = async (): Promise<string> => {
   sessionStorage.setItem('google_auth_pending', 'true');
   sessionStorage.setItem('google_auth_timestamp', Date.now().toString());
   
-  // 현재 창에서 Google 인증 페이지로 이동
-  window.location.href = authUrl;
+  // iframe 환경 감지 및 상위 창으로 리디렉션 (Google X-Frame-Options 우회)
+  try {
+    if (window.self !== window.top) {
+      // iframe 내부에서 실행 중인 경우, 상위 창(top)으로 리디렉션
+      window.top!.location.href = authUrl;
+    } else {
+      // 일반 창에서 실행 중인 경우
+      window.location.href = authUrl;
+    }
+  } catch (e) {
+    // iframe 접근 권한이 없는 경우의 대체 방법
+    window.open(authUrl, '_top');
+  }
   
   // Promise는 페이지 리로드 후 콜백에서 처리됨
   throw new Error('Redirecting to Google...');
