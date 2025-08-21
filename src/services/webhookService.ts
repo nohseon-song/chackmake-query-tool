@@ -1,66 +1,31 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export const sendWebhookData = (payload: any): Promise<string> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
-      if (!token) {
-        return reject(new Error("인증 토큰이 없습니다. 다시 로그인해주세요."));
-      }
+export const sendWebhookData = async (payload: any): Promise<string> => {
+  try {
+    // 1. Supabase에서 Make.com의 진짜 웹훅 주소를 안전하게 가져옵니다.
+    const { data: webhookUrl, error: urlError } = await supabase.functions.invoke('get-webhook-url');
+    if (urlError) throw new Error(`웹훅 주소를 가져오지 못했습니다: ${urlError.message}`);
+    if (!webhookUrl) throw new Error('웹훅 주소가 비어있습니다.');
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-webhook-to-make`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+    // 2. 가져온 주소로 데이터를 직접 전송하고, 응답을 끝까지 기다립니다.
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-      if (!response.ok || !response.body) {
-        const errorText = await response.text();
-        throw new Error(`서버 응답 오류: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let resolved = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          if (!resolved) reject(new Error("스트림이 데이터를 반환하기 전에 종료되었습니다."));
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          try {
-            const json = JSON.parse(line);
-            if (json.type === 'final') {
-              resolved = true;
-              resolve(json.data);
-              reader.cancel();
-              return;
-            } else if (json.type === 'error') {
-              resolved = true;
-              reject(new Error(json.message));
-              reader.cancel();
-              return;
-            }
-          } catch (e) {
-            console.warn('스트림 데이터 파싱 실패:', line);
-          }
-        }
-      }
-    } catch (error) {
-      reject(error);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Make.com에서 오류가 발생했습니다: ${response.status} - ${errorText}`);
     }
-  });
+
+    const responseText = await response.text();
+    return responseText;
+
+  } catch (error) {
+    console.error("sendWebhookData 에러:", error);
+    throw error;
+  }
 };
