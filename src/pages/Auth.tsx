@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { exchangeCodeForToken } from '@/utils/googleDocsUtils';
 
@@ -22,14 +21,13 @@ const Auth = () => {
           description: "사용자가 인증을 거부했거나 오류가 발생했습니다.",
           variant: "destructive",
         });
-        setTimeout(() => navigate('/'), 3000);
+        setTimeout(() => { window.location.href = '/'; }, 3000);
         return;
       }
 
       if (code) {
         setMessage('구글 인증 코드를 받았으며, 토큰으로 교환하는 중입니다...');
         try {
-          // 로컬 스토리지에 액세스 토큰을 저장합니다.
           const { accessToken, refreshToken } = await exchangeCodeForToken(code);
           localStorage.setItem('google_access_token', accessToken);
           if (refreshToken) {
@@ -42,8 +40,6 @@ const Auth = () => {
             description: "Google Docs에 성공적으로 연결되었습니다.",
           });
 
-          // 성공 후 메인 페이지로 돌아갑니다.
-          // URL에서 code 파라미터를 제거하고 이동합니다.
           window.location.href = '/';
 
         } catch (exchangeError) {
@@ -54,10 +50,9 @@ const Auth = () => {
             description: "인증 코드를 토큰으로 바꾸는 데 실패했습니다. 다시 시도해주세요.",
             variant: "destructive",
           });
-          setTimeout(() => navigate('/'), 5000);
+          setTimeout(() => { window.location.href = '/'; }, 5000);
         }
       } else {
-        // 이 페이지는 콜백 전용이므로, 코드가 없으면 메인으로 보냅니다.
         navigate('/');
       }
     };
