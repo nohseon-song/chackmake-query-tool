@@ -46,27 +46,16 @@ Deno.serve(async (req) => {
     console.log("Secret found:", makeWebhookUrl.substring(0, 50) + "...");
     console.log("Preparing to send data to Make.com.");
 
-    const makeResponse = await fetch(makeWebhookUrl, {
+    // "await"을 제거해서 Make.com의 응답을 기다리지 않음
+    fetch(makeWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(clientPayload),
     });
-    console.log("Make.com response status:", makeResponse.status);
-
-    if (!makeResponse.ok) {
-      const errorText = await makeResponse.text();
-      console.error("Error from Make.com:", errorText);
-      // Return detailed JSON error (still non-2xx so the client can react properly)
-      return new Response(JSON.stringify({ success: false, status: makeResponse.status, error: errorText || 'Unknown error' }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
     
-    const responseText = await makeResponse.text();
-    console.log("Successfully received response from Make.com.");
-
-    return new Response(JSON.stringify({ success: true, status: makeResponse.status, data: responseText }), {
+    // "Webhook received" 메시지를 즉시 클라이언트로 반환
+    console.log("Webhook sent to Make.com, returning immediate success to client.");
+    return new Response(JSON.stringify({ success: true, message: "Webhook received and processing started." }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
