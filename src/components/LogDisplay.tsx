@@ -5,7 +5,7 @@ import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
 import { getReportStyles } from '@/styles/reportStyles';
 import { getCombinedHtml } from '@/utils/htmlUtils';
-import { createGoogleDoc, authenticateGoogle } from '@/utils/googleDocsUtils';
+import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { useToast } from '@/hooks/use-toast';
 
 interface LogEntry {
@@ -26,7 +26,7 @@ interface LogDisplayProps {
   equipment?: string;
   onDeleteLog?: (id: string) => void;
   onDownloadPdf?: (content: string) => void;
-  onGoogleAuth?: () => Promise<void>;
+  onGoogleAuth?: () => Promise<string>;
 }
 
 const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDeleteLog, onGoogleAuth }) => {
@@ -72,44 +72,37 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
     
     try {
       setIsGoogleDocsDownloading(true);
-      console.log('🚀 Google Docs 다운로드 시작');
+      console.log('🚀 Google Docs 다운로드 시작 (Authorization Code Flow)');
       
-      // 1) 저장된 액세스 토큰 확인
-      let accessToken = localStorage.getItem('google_access_token');
-
-      // 2) 토큰이 없으면 Google 로그인 플로우 시작 (팝업/새 탭)
-      if (!accessToken) {
-        await authenticateGoogle();
-        toast({
-          title: "Google 로그인 필요",
-          description: "팝업에서 로그인 완료 후 다시 클릭하세요.",
-        });
-        return; // 로그인 완료 후 /auth 경유하여 토큰 저장됨
-      }
+      // Google 인증 (Authorization Code Flow)
+      const code = await authenticateGoogle();
+      console.log('✅ 인증 코드 획득 성공');
       
-      // 3) HTML 콘텐츠 결합
+      // 코드를 액세스 토큰으로 교환
+      const { accessToken } = await exchangeCodeForToken(code);
+      console.log('✅ 토큰 교환 성공');
+      
+      // HTML 콘텐츠 가져오기
       const combinedHtml = responseLogs.map(log => getCombinedHtml(log)).join('\n\n');
+      
       if (!combinedHtml.trim()) {
         throw new Error('내보낼 콘텐츠가 없습니다.');
       }
       
-      // 4) Google Docs 문서 생성
+      // Google Docs 문서 생성
       console.log('📱 LogDisplay에서 createGoogleDoc 호출', {
         equipment: equipment || '',
         hasEquipment: !!equipment
       });
       
-      const documentUrl = await createGoogleDoc(
-        combinedHtml,
-        accessToken,
-        equipmentRef.current || equipment || undefined
-      );
+      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipmentRef.current || equipment || undefined);
       
       toast({
         title: "Google Docs 문서가 생성되었습니다",
         description: "새 탭에서 문서를 확인하세요.",
       });
       
+      // 새 탭에서 문서 열기
       window.open(documentUrl, '_blank');
       
     } catch (error) {

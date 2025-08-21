@@ -36,18 +36,11 @@ export const useAppState = () => {
       setIsAuthLoading(false);
     };
     checkUser();
-
-    // ✨ 여기가 바로 그 '감시자'야!
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      // 'SIGNED_OUT' 이벤트가 발생하면, 즉 로그아웃되면 로그인 페이지로 보냅니다.
-      if (_event === 'SIGNED_OUT') {
-        navigate('/auth');
-      }
     });
-
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -66,7 +59,7 @@ export const useAppState = () => {
           window.history.replaceState({}, document.title, window.location.pathname);
         });
     }
-  }, [toast]); // toast를 의존성 배열에 추가
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
@@ -95,7 +88,7 @@ export const useAppState = () => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
     setLogs(prev => prev.filter(log => !log.isResponse));
-
+    
     try {
       const responseText = await sendWebhookData(payload);
       addLogEntry('📥 응답', responseText, true);
@@ -108,28 +101,22 @@ export const useAppState = () => {
       setIsProcessing(false);
     }
   };
-
+  
   const handleGoogleAuth = async () => await authenticateGoogle();
-
-  // ✨ 최종 수정된 로그아웃 함수 ✨
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        throw error;
-      }
+      await supabase.auth.signOut();
       setEquipment(''); setClass1(''); setClass2(''); setSavedReadings([]); setLogs([]); setTempMessages([]);
       toast({ title: "로그아웃 성공" });
-      // 중요: 여기서 navigate('/auth')를 제거했습니다.
-      // 페이지 이동은 이제 onAuthStateChange 감시자가 전적으로 담당합니다.
+      navigate('/auth');
     } catch (error: any) {
-      toast({ title: "로그아웃 실패", description: error.message, variant: "destructive" });
+      toast({ title: "로그아웃 실패", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
-
+  
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen,
     isProcessing, tempMessages, googleAuth, handleSignOut, toggleTheme, handleEquipmentChange,
