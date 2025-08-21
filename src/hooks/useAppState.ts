@@ -103,7 +103,7 @@ export const useAppState = () => {
   };
   
   const handleGoogleAuth = async () => await authenticateGoogle();
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     setIsProcessing(true);
     try {
       await supabase.auth.signOut();
