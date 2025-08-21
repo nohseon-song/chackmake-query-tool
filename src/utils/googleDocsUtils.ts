@@ -17,7 +17,6 @@ export const authenticateGoogle = async () => {
   
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
   
-  // 팝업 대신 현재 창에서 구글 로그인 페이지로 이동
   window.location.href = authUrl;
 };
 
