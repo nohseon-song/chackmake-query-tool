@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
-import { GoogleAuthState, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
+import { GoogleAuthState, handleGoogleCallback, createGoogleDocWithAuth } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
@@ -43,21 +43,24 @@ export const useAppState = () => {
   }, []);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    if (code) {
-      exchangeCodeForToken(code)
-        .then(({ accessToken }) => {
-          setGoogleAuth({ isAuthenticated: true, accessToken });
-          toast({ title: "✅ 구글 인증 성공", description: "Google Docs에 연결되었습니다." });
-        })
-        .catch(error => {
-          console.error(error);
-          toast({ title: "❌ 구글 인증 실패", variant: "destructive" });
-        })
-        .finally(() => {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        });
+    // Google 인증 콜백 처리
+    const authCode = handleGoogleCallback();
+    if (authCode) {
+      setGoogleAuth({ isAuthenticated: true, accessToken: null }); // 토큰은 createGoogleDocWithAuth에서 처리
+      toast({ title: "✅ 구글 인증 성공", description: "Google Docs 생성을 계속합니다." });
+    }
+    
+    // 인증 대기 상태 확인 (페이지 새로고침 후)
+    const authPending = sessionStorage.getItem('google_auth_pending');
+    const authTimestamp = sessionStorage.getItem('google_auth_timestamp');
+    
+    if (authPending && authTimestamp) {
+      const elapsed = Date.now() - parseInt(authTimestamp);
+      if (elapsed > 300000) { // 5분 초과 시 타임아웃
+        sessionStorage.removeItem('google_auth_pending');
+        sessionStorage.removeItem('google_auth_timestamp');
+        toast({ title: "인증 시간 초과", description: "다시 시도해 주세요.", variant: "destructive" });
+      }
     }
   }, []);
 
@@ -102,7 +105,23 @@ export const useAppState = () => {
     }
   };
   
-  const handleGoogleAuth = async () => await authenticateGoogle();
+  const handleGoogleAuth = async (htmlContent: string, equipmentName?: string) => {
+    try {
+      toast({ title: "🚀 Google Docs 다운로드 시작", description: "구글 인증을 진행합니다..." });
+      const docUrl = await createGoogleDocWithAuth(htmlContent, equipmentName);
+      
+      if (docUrl) {
+        toast({ title: "✅ Google Docs 생성 완료!", description: "문서가 성공적으로 생성되었습니다." });
+        window.open(docUrl, '_blank');
+        setGoogleAuth({ isAuthenticated: true, accessToken: null });
+      }
+    } catch (error: any) {
+      if (!error.message?.includes('Redirecting to Google')) {
+        console.error('Google Docs 생성 오류:', error);
+        toast({ title: "❌ Google Docs 생성 실패", description: error.message, variant: "destructive" });
+      }
+    }
+  };
   const handleSignOut = async () => {
     setIsProcessing(true);
     try {

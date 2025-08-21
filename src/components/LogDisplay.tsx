@@ -5,7 +5,6 @@ import ReportContent from './ReportContent';
 import { downloadPdf } from '@/utils/pdfUtils';
 import { getReportStyles } from '@/styles/reportStyles';
 import { getCombinedHtml } from '@/utils/htmlUtils';
-import { createGoogleDoc, authenticateGoogle, exchangeCodeForToken } from '@/utils/googleDocsUtils';
 import { useToast } from '@/hooks/use-toast';
 
 interface LogEntry {
@@ -26,7 +25,7 @@ interface LogDisplayProps {
   equipment?: string;
   onDeleteLog?: (id: string) => void;
   onDownloadPdf?: (content: string) => void;
-  onGoogleAuth?: () => Promise<string>;
+  onGoogleAuth?: (htmlContent: string, equipmentName?: string) => Promise<void>;
 }
 
 const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDeleteLog, onGoogleAuth }) => {
@@ -68,19 +67,11 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
   };
 
   const handleGoogleDocsDownload = async () => {
-    if (isGoogleDocsDownloading) return;
+    if (isGoogleDocsDownloading || !onGoogleAuth) return;
     
     try {
       setIsGoogleDocsDownloading(true);
-      console.log('🚀 Google Docs 다운로드 시작 (Authorization Code Flow)');
-      
-      // Google 인증 (Authorization Code Flow)
-      const code = await authenticateGoogle();
-      console.log('✅ 인증 코드 획득 성공');
-      
-      // 코드를 액세스 토큰으로 교환
-      const { accessToken } = await exchangeCodeForToken(code);
-      console.log('✅ 토큰 교환 성공');
+      console.log('🚀 Google Docs 다운로드 시작 (New Flow)');
       
       // HTML 콘텐츠 가져오기
       const combinedHtml = responseLogs.map(log => getCombinedHtml(log)).join('\n\n');
@@ -89,31 +80,20 @@ const LogDisplay: React.FC<LogDisplayProps> = ({ logs, isDark, equipment, onDele
         throw new Error('내보낼 콘텐츠가 없습니다.');
       }
       
-      // Google Docs 문서 생성
-      console.log('📱 LogDisplay에서 createGoogleDoc 호출', {
-        equipment: equipment || '',
-        hasEquipment: !!equipment
-      });
-      
-      const documentUrl = await createGoogleDoc(combinedHtml, accessToken, equipmentRef.current || equipment || undefined);
-      
-      toast({
-        title: "Google Docs 문서가 생성되었습니다",
-        description: "새 탭에서 문서를 확인하세요.",
-      });
-      
-      // 새 탭에서 문서 열기
-      window.open(documentUrl, '_blank');
+      // 새로운 Google 인증 및 문서 생성 플로우 사용
+      await onGoogleAuth(combinedHtml, equipmentRef.current || equipment || undefined);
       
     } catch (error) {
-      console.error('Google Docs 생성 오류:', error);
-      const errorMessage = error instanceof Error ? error.message : '문서 생성에 실패했습니다.';
-      
-      toast({
-        title: "문서 생성 실패",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      if (!error?.message?.includes('Redirecting to Google')) {
+        console.error('Google Docs 생성 오류:', error);
+        const errorMessage = error instanceof Error ? error.message : '문서 생성에 실패했습니다.';
+        
+        toast({
+          title: "문서 생성 실패",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsGoogleDocsDownloading(false);
     }

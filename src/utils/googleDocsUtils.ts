@@ -5,7 +5,22 @@ export interface GoogleAuthState {
   accessToken: string | null;
 }
 
-// 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수
+// URL에서 Google 인증 코드 확인 및 처리
+export const handleGoogleCallback = (): string | null => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  const state = urlParams.get('state');
+  
+  if (code && state === 'google_docs_auth') {
+    // URL에서 파라미터 제거
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return code;
+  }
+  
+  return null;
+};
+
+// 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수 (리디렉션 방식)
 export const authenticateGoogle = async (): Promise<string> => {
   const { data, error } = await supabase.functions.invoke('get-google-config');
   if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
@@ -14,51 +29,18 @@ export const authenticateGoogle = async (): Promise<string> => {
   if (!clientId || !redirectUri) throw new Error('Google Client ID 또는 Redirect URI를 찾을 수 없습니다.');
   
   const scope = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file";
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+  const state = 'google_docs_auth';
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent&state=${state}`;
 
-  const width = 520; const height = 640;
-  const left = window.screenX + (window.outerWidth - width) / 2;
-  const top = window.screenY + (window.outerHeight - height) / 2;
-  const popup = window.open(
-    authUrl,
-    'google-oauth',
-    `width=${width},height=${height},left=${left},top=${top}`
-  );
-  if (!popup) throw new Error('팝업이 차단되었습니다. 팝업을 허용해 주세요.');
-
-  const redirectOrigin = new URL(redirectUri).origin;
-  return await new Promise<string>((resolve, reject) => {
-    const start = Date.now();
-    const timeoutMs = 120000; // 2분 타임아웃
-
-    const timer = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(timer);
-        reject(new Error('인증 창이 닫혔습니다.'));
-        return;
-      }
-      try {
-        const href = popup.location.href;
-        const sameOrigin = href && new URL(href).origin === redirectOrigin;
-        if (sameOrigin) {
-          const url = new URL(href);
-          const code = url.searchParams.get('code');
-          if (code) {
-            clearInterval(timer);
-            popup.close();
-            resolve(code);
-          }
-        }
-      } catch (_) {
-        // Cross-origin 단계에서는 접근 불가. Redirect 되면 접근 가능해짐.
-      }
-      if (Date.now() - start > timeoutMs) {
-        clearInterval(timer);
-        popup.close();
-        reject(new Error('인증 시간이 초과되었습니다. 다시 시도해 주세요.'));
-      }
-    }, 500);
-  });
+  // 현재 페이지 상태 저장 (복구를 위해)
+  sessionStorage.setItem('google_auth_pending', 'true');
+  sessionStorage.setItem('google_auth_timestamp', Date.now().toString());
+  
+  // 현재 창에서 Google 인증 페이지로 이동
+  window.location.href = authUrl;
+  
+  // Promise는 페이지 리로드 후 콜백에서 처리됨
+  throw new Error('Redirecting to Google...');
 };
 
 // 2. 구글이 보내준 '인증 코드'를 진짜 '액세스 토큰'으로 교환하는 함수
@@ -178,6 +160,39 @@ const generateReportFileName = (equipmentName?: string): string => {
   const day = String(d.getDate()).padStart(2, '0');
   const equipment = equipmentName?.trim() || '설비';
   return `기술진단내역작성_${equipment}_${year}.${month}.${day}`;
+};
+
+// Google Docs 생성 전체 플로우 (인증부터 문서 생성까지)
+export const createGoogleDocWithAuth = async (
+  htmlContent: string,
+  equipmentName?: string
+): Promise<string> => {
+  try {
+    // 1. 콜백에서 코드 확인
+    let authCode = handleGoogleCallback();
+    
+    if (!authCode) {
+      // 2. 인증이 필요한 경우 Google로 리디렉션
+      await authenticateGoogle();
+      return ''; // 리디렉션되므로 여기는 실행되지 않음
+    }
+    
+    // 3. 코드를 토큰으로 교환
+    const { accessToken } = await exchangeCodeForToken(authCode);
+    
+    // 4. Google Docs 생성
+    const docUrl = await createGoogleDoc(htmlContent, accessToken, equipmentName);
+    
+    // 5. 인증 상태 정리
+    sessionStorage.removeItem('google_auth_pending');
+    sessionStorage.removeItem('google_auth_timestamp');
+    
+    return docUrl;
+  } catch (error) {
+    sessionStorage.removeItem('google_auth_pending');
+    sessionStorage.removeItem('google_auth_timestamp');
+    throw error;
+  }
 };
 
 export const createGoogleDoc = async (

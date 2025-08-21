@@ -40,7 +40,7 @@ interface MainContentProps {
   onSubmit: () => void;
   onDeleteLog: (id: string) => void;
   onDownloadPdf: (content: string) => void;
-  onGoogleAuth?: () => Promise<string>;
+  onGoogleAuth?: (htmlContent: string, equipmentName?: string) => Promise<void>;
   onChatOpen: () => void;
   onAddLogEntry: (tag: string, content: string) => void;
 }
