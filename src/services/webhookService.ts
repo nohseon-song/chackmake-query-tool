@@ -2,15 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 export const sendWebhookData = async (payload: any): Promise<string> => {
   try {
-    // 1. Supabase에 'get-webhook-url' 함수를 호출해서 Make.com의 진짜 웹훅 주소를 안전하게 물어봅니다.
-    const { data, error: urlError } = await supabase.functions.invoke('get-webhook-url');
-    if (urlError) throw new Error(`웹훅 주소를 가져오지 못했습니다: ${urlError.message}`);
-    
-    const webhookUrl = data?.webhookUrl;
-    if (!webhookUrl) throw new Error('Supabase로부터 유효한 웹훅 주소를 받지 못했습니다.');
-
-    // 2. 받아온 진짜 주소로 데이터를 직접 전송하고, 응답을 끝까지 기다립니다.
-    const response = await fetch(webhookUrl, {
+    // Direct call to Supabase edge function
+    const response = await fetch('https://rigbiqjmszdlacjdkhep.supabase.co/functions/v1/start-job', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -18,10 +11,10 @@ export const sendWebhookData = async (payload: any): Promise<string> => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Make.com 오류: ${response.status} - ${errorText}`);
+      throw new Error(`Edge function 오류: ${response.status} - ${errorText}`);
     }
 
-    // 3. Make.com이 보내준 최종 결과물(HTML)을 그대로 반환합니다.
+    // Return the response from the edge function
     return await response.text();
 
   } catch (error) {
