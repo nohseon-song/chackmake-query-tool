@@ -32,7 +32,7 @@ serve(async (req) => {
 
     // Generate a job id and construct callback URL (forced https base)
     const job_id = crypto.randomUUID();
-    const base = 'https://rigbigjmszdlacjdkhep.supabase.co';
+    const base = 'https://rigbiqjmszdlacjdkhep.supabase.co';
     const callback_url = `${base}/functions/v1/callback-job`;
 
     const payloadForMake = {
