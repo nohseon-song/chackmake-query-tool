@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { sendWebhookData } from '@/services/webhookService';
-import { pollJobResult } from '@/services/jobResultService';
+import { startJobAndWait } from '@/services/webhookService';
 import { GoogleAuthState, handleGoogleCallback, createGoogleDocWithAuth } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -59,7 +58,7 @@ export const useAppState = () => {
     
     if (authPending && authTimestamp) {
       const elapsed = Date.now() - parseInt(authTimestamp);
-      if (elapsed > 300000) { // 5분 초과 시 타임아웃
+      if (elapsed > 600000) { // 10분 초과 시 타임아웃
         sessionStorage.removeItem('google_auth_pending');
         sessionStorage.removeItem('google_auth_timestamp');
         toast({ title: "인증 시간 초과", description: "다시 시도해 주세요.", variant: "destructive" });
@@ -103,46 +102,23 @@ export const useAppState = () => {
     }
     
     try {
-      const responseText = await sendWebhookData(payload);
-      addLogEntry('📥 응답', responseText, true);
+      const result = await startJobAndWait(payload);
+      addLogEntry('📥 완료', result, true);
       
-      // Parse response to get job_id
-      let jobId: string | null = null;
-      try {
-        const parsed = JSON.parse(responseText);
-        if (parsed.job_id && parsed.status === 'processing') {
-          jobId = parsed.job_id;
-        }
-      } catch (parseError) {
-        console.warn('Failed to parse webhook response:', parseError);
+      // Handle the result
+      if (result.html) {
+        setResultHtml(result.html);
+      } else if (result.html_url) {
+        setResultHtml(`<div class="text-center p-4"><a href="${result.html_url}" target="_blank" class="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">리포트 열기</a></div>`);
       }
       
-      if (jobId) {
-        // Start polling for job result
-        pollCleanupRef.current = pollJobResult(
-          jobId,
-          (html?: string, htmlUrl?: string) => {
-            if (html) {
-              setResultHtml(html);
-            } else if (htmlUrl) {
-              setResultHtml(`<div class="text-center p-4"><a href="${htmlUrl}" target="_blank" class="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">리포트 열기</a></div>`);
-            }
-            setIsProcessing(false);
-            toast({ title: "✅ 처리 완료", description: "전문 기술검토가 완료되었습니다." });
-          },
-          (errorMessage: string) => {
-            setIsProcessing(false);
-            toast({ title: "❌ 처리 실패", description: errorMessage, variant: "destructive" });
-          }
-        );
-      } else {
-        setIsProcessing(false);
-        toast({ title: "✅ 전송 완료", description: "요청이 접수되었습니다." });
-      }
+      setIsProcessing(false);
+      toast({ title: "✅ 처리 완료", description: "전문 기술검토가 완료되었습니다." });
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
       addLogEntry('⚠️ 오류', errorMessage);
-      toast({ title: "❌ 전송 실패", description: errorMessage, variant: "destructive" });
+      toast({ title: "❌ 처리 실패", description: errorMessage, variant: "destructive" });
       setIsProcessing(false);
     }
   };

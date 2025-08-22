@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { waitForJob } from './jobResultService';
 
 export const sendWebhookData = async (payload: any): Promise<string> => {
   try {
@@ -26,3 +27,31 @@ export const sendWebhookData = async (payload: any): Promise<string> => {
     throw error;
   }
 };
+
+export async function startJobAndWait(payload: any) {
+  // 기존 sendWebhookData 함수 호출 (startJob 역할)
+  const responseText = await sendWebhookData(payload);
+  
+  // Parse response to get job_id
+  let jobId: string | null = null;
+  try {
+    const parsed = JSON.parse(responseText);
+    if (parsed.job_id && parsed.status === 'processing') {
+      jobId = parsed.job_id;
+    }
+  } catch (parseError) {
+    console.warn('Failed to parse webhook response:', parseError);
+  }
+  
+  if (!jobId) throw new Error('job_id 없음');
+
+  const result = await waitForJob(jobId);
+  return { 
+    job_id: jobId, 
+    status: result.status,
+    html: result.html,
+    html_url: result.html_url,
+    error_message: result.error_message,
+    completed_at: result.completed_at
+  };
+}

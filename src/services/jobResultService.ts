@@ -1,3 +1,38 @@
+export async function waitForJob(job_id: string, timeoutMs = 10 * 60 * 1000, intervalMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  const SUPABASE_URL = "https://rigbiqjmszdlacjdkhep.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw";
+  
+  while (Date.now() < deadline) {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/job_results?job_id=eq.${job_id}&select=status,html,html_url,error_message,completed_at&limit=1`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.length === 1) {
+      const result = data[0];
+      if (result.status === 'done') return result;
+      if (result.status === 'error') throw new Error(result?.error_message || '작업 실패');
+    }
+    
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error('시간 초과: 결과 생성이 오래 걸립니다.');
+}
+
 export const pollJobResult = (
   jobId: string,
   onUpdate: (html?: string, htmlUrl?: string) => void,
