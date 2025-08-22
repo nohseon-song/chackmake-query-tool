@@ -43,6 +43,7 @@ const Index = () => {
     addLogEntry,
     sendWebhook,
     handleGoogleAuth,
+    resultHtml,
     toast,
     handleSignOut
   } = useAppState();
@@ -176,6 +177,7 @@ const Index = () => {
         equipmentTree={EQUIPMENT_TREE}
         savedReadings={savedReadings}
         logs={logs}
+        resultHtml={resultHtml}
         isProcessing={isProcessing}
         isDark={isDark}
         tempMessagesCount={tempMessages.length}

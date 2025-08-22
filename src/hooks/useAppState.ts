@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Reading, LogEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { sendWebhookData } from '@/services/webhookService';
+import { pollJobResult } from '@/services/jobResultService';
 import { GoogleAuthState, handleGoogleCallback, createGoogleDocWithAuth } from '@/utils/googleDocsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +24,8 @@ export const useAppState = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [tempMessages, setTempMessages] = useState<string[]>([]);
+  const [resultHtml, setResultHtml] = useState<string>('');
+  const pollCleanupRef = useRef<(() => void) | null>(null);
   const [googleAuth, setGoogleAuth] = useState<GoogleAuthState>({
     isAuthenticated: false,
     accessToken: null
@@ -91,16 +94,51 @@ export const useAppState = () => {
     addLogEntry('📤 전송', payload);
     setIsProcessing(true);
     setLogs(prev => prev.filter(log => !log.isResponse));
+    setResultHtml(''); // Clear previous results
+    
+    // Clean up any existing polling
+    if (pollCleanupRef.current) {
+      pollCleanupRef.current();
+      pollCleanupRef.current = null;
+    }
     
     try {
       const responseText = await sendWebhookData(payload);
       addLogEntry('📥 응답', responseText, true);
-      toast({ title: "✅ 전송 완료", description: "전문 기술검토가 완료되었습니다." });
+      
+      // Parse response to get job_id
+      let jobId: string | null = null;
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed.job_id && parsed.status === 'processing') {
+          jobId = parsed.job_id;
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse webhook response:', parseError);
+      }
+      
+      if (jobId) {
+        // Start polling for job result
+        pollCleanupRef.current = pollJobResult(
+          jobId,
+          (html: string) => {
+            setResultHtml(html);
+            setIsProcessing(false);
+            toast({ title: "✅ 처리 완료", description: "전문 기술검토가 완료되었습니다." });
+          },
+          (errorMessage: string) => {
+            setIsProcessing(false);
+            toast({ title: "❌ 처리 실패", description: errorMessage, variant: "destructive" });
+          }
+        );
+      } else {
+        setIsProcessing(false);
+        toast({ title: "✅ 전송 완료", description: "요청이 접수되었습니다." });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
       addLogEntry('⚠️ 오류', errorMessage);
       toast({ title: "❌ 전송 실패", description: errorMessage, variant: "destructive" });
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -124,9 +162,17 @@ export const useAppState = () => {
   };
   const handleSignOut = async () => {
     setIsProcessing(true);
+    
+    // Clean up polling when signing out
+    if (pollCleanupRef.current) {
+      pollCleanupRef.current();
+      pollCleanupRef.current = null;
+    }
+    
     try {
       await supabase.auth.signOut();
       setEquipment(''); setClass1(''); setClass2(''); setSavedReadings([]); setLogs([]); setTempMessages([]);
+      setResultHtml(''); // Clear results
       toast({ title: "로그아웃 성공" });
       navigate('/auth');
     } catch (error: any) {
@@ -138,7 +184,7 @@ export const useAppState = () => {
   
   return {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen,
-    isProcessing, tempMessages, googleAuth, handleSignOut, toggleTheme, handleEquipmentChange,
+    isProcessing, tempMessages, googleAuth, resultHtml, handleSignOut, toggleTheme, handleEquipmentChange,
     handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs,
     setChatOpen, addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages,
     addLogEntry, sendWebhook, handleGoogleAuth, toast

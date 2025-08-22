@@ -28,6 +28,7 @@ interface MainContentProps {
   equipmentTree: Record<string, any>;
   savedReadings: Reading[];
   logs: LogEntry[];
+  resultHtml: string;
   isProcessing: boolean;
   isDark: boolean;
   tempMessagesCount: number;
@@ -52,6 +53,7 @@ const MainContent: React.FC<MainContentProps> = ({
   equipmentTree,
   savedReadings,
   logs,
+  resultHtml,
   isProcessing,
   isDark,
   tempMessagesCount,
@@ -113,14 +115,26 @@ const MainContent: React.FC<MainContentProps> = ({
         tempMessagesCount={tempMessagesCount}
       />
 
-      <LogDisplay 
-        logs={logs} 
-        isDark={isDark} 
-        equipment={equipment}
-        onDeleteLog={onDeleteLog}
-        onDownloadPdf={onDownloadPdf}
-        onGoogleAuth={onGoogleAuth}
-      />
+      {/* Show result HTML if available, otherwise show logs */}
+      {resultHtml ? (
+        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+          <CardContent className="p-4">
+            <div 
+              className="result-content prose dark:prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: resultHtml }}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <LogDisplay 
+          logs={logs} 
+          isDark={isDark} 
+          equipment={equipment}
+          onDeleteLog={onDeleteLog}
+          onDownloadPdf={onDownloadPdf}
+          onGoogleAuth={onGoogleAuth}
+        />
+      )}
 
     </main>
   );
