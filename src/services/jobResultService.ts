@@ -1,27 +1,28 @@
 export const pollJobResult = (
   jobId: string,
-  onUpdate: (html: string) => void,
+  onUpdate: (html?: string, htmlUrl?: string) => void,
   onError: (message: string) => void
 ): (() => void) => {
   let isPolling = true;
   let pollCount = 0;
-  const maxPolls = 600; // 30분 (3초 * 600회)
-  const pollInterval = 3000; // 3초
+  const maxPolls = 45; // 3분 (4초 * 45회)
+  const pollInterval = 4000; // 4초
   const retryDelay = 5000; // 5초
 
-  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw";
+  const SUPABASE_URL = "https://rigbiqjmszdlacjdkhep.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw";
 
   const pollOnce = async (): Promise<void> => {
     if (!isPolling) return;
 
     try {
       const response = await fetch(
-        `https://rigbiqjmszdlacjdkhep.supabase.co/rest/v1/job_results?select=job_id,status,html,error_message&job_id=eq.${jobId}`,
+        `${SUPABASE_URL}/rest/v1/job_results?job_id=eq.${jobId}&select=status,html,html_url,error_message,completed_at&limit=1`,
         {
           method: 'GET',
           headers: {
-            'apikey': ANON_KEY,
-            'Authorization': `Bearer ${ANON_KEY}`,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
             'Content-Type': 'application/json'
           }
         }
@@ -36,16 +37,18 @@ export const pollJobResult = (
       if (data.length === 1) {
         const result = data[0];
         
-        if (result.status === 'done') {
+        if (result.status !== 'processing') {
           isPolling = false;
-          onUpdate(result.html || '');
-          return;
-        }
-        
-        if (result.status === 'error') {
-          isPolling = false;
-          onError(result.error_message || '오류');
-          return;
+          
+          if (result.status === 'done') {
+            onUpdate(result.html, result.html_url);
+            return;
+          }
+          
+          if (result.error_message) {
+            onError(result.error_message);
+            return;
+          }
         }
       }
       

@@ -115,7 +115,7 @@ const MainContent: React.FC<MainContentProps> = ({
         tempMessagesCount={tempMessagesCount}
       />
 
-      {/* Show result HTML if available, otherwise show logs */}
+      {/* Show result HTML if available, show spinner while processing, otherwise show logs */}
       {resultHtml ? (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
@@ -123,6 +123,15 @@ const MainContent: React.FC<MainContentProps> = ({
               className="result-content prose dark:prose-invert max-w-none"
               dangerouslySetInnerHTML={{ __html: resultHtml }}
             />
+          </CardContent>
+        </Card>
+      ) : isProcessing ? (
+        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+          <CardContent className="p-4">
+            <div className="flex flex-col items-center justify-center p-8 space-y-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-muted-foreground">분석 중…</p>
+            </div>
           </CardContent>
         </Card>
       ) : (

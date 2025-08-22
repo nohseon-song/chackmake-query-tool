@@ -121,8 +121,12 @@ export const useAppState = () => {
         // Start polling for job result
         pollCleanupRef.current = pollJobResult(
           jobId,
-          (html: string) => {
-            setResultHtml(html);
+          (html?: string, htmlUrl?: string) => {
+            if (html) {
+              setResultHtml(html);
+            } else if (htmlUrl) {
+              setResultHtml(`<div class="text-center p-4"><a href="${htmlUrl}" target="_blank" class="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">리포트 열기</a></div>`);
+            }
             setIsProcessing(false);
             toast({ title: "✅ 처리 완료", description: "전문 기술검토가 완료되었습니다." });
           },
