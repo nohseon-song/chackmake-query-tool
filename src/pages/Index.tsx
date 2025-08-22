@@ -15,6 +15,9 @@ import { LogOut, User } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
+  const appState = useAppState();
+  console.log('Index.tsx received handleSignOut:', !!appState.handleSignOut);
+  
   const {
     user,
     isAuthLoading,
@@ -46,7 +49,7 @@ const Index = () => {
     resultHtml,
     toast,
     handleSignOut
-  } = useAppState();
+  } = appState;
 
   const {
     handleSaveReading,

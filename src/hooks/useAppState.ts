@@ -161,6 +161,7 @@ export const useAppState = () => {
     }
   };
   const handleSignOut = async () => {
+    console.log('handleSignOut function called');
     setIsProcessing(true);
     
     // Clean up polling when signing out
@@ -182,11 +183,14 @@ export const useAppState = () => {
     }
   };
   
-  return {
+  const returnValue = {
     user, isAuthLoading, isDark, equipment, class1, class2, savedReadings, logs, chatOpen,
     isProcessing, tempMessages, googleAuth, resultHtml, handleSignOut, toggleTheme, handleEquipmentChange,
     handleClass1Change, setEquipment, setClass1, setClass2, setSavedReadings, setLogs,
     setChatOpen, addTempMessage, updateTempMessage, deleteTempMessage, clearTempMessages,
     addLogEntry, sendWebhook, handleGoogleAuth, toast
   };
+  
+  console.log('useAppState returning:', { handleSignOut: !!returnValue.handleSignOut });
+  return returnValue;
 };
