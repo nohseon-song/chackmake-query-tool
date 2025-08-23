@@ -20,7 +20,9 @@ export const handleGoogleCallback = (): string | null => {
   return null;
 };
 
-// 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수 (리디렉션 방식)
+import { safeOpenNewTab } from './safeOpen';
+
+// 1. 구글 로그인 페이지로 이동시켜 인증을 시작하는 함수 (새 탭 방식)
 export const authenticateGoogle = async (): Promise<string> => {
   const { data, error } = await supabase.functions.invoke('get-google-config');
   if (error) throw new Error(`Supabase 함수 호출 실패: ${error.message}`);
@@ -36,22 +38,11 @@ export const authenticateGoogle = async (): Promise<string> => {
   sessionStorage.setItem('google_auth_pending', 'true');
   sessionStorage.setItem('google_auth_timestamp', Date.now().toString());
   
-  // iframe 환경 감지 및 상위 창으로 리디렉션 (Google X-Frame-Options 우회)
-  try {
-    if (window.self !== window.top) {
-      // iframe 내부에서 실행 중인 경우, 상위 창(top)으로 리디렉션
-      window.top!.location.href = authUrl;
-    } else {
-      // 일반 창에서 실행 중인 경우
-      window.location.href = authUrl;
-    }
-  } catch (e) {
-    // iframe 접근 권한이 없는 경우의 대체 방법
-    window.open(authUrl, '_top');
-  }
+  // 항상 새 탭으로만 열어 샌드박스 문제 해결
+  safeOpenNewTab(authUrl);
   
-  // Promise는 페이지 리로드 후 콜백에서 처리됨
-  throw new Error('Redirecting to Google...');
+  // 새 탭에서 인증 후 리디렉션될 예정이므로 Promise는 여기서 종료
+  throw new Error('새 탭에서 Google 인증을 진행합니다.');
 };
 
 // 2. 구글이 보내준 '인증 코드'를 진짜 '액세스 토큰'으로 교환하는 함수
