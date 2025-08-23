@@ -1,0 +1,50 @@
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Download, Loader2, FileUp } from 'lucide-react';
+
+interface ActionBarProps {
+  html: string | null;
+  loading: boolean;
+  onPdf: () => void;
+  onGDocs: () => void;
+}
+
+const ActionBar: React.FC<ActionBarProps> = ({ html, loading, onPdf, onGDocs }) => {
+  return (
+    <div className="action-bar flex gap-2 items-center mb-4">
+      <div className="font-medium text-lg">기술검토 및 진단 결과입니다.</div>
+      <div className="flex gap-2 ml-auto">
+        <Button
+          onClick={onPdf}
+          size="sm"
+          variant="outline"
+          className="flex items-center gap-1"
+          disabled={!html || loading}
+        >
+          {loading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Download className="w-3 h-3" />
+          )}
+          {loading ? 'PDF 생성 중...' : 'PDF 다운로드'}
+        </Button>
+        <Button
+          onClick={onGDocs}
+          size="sm"
+          variant="outline"
+          className="flex items-center gap-1"
+          disabled={!html || loading}
+        >
+          {loading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <FileUp className="w-3 h-3" />
+          )}
+          {loading ? 'Google Docs 생성 중...' : 'Google Docs로 내보내기'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default ActionBar;

@@ -5,6 +5,10 @@ import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
+import ActionBar from '@/components/ActionBar';
+import { downloadPdfFromHtml } from '@/utils/pdf';
+import { exportToGoogleDocs } from '@/utils/googleDocs';
+import { useToast } from '@/hooks/use-toast';
 interface Reading {
   equipment: string;
   class1: string;
@@ -43,7 +47,7 @@ interface MainContentProps {
   onDownloadPdf: (content: string) => void;
   onGoogleAuth?: (htmlContent: string, equipmentName?: string) => Promise<void>;
   onChatOpen: () => void;
-  onAddLogEntry: (tag: string, content: string) => void;
+  onAddLogEntry: (tag: string, content: any) => void;
 }
 
 const MainContent: React.FC<MainContentProps> = ({
@@ -70,6 +74,27 @@ const MainContent: React.FC<MainContentProps> = ({
   onChatOpen,
   onAddLogEntry
 }) => {
+  const { toast } = useToast();
+
+  const handlePdf = () => {
+    if (!resultHtml) return;
+    try {
+      downloadPdfFromHtml(resultHtml, "기술검토_진단_보고서");
+      toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
+    } catch (error) {
+      toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
+    }
+  };
+
+  const handleGDocs = async () => {
+    if (!resultHtml) return;
+    try {
+      await exportToGoogleDocs(resultHtml, equipment);
+      toast({ title: "Google Docs 내보내기", description: "새 탭에서 문서가 열렸습니다." });
+    } catch (error) {
+      toast({ title: "Google Docs 내보내기 실패", description: "다시 시도해주세요.", variant: "destructive" });
+    }
+  };
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
   const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
   const showInputs = class2 && selectedClass1;
@@ -115,23 +140,38 @@ const MainContent: React.FC<MainContentProps> = ({
         tempMessagesCount={tempMessagesCount}
       />
 
+      {/* Action Bar - Always visible when there's result or processing */}
+      {(resultHtml || isProcessing) && (
+        <ActionBar
+          html={resultHtml}
+          loading={isProcessing}
+          onPdf={handlePdf}
+          onGDocs={handleGDocs}
+        />
+      )}
+
       {/* Show result HTML if available, show spinner while processing, otherwise show logs */}
       {resultHtml ? (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
-            <div 
-              className="result-content prose dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: resultHtml }}
-            />
+            <section aria-live="polite" aria-busy={false}>
+              <div 
+                id="report-content"
+                className="result-content prose dark:prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: resultHtml }}
+              />
+            </section>
           </CardContent>
         </Card>
       ) : isProcessing ? (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
-            <div className="flex flex-col items-center justify-center p-8 space-y-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <p className="text-muted-foreground">분석 중…</p>
-            </div>
+            <section aria-live="polite" aria-busy={true}>
+              <div className="flex flex-col items-center justify-center p-8 space-y-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <p className="text-muted-foreground">분석 중…</p>
+              </div>
+            </section>
           </CardContent>
         </Card>
       ) : (
@@ -141,7 +181,7 @@ const MainContent: React.FC<MainContentProps> = ({
           equipment={equipment}
           onDeleteLog={onDeleteLog}
           onDownloadPdf={onDownloadPdf}
-          onGoogleAuth={onGoogleAuth}
+          onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, equipment) : undefined}
         />
       )}
 
