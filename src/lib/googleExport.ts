@@ -1,79 +1,107 @@
 // src/lib/googleExport.ts
-// 전제: index.html 에 아래 스크립트가 포함되어 있어야 합니다.
+// 전제: index.html에 아래 스크립트 포함
 // <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 type ExportOptions = {
-  html: string;                 // 최종 보고서 HTML
-  equipmentName: string;        // 예: '펌프'
-  clientId: string;             // VITE_GOOGLE_CLIENT_ID
-  folderId: string;             // VITE_DRIVE_TARGET_FOLDER_ID
-  openNewTab?: boolean;         // 새 탭/창 미리 열기 (기본 true)
-  onToast?: (p: { type: "success" | "error"; message: string }) => void;
+  html: string;               // 최종 리포트 HTML
+  equipmentName: string;      // 예: '펌프'
+  clientId: string;           // VITE_GOOGLE_CLIENT_ID
+  folderId: string;           // VITE_DRIVE_TARGET_FOLDER_ID
+  openNewTab?: boolean;       // 새 탭 열기 여부(기본 false: 현재 탭에서 열어 팝업차단 최소화)
+  onToast?: (p: { type: "success" | "error" | "info"; message: string }) => void;
 };
 
-// YYYY.MM.DD
 function fmtDateYYYYMMDD(d = new Date()) {
   const z = (n: number) => (n < 10 ? `0${n}` : `${n}`);
   return `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`;
 }
 
-// 팝업이 막히면 현재 탭으로 열기 위한 헬퍼
-function openWindowSafe(url?: string) {
-  try {
-    const w = window.open(url ?? "", "_blank", "noopener");
-    if (!w) return null; // 팝업 차단
-    return w;
-  } catch {
-    return null;
-  }
+function assert(val: any, msg: string): asserts val {
+  if (!val) throw new Error(msg);
 }
 
-export async function exportHtmlToGoogleDoc({
+async function ensureGisLoaded() {
+  if (typeof window !== "undefined" && (window as any).google?.accounts?.oauth2) return;
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Google Identity Services 스크립트 로드 실패"));
+    document.head.appendChild(s);
+  });
+}
+
+export async function exportHtmlToGoogleDocs({
   html,
   equipmentName,
   clientId,
   folderId,
-  openNewTab = true,
+  openNewTab = false,
   onToast,
 }: ExportOptions): Promise<{ id: string; webViewLink: string }> {
-  // 1) 미리 창을 연다(팝업차단 회피). 실패하면 null 리턴됨.
-  const preWin = openNewTab ? openWindowSafe() : null;
+  assert(html && html.trim(), "빈 보고서는 내보낼 수 없습니다.");
+  assert(clientId, "Google Client ID가 비어있습니다.");
+  assert(folderId, "Drive 대상 폴더 ID가 비어있습니다.");
 
-  // 2) GIS 토큰 클라이언트로 액세스 토큰 받기(리디렉트 불필요)
-  const scopes =
-    "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/documents";
+  // 0) GIS 보장
+  await ensureGisLoaded();
+
+  // 1) (선택) 팝업 차단 최소화를 위해 기본은 같은 탭. 새 탭을 원하면 true로.
+  let win: Window | null = null;
+  if (openNewTab) {
+    try { win = window.open("", "_blank", "noopener"); } catch { /* ignore */ }
+  }
+
+  // 2) 토큰 받기(GIS Token Client) — 승인된 JavaScript 원본(origin) 필요
+  const scopes = [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/documents",
+  ].join(" ");
 
   const token: string = await new Promise((resolve, reject) => {
-    // @ts-ignore
-    const tc = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: scopes,
-      // popup 기본(ux_mode 생략). redirect_uri 불필요.
-      callback: (resp: any) => {
-        if (resp && resp.access_token) {
-          resolve(resp.access_token);
-        } else {
-          reject(new Error(resp?.error || "Failed to fetch access token"));
-        }
-      },
-    });
-    // 사용자 클릭 이벤트 안에서 호출되어야 브라우저가 팝업으로 인식
-    tc.requestAccessToken({ prompt: "" });
+    try {
+      // @ts-ignore
+      const tc = (google as any).accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: scopes,
+        callback: (resp: any) => {
+          if (resp?.error) return reject(new Error(`토큰 오류: ${resp.error}`));
+          const at =
+            resp?.access_token ||
+            // @ts-ignore
+            (google as any).accounts?.oauth2?.getToken?.()?.access_token;
+          if (!at) return reject(new Error("액세스 토큰을 받지 못했습니다."));
+          resolve(at);
+        },
+      });
+      // 사용자 클릭 핸들러 안에서 호출되어야 팝업 차단이 안 걸림
+      tc.requestAccessToken({ prompt: "" });
+    } catch (e: any) {
+      reject(e);
+    }
+  }).catch((e: any) => {
+    // 가장 흔한 설정 오류: origin 미등록
+    if (String(e?.message || e).includes("origin_mismatch") || String(e).includes("mismatch")) {
+      onToast?.({ type: "error", message: "Google Cloud Console의 ‘승인된 JavaScript 원본’에 현재 주소를 추가하세요." });
+    }
+    throw e;
   });
 
   // 3) 파일명 규칙
   const safeEquip = (equipmentName || "미지정").trim();
   const fileName = `기술진단결과_${safeEquip}_${fmtDateYYYYMMDD()}`;
 
-  // 4) Google Drive에 멀티파트 업로드(HTML → Google Docs 변환 + 지정 폴더 저장)
+  // 4) Drive 업로드(HTML → Google Docs 변환, 지정 폴더 저장)
   const boundary = "-------314159265358979323846";
   const metadata = {
     name: fileName,
     mimeType: "application/vnd.google-apps.document",
-    parents: folderId ? [folderId] : undefined,
+    parents: [folderId],
   };
 
-  const multipartBody =
+  const body =
     `--${boundary}\r\n` +
     `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
     JSON.stringify(metadata) +
@@ -90,29 +118,29 @@ export async function exportHtmlToGoogleDoc({
         Authorization: `Bearer ${token}`,
         "Content-Type": `multipart/related; boundary=${boundary}`,
       },
-      body: multipartBody,
+      body,
     }
   );
 
   if (!res.ok) {
-    preWin?.close?.();
     const txt = await res.text();
-    onToast?.({ type: "error", message: "Google Drive 업로드 실패" });
-    throw new Error(`Google Drive upload failed: ${txt}`);
+    win?.close?.();
+    throw new Error(`Google Drive 업로드 실패: ${txt}`);
   }
 
   const data = (await res.json()) as { id: string; webViewLink: string };
 
-  // 5) 미리 연 창이 있으면, 그 창에서 문서 링크로 이동. 없으면 현재 탭으로 열기.
+  // 5) 링크 열기(새 탭 열었으면 그 탭에서, 아니면 현재 탭에서)
   if (data.webViewLink) {
-    if (preWin) {
-      preWin.location.replace(data.webViewLink);
+    if (win) {
+      try { win.location.replace(data.webViewLink); }
+      catch { window.open(data.webViewLink, "_blank", "noopener"); }
     } else {
-      // 팝업이 막힌 경우 현재 탭에서 열기
+      // 현재 탭: 팝업차단과 무관
       window.location.assign(data.webViewLink);
     }
   }
 
-  onToast?.({ type: "success", message: "Google Docs 문서가 생성되었습니다." });
+  onToast?.({ type: "success", message: "Google Docs로 내보내기 완료" });
   return data;
 }
