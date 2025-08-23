@@ -87,11 +87,41 @@ const MainContent: React.FC<MainContentProps> = ({
   };
 
   const handleGDocs = async () => {
-    if (!resultHtml) return;
+    if (!resultHtml) {
+      toast({ title: "내보낼 보고서가 없습니다.", variant: "destructive" });
+      return;
+    }
+    
+    const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
+    const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
+    
+    if (!GOOGLE_CLIENT_ID) {
+      toast({ title: "Google Client ID가 설정되지 않았습니다.", variant: "destructive" });
+      return;
+    }
+
     try {
-      await exportToGoogleDocs(resultHtml, equipment);
-      toast({ title: "Google Docs 내보내기", description: "새 탭에서 문서가 열렸습니다." });
+      const { exportHtmlToGoogleDoc } = await import('@/lib/googleExport');
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, "0");
+      const day = String(today.getDate()).padStart(2, "0");
+      const safeEquip = equipment || "미지정";
+      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${day}`;
+
+      await exportHtmlToGoogleDoc({
+        clientId: GOOGLE_CLIENT_ID,
+        folderId: DRIVE_FOLDER_ID,
+        html: resultHtml,
+        fileName,
+        onToast: (t) => toast({ 
+          title: t.type === "success" ? "성공" : "오류", 
+          description: t.message,
+          variant: t.type === "error" ? "destructive" : "default"
+        })
+      });
     } catch (error) {
+      console.error("Google Docs 내보내기 오류:", error);
       toast({ title: "Google Docs 내보내기 실패", description: "다시 시도해주세요.", variant: "destructive" });
     }
   };
