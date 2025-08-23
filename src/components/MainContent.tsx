@@ -99,7 +99,7 @@ const MainContent: React.FC<MainContentProps> = ({
       return;
     }
 
-    // 동기적으로 새 탭 선점(차단 시 null)
+    // ① 사용자 클릭과 동기적으로 새 탭 시도(차단 시 null)
     let popup: Window | null = window.open('about:blank', '_blank', 'noopener,noreferrer');
     const openedNewTab = !!popup;
     if (popup) {
@@ -115,14 +115,25 @@ const MainContent: React.FC<MainContentProps> = ({
     } else {
       toast({
         title: '팝업이 차단되었습니다',
-        description: '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요. (이번에는 현재 탭에서 열립니다.)',
+        description:
+          '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요. (이번에는 현재 탭으로 열립니다.)',
         variant: 'destructive'
       });
     }
 
     try {
-      const { exportHtmlToGoogleDoc } = await import('@/lib/googleExport');
+      // ② 유틸 모듈 로드(이름 불일치 방지: 존재 확인 후 호출)
+      const mod = await import('@/lib/googleExport');
+      const exportFn =
+        (mod as any).exportHtmlToGoogleDoc ||
+        (mod as any).exportHtmlToGoogleDocs ||
+        (mod as any).default;
 
+      if (typeof exportFn !== 'function') {
+        throw new Error('export function not found: exportHtmlToGoogleDoc(s)');
+      }
+
+      // 파일명 규칙: 기술진단결과_{설비}_{YYYY.MM.DD}
       const today = new Date();
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, '0');
@@ -130,7 +141,7 @@ const MainContent: React.FC<MainContentProps> = ({
       const safeEquip = (equipment && equipment.trim()) || '미지정';
       const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
 
-      const res: any = await exportHtmlToGoogleDoc({
+      const res: any = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
@@ -148,9 +159,9 @@ const MainContent: React.FC<MainContentProps> = ({
 
       if (docUrl) {
         if (openedNewTab && popup) {
-          popup.location.href = docUrl;          // 팝업 허용: 새 탭 이동
+          popup.location.href = docUrl;   // 팝업 허용: 새 탭 이동
         } else {
-          window.location.href = docUrl;         // 팝업 차단: 현재 탭 이동
+          window.location.href = docUrl;  // 팝업 차단: 현재 탭 이동
         }
         toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
       } else {
