@@ -6,7 +6,6 @@ import ActionButtons from '@/components/ActionButtons';
 import LogDisplay from '@/components/LogDisplay';
 import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
-import { exportToGoogleDocs } from '@/utils/googleDocs';
 import { useToast } from '@/hooks/use-toast';
 
 interface Reading {
@@ -86,7 +85,6 @@ const MainContent: React.FC<MainContentProps> = ({
     }
   };
 
-  // ⬇⬇⬇ Google Docs 내보내기: 팝업 차단 방지(동기적 창 오픈) + 파일명 규칙 + 지정 폴더 저장
   const handleGDocs = async () => {
     if (!resultHtml) {
       toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
@@ -101,33 +99,30 @@ const MainContent: React.FC<MainContentProps> = ({
       return;
     }
 
-    // 1) 사용자 클릭과 "동기적으로" 새 창(빈 탭) 오픈 → 브라우저 팝업 정책 충족
-    const popup = window.open('about:blank', '_blank', 'noopener,noreferrer');
-    if (!popup) {
+    // 동기적으로 새 탭 선점(차단 시 null)
+    let popup: Window | null = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    const openedNewTab = !!popup;
+    if (popup) {
+      try {
+        popup.document.write(`
+          <html><head><title>Google Docs 생성 중...</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif}</style>
+          </head><body><div>Google Docs 문서를 생성하고 있습니다…</div></body></html>
+        `);
+        popup.document.close();
+      } catch {}
+    } else {
       toast({
         title: '팝업이 차단되었습니다',
-        description: '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요.',
+        description: '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요. (이번에는 현재 탭에서 열립니다.)',
         variant: 'destructive'
       });
-      return;
-    }
-    // 임시 대기 화면
-    try {
-      popup.document.write(`
-        <html><head><title>Google Docs 생성 중...</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <style>html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif}</style>
-        </head><body><div>Google Docs 문서를 생성하고 있습니다…</div></body></html>
-      `);
-      popup.document.close();
-    } catch {
-      /* 일부 브라우저 보안정책으로 document 접근이 막혀도 무시 */
     }
 
     try {
       const { exportHtmlToGoogleDoc } = await import('@/lib/googleExport');
 
-      // 파일명 규칙: 기술진단결과_{설비}_{YYYY.MM.DD}
       const today = new Date();
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, '0');
@@ -135,13 +130,11 @@ const MainContent: React.FC<MainContentProps> = ({
       const safeEquip = (equipment && equipment.trim()) || '미지정';
       const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
 
-      // 2) 내보내기 실행 (라이브러리 반환값 형태가 달라도 안전하게 처리)
       const res: any = await exportHtmlToGoogleDoc({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
         fileName,
-        // 라이브러리에서 토스트 전달을 지원하면 그대로 사용
         onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
           toast({
             title: t.type === 'success' ? '성공' : t.type === 'error' ? '오류' : '안내',
@@ -150,16 +143,18 @@ const MainContent: React.FC<MainContentProps> = ({
           })
       });
 
-      // 3) 결과 URL 결정 & 동기 오픈한 창으로 이동
       const docUrl: string =
         res?.docUrl || res?.webViewLink || res?.alternateLink || res?.url || '';
 
       if (docUrl) {
-        popup.location.href = docUrl;
+        if (openedNewTab && popup) {
+          popup.location.href = docUrl;          // 팝업 허용: 새 탭 이동
+        } else {
+          window.location.href = docUrl;         // 팝업 차단: 현재 탭 이동
+        }
         toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
       } else {
-        // URL이 없다면 창 정리
-        try { popup.close(); } catch {}
+        try { popup?.close(); } catch {}
         toast({
           title: '문서 링크를 받지 못했습니다',
           description: '문서는 생성되었을 수 있으니 Google Drive 폴더를 확인해 주세요.',
@@ -167,11 +162,11 @@ const MainContent: React.FC<MainContentProps> = ({
         });
       }
     } catch (err) {
-      try { popup.close(); } catch {}
+      try { popup?.close(); } catch {}
       console.error('Google Docs 내보내기 오류:', err);
       toast({
         title: 'Google Docs 내보내기 실패',
-        description: '네트워크 상태 또는 권한을 확인 후 다시 시도해주세요.',
+        description: '네트워크/권한을 확인 후 다시 시도해주세요.',
         variant: 'destructive'
       });
     }
