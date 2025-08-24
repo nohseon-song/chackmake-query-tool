@@ -8,14 +8,33 @@ import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
 import { useToast } from '@/hooks/use-toast';
 
-interface Reading { equipment: string; class1: string; class2: string; design: string; measure: string; }
-interface LogEntry { id: string; tag: string; content: string; isResponse?: boolean; timestamp: number; }
+interface Reading {
+  equipment: string;
+  class1: string;
+  class2: string;
+  design: string;
+  measure: string;
+}
+
+interface LogEntry {
+  id: string;
+  tag: string;
+  content: string;
+  isResponse?: boolean;
+  timestamp: number;
+}
 
 interface MainContentProps {
-  equipment: string; class1: string; class2: string;
+  equipment: string;
+  class1: string;
+  class2: string;
   equipmentTree: Record<string, any>;
-  savedReadings: Reading[]; logs: LogEntry[];
-  resultHtml: string; isProcessing: boolean; isDark: boolean; tempMessagesCount: number;
+  savedReadings: Reading[];
+  logs: LogEntry[];
+  resultHtml: string;
+  isProcessing: boolean;
+  isDark: boolean;
+  tempMessagesCount: number;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -30,16 +49,34 @@ interface MainContentProps {
   onAddLogEntry: (tag: string, content: any) => void;
 }
 
-const MainContent: React.FC<MainContentProps> = (props) => {
-  const {
-    equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
-    isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
-    onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
-    onGoogleAuth, onChatOpen, onAddLogEntry
-  } = props;
-
+const MainContent: React.FC<MainContentProps> = ({
+  equipment,
+  class1,
+  class2,
+  equipmentTree,
+  savedReadings,
+  logs,
+  resultHtml,
+  isProcessing,
+  isDark,
+  tempMessagesCount,
+  onEquipmentChange,
+  onClass1Change,
+  onClass2Change,
+  onSaveReading,
+  onUpdateReading,
+  onDeleteReading,
+  onSubmit,
+  onDeleteLog,
+  onDownloadPdf,
+  onGoogleAuth,
+  onChatOpen,
+  onAddLogEntry
+}) => {
   const { toast } = useToast();
-  const [gdocsLink, setGdocsLink] = useState<string | null>(null);
+
+  // Google Docs 로컬 다운로드(Blob) 링크 상태 (개인정보 보호: Drive 링크 미노출)
+  const [gdocsDownload, setGdocsDownload] = useState<{ url: string; name: string } | null>(null);
 
   const handlePdf = () => {
     if (!resultHtml) return;
@@ -49,7 +86,7 @@ const MainContent: React.FC<MainContentProps> = (props) => {
       const m = String(now.getMonth() + 1).padStart(2, "0");
       const d = String(now.getDate()).padStart(2, "0");
       const safeEquip = (equipment || "미지정").trim();
-      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
+      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;  // 규칙 동일
       downloadPdfFromHtml(resultHtml, fileName);
       toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
     } catch {
@@ -62,26 +99,30 @@ const MainContent: React.FC<MainContentProps> = (props) => {
       toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
       return;
     }
+
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
     const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-    if (!GOOGLE_CLIENT_ID) {
-      toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' });
+
+    if (!GOOGLE_CLIENT_ID || !DRIVE_FOLDER_ID) {
+      toast({ title: '환경변수 누락', description: 'Google Client/Folder 설정을 확인하세요.', variant: 'destructive' });
       return;
     }
+
     try {
       const mod = await import('@/lib/googleExport');
       const exportFn =
-        (mod as any).exportHtmlToGoogleDoc ||
         (mod as any).exportHtmlToGoogleDocs ||
+        (mod as any).exportHtmlToGoogleDoc ||
         (mod as any).default;
-      if (typeof exportFn !== 'function') throw new Error('export function not found');
 
       const today = new Date();
-      const y = today.getFullYear(), m = String(today.getMonth() + 1).padStart(2, '0'), d = String(today.getDate()).padStart(2, '0');
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
       const safeEquip = (equipment && equipment.trim()) || '미지정';
       const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
 
-      const res: any = await exportFn({
+      const res: { id: string; fileName: string; downloadUrl: string } = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
@@ -95,20 +136,26 @@ const MainContent: React.FC<MainContentProps> = (props) => {
           })
       });
 
-      const docUrl: string = res?.docUrl || res?.webViewLink || res?.alternateLink || res?.url || '';
-      if (docUrl) {
-        setGdocsLink(docUrl); // 화면에는 링크만 노출(앱 화면 덮지 않음)
-        toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
+      // 개인정보 보호: Drive 링크는 표출하지 않고 로컬 저장용 링크만 제공
+      if (res?.downloadUrl) {
+        // 전에 만든 링크가 있으면 메모리 해제
+        if (gdocsDownload?.url) URL.revokeObjectURL(gdocsDownload.url);
+        setGdocsDownload({ url: res.downloadUrl, name: res.fileName });
+        toast({ title: 'Google Docs 내보내기 완료', description: '로컬 다운로드 링크가 준비되었습니다.' });
       } else {
         toast({
-          title: '문서 링크를 받지 못했습니다',
-          description: '문서는 생성되었을 수 있으니 Google Drive 폴더를 확인해 주세요.',
+          title: '다운로드 링크 생성 실패',
+          description: 'Drive에는 저장되었을 수 있습니다(관리자만 확인).',
           variant: 'destructive'
         });
       }
     } catch (err) {
       console.error('Google Docs 내보내기 오류:', err);
-      toast({ title: 'Google Docs 내보내기 실패', description: '네트워크/권한을 확인 후 다시 시도해주세요.', variant: 'destructive' });
+      toast({
+        title: 'Google Docs 내보내기 실패',
+        description: '네트워크/권한을 확인 후 다시 시도해주세요.',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -161,14 +208,28 @@ const MainContent: React.FC<MainContentProps> = (props) => {
         <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {/* Google Docs 링크 카드: 자동 이동 안 함 */}
-      {gdocsLink && (
+      {/* Google Docs 로컬 저장 링크 안내 (Drive 링크 노출 금지) */}
+      {gdocsDownload && (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
-            <p className="mb-2 font-medium">Google Docs 문서가 생성되었습니다.</p>
-            <a className="text-blue-600 underline break-all" href={gdocsLink} target="_blank" rel="noopener noreferrer">
-              문서 열기 / 다운로드 링크
-            </a>
+            <div className="space-y-2">
+              <div>Google Docs 문서가 생성되었습니다.</div>
+              <a
+                className="text-blue-600 underline"
+                href={gdocsDownload.url}
+                download={gdocsDownload.name}
+                onClick={() => {
+                  // 다운로드 클릭 후 5초 뒤 URL 해제(일회성 링크)
+                  const url = gdocsDownload.url;
+                  setTimeout(() => URL.revokeObjectURL(url), 5000);
+                }}
+              >
+                내 기기로 저장 (DOCX 다운로드)
+              </a>
+              <p className="text-sm text-muted-foreground">
+                * 개인정보 보호를 위해 Drive 링크는 노출하지 않습니다. 관리자용 저장은 지정 폴더에서만 관리하세요.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -177,7 +238,11 @@ const MainContent: React.FC<MainContentProps> = (props) => {
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
             <section aria-live="polite" aria-busy={false}>
-              <div id="report-content" className="result-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: resultHtml }} />
+              <div
+                id="report-content"
+                className="result-content prose dark:prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: resultHtml }}
+              />
             </section>
           </CardContent>
         </Card>
