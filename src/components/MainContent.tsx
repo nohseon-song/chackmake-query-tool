@@ -76,14 +76,21 @@ const MainContent: React.FC<MainContentProps> = ({
   const { toast } = useToast();
 
   const handlePdf = () => {
-    if (!resultHtml) return;
-    try {
-      downloadPdfFromHtml(resultHtml, '기술검토_진단_보고서');
-      toast({ title: 'PDF 다운로드', description: '인쇄 대화상자가 열렸습니다.' });
-    } catch {
-      toast({ title: 'PDF 다운로드 실패', description: '다시 시도해주세요.', variant: 'destructive' });
-    }
-  };
+  if (!resultHtml) return;
+  try {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    const safeEquip = (equipment || "미지정").trim();
+    const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;  // ← 규칙 동일
+
+    downloadPdfFromHtml(resultHtml, fileName);
+    toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
+  } catch (error) {
+    toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
+  }
+};
 
   const handleGDocs = async () => {
     if (!resultHtml) {
