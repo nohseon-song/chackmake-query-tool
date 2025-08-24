@@ -1,15 +1,13 @@
-import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import EquipmentSelection from '@/components/EquipmentSelection';
-import ReadingsManagement from '@/components/ReadingsManagement';
-import ActionButtons from '@/components/ActionButtons';
-import LogDisplay from '@/components/LogDisplay';
-import ActionBar from '@/components/ActionBar';
-import { downloadPdfFromHtml } from '@/utils/pdf';
-import { useToast } from '@/hooks/use-toast';
-
-// 추가: Google Docs 내보내기 유틸(정화 포함)
-import { exportHtmlToGoogleDocs, sanitizeReportHtml } from '@/lib/googleExport';
+// src/components/MainContent.tsx
+import React from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import EquipmentSelection from "@/components/EquipmentSelection";
+import ReadingsManagement from "@/components/ReadingsManagement";
+import ActionButtons from "@/components/ActionButtons";
+import LogDisplay from "@/components/LogDisplay";
+import ActionBar from "@/components/ActionBar";
+import { downloadPdfFromHtml } from "@/utils/pdf";
+import { useToast } from "@/hooks/use-toast";
 
 interface Reading {
   equipment: string;
@@ -18,6 +16,7 @@ interface Reading {
   design: string;
   measure: string;
 }
+
 interface LogEntry {
   id: string;
   tag: string;
@@ -25,6 +24,7 @@ interface LogEntry {
   isResponse?: boolean;
   timestamp: number;
 }
+
 interface MainContentProps {
   equipment: string;
   class1: string;
@@ -45,6 +45,10 @@ interface MainContentProps {
   onSubmit: () => void;
   onDeleteLog: (id: string) => void;
   onDownloadPdf: (content: string) => void;
+  /**
+   * 선택: 외부에서 Google Docs 내보내기를 직접 처리하고 싶을 때 주입
+   * (없으면 내부 버튼은 비활성/미사용 처리)
+   */
   onGoogleAuth?: (htmlContent: string, equipmentName?: string) => Promise<void>;
   onChatOpen: () => void;
   onAddLogEntry: (tag: string, content: any) => void;
@@ -72,86 +76,59 @@ const MainContent: React.FC<MainContentProps> = ({
   onDownloadPdf,
   onGoogleAuth,
   onChatOpen,
-  onAddLogEntry
+  onAddLogEntry,
 }) => {
   const { toast } = useToast();
 
-  // Google Docs 다운로드 링크 상태(문서 생성 후에만 노출)
-  const [gdocsLink, setGdocsLink] = React.useState<string | null>(null);
-  const [gdocsFileName, setGdocsFileName] = React.useState<string | null>(null);
-
-  // 파일명 규칙용 설비명 (equipment 비어있으면 보강)
-  const effectiveEquipName =
-    (equipment && equipment.trim()) ||
-    (savedReadings[0]?.equipment?.trim()) ||
-    (class2 && class2.trim()) ||
-    "미지정";
-
-  const buildFileName = React.useCallback(() => {
-    const d = new Date();
-    const z = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-    const stamp = `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`;
-    return `기술진단결과_${effectiveEquipName}_${stamp}`;
-  }, [effectiveEquipName]);
-
+  // PDF 다운로드: 기존 pdf 유틸 그대로 사용 (파일명 규칙은 pdf 유틸에서 처리)
   const handlePdf = () => {
-    if (!resultHtml) return;
+    if (!resultHtml) {
+      toast({ title: "PDF 다운로드", description: "내보낼 보고서가 없습니다.", variant: "destructive" });
+      return;
+    }
     try {
-      // 이상한 JSON 조각 제거 후 PDF화 + 파일명 규칙 적용
-      const cleaned = sanitizeReportHtml(resultHtml);
-      downloadPdfFromHtml(cleaned, buildFileName());
-      toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
-    } catch (error) {
+      // 내부 유틸이 파일명 규칙을 적용하도록 유지
+      downloadPdfFromHtml(resultHtml);
+      toast({ title: "PDF 다운로드", description: "인쇄(저장) 대화상자가 열렸습니다." });
+    } catch {
       toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
     }
   };
 
+  // Google Docs 내보내기: 외부 핸들러가 주입된 경우에만 사용
   const handleGDocs = async () => {
     if (!resultHtml) {
       toast({ title: "내보낼 보고서가 없습니다.", variant: "destructive" });
       return;
     }
-
-    const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-    const DRIVE_FOLDER_ID  = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-    if (!GOOGLE_CLIENT_ID || !DRIVE_FOLDER_ID) {
-      toast({ title: "Google 설정이 비어있습니다.", description: "환경변수를 확인하세요.", variant: "destructive" });
+    if (!onGoogleAuth) {
+      toast({
+        title: "Google Docs",
+        description: "현재 빌드에서는 Google Docs 내보내기 핸들러가 설정되어 있지 않습니다.",
+        variant: "destructive",
+      });
       return;
     }
-
     try {
-      // 화면 이동 없이 문서 생성 + 다운로드 링크 반환
-      const { downloadUrl, fileName } = await exportHtmlToGoogleDocs({
-        html: resultHtml,
-        equipmentName: effectiveEquipName,
-        clientId: GOOGLE_CLIENT_ID,
-        folderId: DRIVE_FOLDER_ID,
-        onToast: (t) =>
-          toast({
-            title: t.type === "success" ? "성공" : t.type === "info" ? "안내" : "오류",
-            description: t.message,
-            variant: t.type === "error" ? "destructive" : "default",
-          }),
+      await onGoogleAuth(resultHtml, equipment);
+    } catch (e: any) {
+      // 내부 예외는 여기서 완충
+      console.error("Google Docs 내보내기 오류:", e);
+      toast({
+        title: "Google Docs 내보내기 실패",
+        description: "네트워크/권한을 확인 후 다시 시도해주세요.",
+        variant: "destructive",
       });
-
-      setGdocsLink(downloadUrl);
-      setGdocsFileName(fileName);
-
-      // 로그에도 남겨 앱 내부 이력에서 링크 재확인 가능
-      onAddLogEntry("GoogleDocs", `생성 완료: ${fileName}\n${downloadUrl}`);
-    } catch (error) {
-      console.error("Google Docs 내보내기 오류:", error);
-      toast({ title: "Google Docs 내보내기 실패", description: "네트워크/권한을 확인 후 다시 시도해주세요.", variant: "destructive" });
     }
   };
 
   const selectedEquipment = equipmentTree[equipment as keyof typeof equipmentTree];
   const selectedClass1 = selectedEquipment?.[class1 as keyof typeof selectedEquipment];
-  const showInputs = class2 && selectedClass1;
+  const showInputs = Boolean(class2 && selectedClass1);
 
   return (
     <main className="flex-1 overflow-y-auto p-3 pb-24">
-      <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+      <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white"} mt-4`}>
         <CardContent className="p-4 space-y-4">
           <EquipmentSelection
             equipment={equipment}
@@ -190,58 +167,29 @@ const MainContent: React.FC<MainContentProps> = ({
         tempMessagesCount={tempMessagesCount}
       />
 
-      {/* Action Bar */}
       {(resultHtml || isProcessing) && (
-        <ActionBar
-          html={resultHtml}
-          loading={isProcessing}
-          onPdf={handlePdf}
-          onGDocs={handleGDocs}
-        />
+        <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {/* Google Docs 다운로드 링크 표시(생성된 이후에만) */}
-      {gdocsLink && (
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm">Google Docs 문서가 지정된 Google Drive 폴더에 저장되었습니다.</p>
-              <a
-                href={gdocsLink}
-                download={gdocsFileName || undefined}
-                className="text-blue-600 underline"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {gdocsFileName || "문서 다운로드 (DOCX)"}
-              </a>
-              <p className="text-xs text-muted-foreground">
-                링크는 DOCX 다운로드 전용입니다. (화면 이동 없이 기기에 저장)
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 결과/로딩/로그 */}
       {resultHtml ? (
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+        <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white"} mt-4`}>
           <CardContent className="p-4">
             <section aria-live="polite" aria-busy={false}>
               <div
                 id="report-content"
                 className="result-content prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: sanitizeReportHtml(resultHtml) }}
+                // 서버에서 온 HTML 그대로 렌더: 스타일/가독성 유지
+                dangerouslySetInnerHTML={{ __html: resultHtml }}
               />
             </section>
           </CardContent>
         </Card>
       ) : isProcessing ? (
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+        <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white"} mt-4`}>
           <CardContent className="p-4">
             <section aria-live="polite" aria-busy={true}>
               <div className="flex flex-col items-center justify-center p-8 space-y-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                 <p className="text-muted-foreground">분석 중…</p>
               </div>
             </section>
