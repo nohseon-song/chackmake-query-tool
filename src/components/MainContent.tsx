@@ -8,33 +8,14 @@ import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
 import { useToast } from '@/hooks/use-toast';
 
-interface Reading {
-  equipment: string;
-  class1: string;
-  class2: string;
-  design: string;
-  measure: string;
-}
-
-interface LogEntry {
-  id: string;
-  tag: string;
-  content: string;
-  isResponse?: boolean;
-  timestamp: number;
-}
+interface Reading { equipment: string; class1: string; class2: string; design: string; measure: string; }
+interface LogEntry { id: string; tag: string; content: string; isResponse?: boolean; timestamp: number; }
 
 interface MainContentProps {
-  equipment: string;
-  class1: string;
-  class2: string;
+  equipment: string; class1: string; class2: string;
   equipmentTree: Record<string, any>;
-  savedReadings: Reading[];
-  logs: LogEntry[];
-  resultHtml: string;
-  isProcessing: boolean;
-  isDark: boolean;
-  tempMessagesCount: number;
+  savedReadings: Reading[]; logs: LogEntry[];
+  resultHtml: string; isProcessing: boolean; isDark: boolean; tempMessagesCount: number;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -50,33 +31,13 @@ interface MainContentProps {
 }
 
 const MainContent: React.FC<MainContentProps> = ({
-  equipment,
-  class1,
-  class2,
-  equipmentTree,
-  savedReadings,
-  logs,
-  resultHtml,
-  isProcessing,
-  isDark,
-  tempMessagesCount,
-  onEquipmentChange,
-  onClass1Change,
-  onClass2Change,
-  onSaveReading,
-  onUpdateReading,
-  onDeleteReading,
-  onSubmit,
-  onDeleteLog,
-  onDownloadPdf,
-  onGoogleAuth,
-  onChatOpen,
-  onAddLogEntry
+  equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
+  isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
+  onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
+  onGoogleAuth, onChatOpen, onAddLogEntry
 }) => {
   const { toast } = useToast();
-
-  // Google Docs 로컬 다운로드(Blob) 링크 상태 (개인정보 보호: Drive 링크 미노출)
-  const [gdocsDownload, setGdocsDownload] = useState<{ url: string; name: string } | null>(null);
+  const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
   const handlePdf = () => {
     if (!resultHtml) return;
@@ -86,7 +47,7 @@ const MainContent: React.FC<MainContentProps> = ({
       const m = String(now.getMonth() + 1).padStart(2, "0");
       const d = String(now.getDate()).padStart(2, "0");
       const safeEquip = (equipment || "미지정").trim();
-      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;  // 규칙 동일
+      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
       downloadPdfFromHtml(resultHtml, fileName);
       toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
     } catch {
@@ -94,19 +55,12 @@ const MainContent: React.FC<MainContentProps> = ({
     }
   };
 
+  // 개인정보 보호: Drive 링크는 노출하지 않고 DOCX만 기기 저장
   const handleGDocs = async () => {
-    if (!resultHtml) {
-      toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
-      return;
-    }
-
+    if (!resultHtml) { toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' }); return; }
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
     const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-
-    if (!GOOGLE_CLIENT_ID || !DRIVE_FOLDER_ID) {
-      toast({ title: '환경변수 누락', description: 'Google Client/Folder 설정을 확인하세요.', variant: 'destructive' });
-      return;
-    }
+    if (!GOOGLE_CLIENT_ID) { toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' }); return; }
 
     try {
       const mod = await import('@/lib/googleExport');
@@ -114,15 +68,14 @@ const MainContent: React.FC<MainContentProps> = ({
         (mod as any).exportHtmlToGoogleDocs ||
         (mod as any).exportHtmlToGoogleDoc ||
         (mod as any).default;
+      if (typeof exportFn !== 'function') throw new Error('export function not found');
 
-      const today = new Date();
-      const y = today.getFullYear();
-      const m = String(today.getMonth() + 1).padStart(2, '0');
-      const d = String(today.getDate()).padStart(2, '0');
+      const t = new Date();
+      const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, '0'), d = String(t.getDate()).padStart(2, '0');
       const safeEquip = (equipment && equipment.trim()) || '미지정';
       const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
 
-      const res: { id: string; fileName: string; downloadUrl: string } = await exportFn({
+      const res: any = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
@@ -136,26 +89,32 @@ const MainContent: React.FC<MainContentProps> = ({
           })
       });
 
-      // 개인정보 보호: Drive 링크는 표출하지 않고 로컬 저장용 링크만 제공
-      if (res?.downloadUrl) {
-        // 전에 만든 링크가 있으면 메모리 해제
-        if (gdocsDownload?.url) URL.revokeObjectURL(gdocsDownload.url);
-        setGdocsDownload({ url: res.downloadUrl, name: res.fileName });
-        toast({ title: 'Google Docs 내보내기 완료', description: '로컬 다운로드 링크가 준비되었습니다.' });
+      const dl = res?.download;
+      if (dl?.blobUrl && dl?.fileName) {
+        // 자동 저장
+        const a = document.createElement('a');
+        a.href = dl.blobUrl;
+        a.download = dl.fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // 화면에는 "다시 받기"만 노출
+        setDocxLink({ url: dl.blobUrl, name: dl.fileName });
+        toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
+
+        // 2분 뒤 메모리 해제(사용자가 다시 받기 버튼을 눌러도 충분)
+        setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
       } else {
+        // blobUrl 생성 실패 시에도 개인정보 보호를 위해 링크는 노출하지 않음
         toast({
-          title: '다운로드 링크 생성 실패',
-          description: 'Drive에는 저장되었을 수 있습니다(관리자만 확인).',
+          title: '문서 링크 생성에 실패했습니다',
+          description: 'Google Drive 지정 폴더에는 저장되었습니다.',
           variant: 'destructive'
         });
       }
     } catch (err) {
       console.error('Google Docs 내보내기 오류:', err);
-      toast({
-        title: 'Google Docs 내보내기 실패',
-        description: '네트워크/권한을 확인 후 다시 시도해주세요.',
-        variant: 'destructive'
-      });
+      toast({ title: 'Google Docs 내보내기 실패', description: '네트워크/권한을 확인 후 다시 시도해주세요.', variant: 'destructive' });
     }
   };
 
@@ -168,9 +127,7 @@ const MainContent: React.FC<MainContentProps> = ({
       <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
         <CardContent className="p-4 space-y-4">
           <EquipmentSelection
-            equipment={equipment}
-            class1={class1}
-            class2={class2}
+            equipment={equipment} class1={class1} class2={class2}
             equipmentTree={equipmentTree}
             onEquipmentChange={onEquipmentChange}
             onClass1Change={onClass1Change}
@@ -180,11 +137,8 @@ const MainContent: React.FC<MainContentProps> = ({
             onAddLogEntry={onAddLogEntry}
             isDark={isDark}
           />
-
           <ReadingsManagement
-            equipment={equipment}
-            class1={class1}
-            class2={class2}
+            equipment={equipment} class1={class1} class2={class2}
             showInputs={showInputs}
             savedReadings={savedReadings}
             onSaveReading={onSaveReading}
@@ -208,28 +162,14 @@ const MainContent: React.FC<MainContentProps> = ({
         <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {/* Google Docs 로컬 저장 링크 안내 (Drive 링크 노출 금지) */}
-      {gdocsDownload && (
+      {/* 개인정보 보호: Drive 링크 대신 "다시 받기"만 제공 */}
+      {docxLink && (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
-            <div className="space-y-2">
-              <div>Google Docs 문서가 생성되었습니다.</div>
-              <a
-                className="text-blue-600 underline"
-                href={gdocsDownload.url}
-                download={gdocsDownload.name}
-                onClick={() => {
-                  // 다운로드 클릭 후 5초 뒤 URL 해제(일회성 링크)
-                  const url = gdocsDownload.url;
-                  setTimeout(() => URL.revokeObjectURL(url), 5000);
-                }}
-              >
-                내 기기로 저장 (DOCX 다운로드)
-              </a>
-              <p className="text-sm text-muted-foreground">
-                * 개인정보 보호를 위해 Drive 링크는 노출하지 않습니다. 관리자용 저장은 지정 폴더에서만 관리하세요.
-              </p>
-            </div>
+            <p className="mb-2 font-medium">문서가 기기에 저장되었습니다.</p>
+            <a className="text-blue-600 underline break-all" href={docxLink.url} download={docxLink.name}>
+              DOCX 다시 받기
+            </a>
           </CardContent>
         </Card>
       )}
@@ -238,11 +178,7 @@ const MainContent: React.FC<MainContentProps> = ({
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
             <section aria-live="polite" aria-busy={false}>
-              <div
-                id="report-content"
-                className="result-content prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: resultHtml }}
-              />
+              <div id="report-content" className="result-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: resultHtml }} />
             </section>
           </CardContent>
         </Card>
@@ -259,9 +195,7 @@ const MainContent: React.FC<MainContentProps> = ({
         </Card>
       ) : (
         <LogDisplay
-          logs={logs}
-          isDark={isDark}
-          equipment={equipment}
+          logs={logs} isDark={isDark} equipment={equipment}
           onDeleteLog={onDeleteLog}
           onDownloadPdf={onDownloadPdf}
           onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, equipment) : undefined}
@@ -270,5 +204,4 @@ const MainContent: React.FC<MainContentProps> = ({
     </main>
   );
 };
-
 export default MainContent;
