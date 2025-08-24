@@ -1,5 +1,5 @@
 // src/utils/pdf.ts
-// 목표: 가독성 100% 유지 + JSON 안전 치환 + "문장강조 도배" 자동 해제 + 화면 전환 없이 미리보기
+// 목표: 가독성 100% 유지 + JSON 안전 치환 + "문단 전체 볼드"만 해제 + 화면 전환 없이 미리보기
 
 /** 균형 잡힌 JSON 블록 끝 위치(문자열/이스케이프/중괄호 깊이 인식) */
 function findBalancedJsonEnd(s: string, start: number) {
@@ -19,12 +19,11 @@ function findBalancedJsonEnd(s: string, start: number) {
   return -1;
 }
 
-/** 값이 비어있지 않은 문자열인지 */
 function nonEmpty(v: any): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-/** 본문 중간 JSON 오브젝트를 안전하게 치환(삭제 금지, 비어있는 HTML 건너뛰고 요약문은 포함) */
+/** 본문 중간 JSON 오브젝트를 안전하게 치환(삭제 금지, 비어있는 HTML 건너뛰고 요약문 포함) */
 function inlineJsonBlocksSafe(raw: string): string {
   if (!raw) return "";
   const keys = [
@@ -58,19 +57,15 @@ function inlineJsonBlocksSafe(raw: string): string {
         if (keys.some(k => block.includes(`"${k}"`))) {
           try {
             const obj = JSON.parse(block);
-            // 1) 비어있지 않은 HTML 후보
             const htmlCandidate =
               [obj.final_report_html, obj.precision_verification_html, obj.final_summary_html, obj.final_report]
-                .map(v => (typeof v === "string" ? v.trim() : v))
+                .map((v: any) => (typeof v === "string" ? v.trim() : v))
                 .find(nonEmpty);
-            // 2) 요약문은 있으면 반드시 포함
             const summary = nonEmpty(obj.final_summary_text) ? `<p>${obj.final_summary_text.trim()}</p>` : "";
-
             const replacement = nonEmpty(htmlCandidate)
               ? (summary ? htmlCandidate + summary : htmlCandidate)
               : summary;
-
-            out += replacement || "";   // 절대 삭제하지 않음
+            out += replacement || "";
             i = end + 1;
             continue;
           } catch {
@@ -86,37 +81,43 @@ function inlineJsonBlocksSafe(raw: string): string {
   return out;
 }
 
-/** 블록 전체가 <strong>/<b>로 감싸진 "문장강조 도배" 해제 */
-function normalizeOverBold(html: string): string {
-  if (!html) return "";
-  let out = html;
+/** 문단 전체가 <strong>/<b>로 감싸진 경우만 언랩(부분 강조는 유지) */
+function unwrapOverBold(html: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div id="__root">${html}</div>`, "text/html");
+    const root = doc.getElementById("__root");
+    if (!root) return html;
 
-  // 인라인 굵기 강제 제거(700/bold)
-  out = out.replace(/font-weight\s*:\s*(700|bold)\s*;?/gi, "");
-
-  const tags = ["p", "li", "div", "section", "article"];
-  for (const tag of tags) {
-    const reStrong = new RegExp(`<${tag}>(\\s*)<strong>([\\s\\S]*?)<\\/strong>(\\s*)<\\/${tag}>`, "gi");
-    out = out.replace(reStrong, (_m, a, body, b) => {
-      const plain = String(body).replace(/<\\/?strong>/gi, "");
-      const textOnly = plain.replace(/<[^>]*>/g, "").trim();
-      // 길이가 충분하고(≥24) 사실상 "전체 강조"면 해제
-      if (textOnly.length >= 24) return `<${tag}>${a}${plain}${b}</${tag}>`;
-      return _m;
+    const targets = root.querySelectorAll("p, li, div, section, article");
+    targets.forEach((el) => {
+      // font-weight 강제 제거
+      const st = (el as HTMLElement).getAttribute("style") || "";
+      if (/font-weight\s*:\s*(700|bold)/i.test(st)) {
+        (el as HTMLElement).setAttribute("style", st.replace(/font-weight\s*:\s*(700|bold)\s*;?/ig, ""));
+      }
+      if (el.children.length === 1) {
+        const only = el.children[0] as HTMLElement;
+        const tag = only.tagName.toLowerCase();
+        if (tag === "strong" || tag === "b") {
+          // 내부에 블록 태그가 없고 텍스트 길이가 충분하면 "전체 강조"로 판단
+          if (!only.querySelector("p,div,section,article,table") ) {
+            const plain = only.textContent ? only.textContent.trim() : "";
+            if (plain.length >= 24) {
+              el.innerHTML = only.innerHTML; // 언랩
+            }
+          }
+        }
+      }
     });
-
-    const reB = new RegExp(`<${tag}>(\\s*)<b>([\\s\\S]*?)<\\/b>(\\s*)<\\/${tag}>`, "gi");
-    out = out.replace(reB, (_m, a, body, b) => {
-      const plain = String(body).replace(/<\\/?b>/gi, "");
-      const textOnly = plain.replace(/<[^>]*>/g, "").trim();
-      if (textOnly.length >= 24) return `<${tag}>${a}${plain}${b}</${tag}>`;
-      return _m;
-    });
+    const res = (root as HTMLElement).innerHTML;
+    return res;
+  } catch {
+    return html;
   }
-  return out;
 }
 
-/** 오버레이(앱 내 미리보기) 생성 */
+/** 오버레이(앱 내 미리보기) */
 function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
   const overlay = document.createElement("div");
   overlay.style.position = "fixed";
@@ -145,21 +146,11 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
 
   const btnSave = document.createElement("button");
   btnSave.textContent = "PDF 저장(인쇄)";
-  btnSave.style.background = "#2563eb";
-  btnSave.style.color = "#fff";
-  btnSave.style.border = "0";
-  btnSave.style.padding = "6px 10px";
-  btnSave.style.borderRadius = "6px";
-  btnSave.style.cursor = "pointer";
+  Object.assign(btnSave.style, { background: "#2563eb", color: "#fff", border: "0", padding: "6px 10px", borderRadius: "6px", cursor: "pointer" });
 
   const btnClose = document.createElement("button");
   btnClose.textContent = "닫기";
-  btnClose.style.background = "#374151";
-  btnClose.style.color = "#fff";
-  btnClose.style.border = "0";
-  btnClose.style.padding = "6px 10px";
-  btnClose.style.borderRadius = "6px";
-  btnClose.style.cursor = "pointer";
+  Object.assign(btnClose.style, { background: "#374151", color: "#fff", border: "0", padding: "6px 10px", borderRadius: "6px", cursor: "pointer" });
 
   bar.appendChild(title);
   bar.appendChild(btnSave);
@@ -179,6 +170,7 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
   let blobUrl: string | null = null;
 
   try {
+    // srcdoc 선호
     (frame as any).srcdoc = htmlDoc;
   } catch {
     const blob = new Blob([htmlDoc], { type: "text/html;charset=utf-8" });
@@ -191,8 +183,7 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
       const cw = frame.contentWindow;
       if (!cw) return;
       try { cw.document.title = fileBase; } catch {}
-      cw.focus();
-      cw.print();
+      cw.focus(); cw.print();
     } catch {}
   };
 
@@ -203,12 +194,10 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
 }
 
 export function downloadPdfFromHtml(html: string, filename: string) {
-  const fileBase = (filename || "report")
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/\.+$/, "");
+  const fileBase = (filename || "report").replace(/[\\/:*?"<>|]+/g, "_").replace(/\.+$/, "");
 
-  // 1) JSON 안전 치환 → 2) "문장강조 도배" 해제
-  const cleaned = normalizeOverBold(inlineJsonBlocksSafe(html || ""));
+  // 1) JSON 안전 치환 → 2) 문단 전체 볼드 언랩
+  const cleaned = unwrapOverBold(inlineJsonBlocksSafe(html || ""));
 
   const htmlDoc = `
     <!DOCTYPE html>
@@ -217,24 +206,23 @@ export function downloadPdfFromHtml(html: string, filename: string) {
       <meta charset="UTF-8" />
       <title>${fileBase}</title>
       <style> 
-        /* 네가 주신 "가독성 100%" 기본 스타일 */
+        /* 가독성 100% 기본 스타일 */
         @page{ size: A4; margin: 14mm } 
-        body{ margin:0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; font-weight:400; color:#111; } 
+        body{ margin:0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; font-weight: 400; color:#111; } 
         .prose { max-width: none; }
-        .prose h1, .prose h2, .prose h3 { margin-top: 1em; margin-bottom: 0.5em; font-weight:700; }
+        .prose h1, .prose h2, .prose h3 { margin-top: 1em; margin-bottom: 0.5em; font-weight: 700; }
         .prose p { margin: 0.5em 0; }
         ul, ol { margin: 0.5em 0 0.5em 1.25em; }
         table { width: 100%; border-collapse: collapse; margin: 1em 0; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f5f5f5; font-weight: 700; }
-        /* 문단 전체 볼드 방지(부분 강조는 유지) */
-        strong, b { font-weight: 600; }
+        strong, b { font-weight: 600; } /* 부분 강조는 유지 */
       </style>
     </head>
     <body>${cleaned}</body>
     </html>
   `;
 
-  // 화면 전환 없이 즉시 미리보기
+  // 화면 전환 없이 미리보기
   openOverlayWithIframe(htmlDoc, fileBase);
 }
