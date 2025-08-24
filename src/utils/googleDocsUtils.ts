@@ -21,7 +21,83 @@ function htmlEntitiesDecode(s: string): string {
     .replace(/&#39;/gi, "'");
 }
 
-/** 입력이 JSON 문자열이어도 본문 HTML만 깔끔 추출 */
+/** ▼▼▼ 임베디드 JSON 안전 치환기 (삭제 금지, 요약 반드시 포함) ▼▼▼ */
+function findBalancedJsonEnd(s: string, start: number) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+function nonEmpty(v: any): v is string { return typeof v === 'string' && v.trim().length > 0; }
+
+/** 본문 중간 JSON 오브젝트를 안전하게 치환(빈 HTML 무시, final_summary_text는 포함) */
+function inlineJsonBlocksSafe(raw: string): string {
+  if (!raw) return '';
+  const keys = [
+    'final_report_html',
+    'precision_verification_html',
+    'final_summary_html',
+    'final_report',
+    'final_summary_text',
+  ];
+
+  let s = raw, out = '', i = 0, inStr = false, esc = false;
+
+  while (i < s.length) {
+    const ch = s[i];
+
+    if (inStr) {
+      out += ch;
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      i++; continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; i++; continue; }
+
+    if (ch === '{') {
+      const end = findBalancedJsonEnd(s, i);
+      if (end !== -1) {
+        const block = s.slice(i, end + 1);
+        if (keys.some(k => block.includes(`"${k}"`))) {
+          try {
+            const obj = JSON.parse(block);
+            const htmlCandidate =
+              [obj.final_report_html, obj.precision_verification_html, obj.final_summary_html, obj.final_report]
+                .map((v: any) => (typeof v === 'string' ? v.trim() : v))
+                .find(nonEmpty);
+            const summary = nonEmpty(obj.final_summary_text) ? `<p>${obj.final_summary_text.trim()}</p>` : '';
+            const replacement = nonEmpty(htmlCandidate)
+              ? (summary ? htmlCandidate + summary : htmlCandidate)
+              : summary;
+            out += replacement || '';
+            i = end + 1;
+            continue;
+          } catch {
+            // 파싱 실패 → 원문 유지
+          }
+        }
+      }
+      out += ch; i++; continue;
+    }
+
+    out += ch; i++;
+  }
+  return out;
+}
+/* ▲▲▲ 임베디드 JSON 안전 치환기 ▲▲▲ */
+
+/** 입력이 JSON 문자열이어도 본문 HTML만 깔끔 추출(문자열 시작이 JSON일 때) */
 function sanitizeGoogleReportHtml(raw: string): string {
   const text = (raw ?? '').toString().trim();
   if (!text) return '';
@@ -113,27 +189,29 @@ export const exchangeCodeForToken = async (
 /* ---------------- 보고서 → Google Docs 변환 엔진 ---------------- */
 /** 기존 함수 이름/리턴 유지. 내부에서 HTML 정규화만 강화 */
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
-  // 1) 전처리: JSON → 본문 HTML 추출, 엔티티/개행 정리
-  let processedHtml = sanitizeGoogleReportHtml(htmlContent);
+  // ☆☆☆ 핵심 1줄: 본문 어딘가에 섞인 JSON 블록을 먼저 안전 치환(요약 포함) ☆☆☆
+  let processedHtml = inlineJsonBlocksSafe(htmlContent || '');
+
+  // 이후, "문자열 자체가 JSON"인 경우를 보정(기존 함수 재사용)
+  processedHtml = sanitizeGoogleReportHtml(processedHtml);
+
+  // 엔티티/개행 정리(기존 로직 그대로)
   processedHtml = htmlEntitiesDecode(processedHtml)
     .replace(/\r\n/g, '\n')
     .replace(/<\s*br\s*\/?>/gi, '\n')
-    .replace(/&bull;|•/g, '•') // 글머리 기호 통일
-    // 제목/문단/리스트 → 개행
+    .replace(/&bull;|•/g, '•')
     .replace(/<\s*h[1-6][^>]*>/gi, '\n\n')
     .replace(/<\s*\/\s*h[1-6]\s*>/gi, '\n')
     .replace(/<\s*p[^>]*>/gi, '\n')
     .replace(/<\s*\/\s*p\s*>/gi, '\n')
     .replace(/<\s*li[^>]*>/gi, '\n• ')
     .replace(/<\s*\/\s*(li|div|section|article|footer)\s*>/gi, '\n')
-    // 남은 태그 제거
     .replace(/<[^>]+>/g, '')
-    // 공백 정리
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // 2) 중복 라인 억제(가독성 ↑)
+  // 중복 라인 억제
   const lines = processedHtml.split('\n');
   const uniqueLines: string[] = [];
   let lastNonBlank = '';
@@ -145,7 +223,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   }
   processedHtml = uniqueLines.join('\n').trim();
 
-  // 3) Google Docs batchUpdate 요청 구성 (기존 로직 유지, 스타일만 약간 보강)
+  // Google Docs batchUpdate 요청 구성(기존 그대로)
   const requests: any[] = [];
   let currentIndex = 1;
   let isFirstLine = true;
@@ -153,7 +231,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   processedHtml.split('\n').forEach((line) => {
     let txt = line.trim();
 
-    // 완전 빈 줄 → 개행만 삽입
     if (!txt) {
       requests.push({ insertText: { location: { index: currentIndex }, text: '\n' } });
       currentIndex += 1;
@@ -174,38 +251,22 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
     const endIndex = startIndex + textToInsert.length;
 
-    // 기본 스타일(보고서 본문 11pt), 제목류는 굵게/크게
     const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' }, bold: false };
     let fields = 'fontSize,bold';
 
     if (/^기계설비 성능점검.*Troubleshooting$/i.test(txt) || /^기술검토 및 진단 종합 보고서$/.test(txt)) {
-      textStyle.fontSize = { magnitude: 20, unit: 'PT' };
-      textStyle.bold = true;
+      textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true;
     } else if (/^(Overview|프로필|핵심 진단|최종 종합 의견|요약|요약 및 권고)/.test(txt) || isNumberedHeading) {
-      textStyle.fontSize = { magnitude: 16, unit: 'PT' };
-      textStyle.bold = true;
-    } else if (
-      /^(핵심 진단 요약|정밀 검증|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|단위 변환 공식|압력값 변환|유량 변환|양정\(H\) 계산|경제성 분석|종합 평가)/.test(
-        txt,
-      )
-    ) {
-      textStyle.fontSize = { magnitude: 14, unit: 'PT' };
-      textStyle.bold = true;
+      textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true;
+    } else if (/^(핵심 진단 요약|정밀 검증|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|단위 변환 공식|압력값 변환|유량 변환|양정\(H\) 계산|경제성 분석|종합 평가)/.test(txt)) {
+      textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true;
     } else if (/^(전문분야:|배경:|주요 조언:|핵심 조언:)/.test(txt)) {
       textStyle.bold = true;
     }
 
-    requests.push({
-      updateTextStyle: { range: { startIndex, endIndex: endIndex - 1 }, textStyle, fields },
-    });
-
+    requests.push({ updateTextStyle: { range: { startIndex, endIndex: endIndex - 1 }, textStyle, fields } });
     if (bullet) {
-      requests.push({
-        createParagraphBullets: {
-          range: { startIndex, endIndex: endIndex - 1 },
-          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
-        },
-      });
+      requests.push({ createParagraphBullets: { range: { startIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
     }
 
     currentIndex = endIndex;
@@ -218,8 +279,6 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
 /* ---------------- 폴더/파일명 규칙 ---------------- */
 const FALLBACK_FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'; // 기존 값 유지(안전 폴백)
 const getDriveFolderId = (): string => {
-  // Vite 환경변수 우선, 없으면 기존 하드코드
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const env = (import.meta as any)?.env || {};
   return env.VITE_DRIVE_TARGET_FOLDER_ID || FALLBACK_FOLDER_ID;
 };
@@ -238,7 +297,7 @@ export const createGoogleDocWithAuth = async (
     let authCode = handleGoogleCallback();
     if (!authCode) {
       await authenticateGoogle();
-      return ''; // 여기 도달하지 않음(새 탭 이동)
+      return '';
     }
 
     const { accessToken } = await exchangeCodeForToken(authCode);
@@ -260,7 +319,7 @@ export const createGoogleDoc = async (
   accessToken: string,
   equipmentName?: string,
 ): Promise<string> => {
-  // 1) 빈 제목 문서 생성 (파일명 규칙 적용)
+  // 1) 규칙 제목으로 생성
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -299,6 +358,6 @@ export const createGoogleDoc = async (
     { method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}` } },
   ).catch((err) => console.warn('폴더 이동 실패 (치명적이지 않음):', err));
 
-  // 4) 편집 링크 반환 (앱은 링크만 표시 → 화면 덮어쓰기 없음)
+  // 4) 편집 링크 반환
   return `https://docs.google.com/document/d/${documentId}/edit`;
 };
