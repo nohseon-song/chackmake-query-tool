@@ -8,6 +8,9 @@ import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
 import { useToast } from '@/hooks/use-toast';
 
+// 추가: Google Docs 내보내기 유틸(정화 포함)
+import { exportHtmlToGoogleDocs, sanitizeReportHtml } from '@/lib/googleExport';
+
 interface Reading {
   equipment: string;
   class1: string;
@@ -15,7 +18,6 @@ interface Reading {
   design: string;
   measure: string;
 }
-
 interface LogEntry {
   id: string;
   tag: string;
@@ -23,7 +25,6 @@ interface LogEntry {
   isResponse?: boolean;
   timestamp: number;
 }
-
 interface MainContentProps {
   equipment: string;
   class1: string;
@@ -75,118 +76,72 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
   const { toast } = useToast();
 
-  const handlePdf = () => {
-  if (!resultHtml) return;
-  try {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    const safeEquip = (equipment || "미지정").trim();
-    const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;  // ← 규칙 동일
+  // Google Docs 다운로드 링크 상태(문서 생성 후에만 노출)
+  const [gdocsLink, setGdocsLink] = React.useState<string | null>(null);
+  const [gdocsFileName, setGdocsFileName] = React.useState<string | null>(null);
 
-    downloadPdfFromHtml(resultHtml, fileName);
-    toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
-  } catch (error) {
-    toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
-  }
-};
+  // 파일명 규칙용 설비명 (equipment 비어있으면 보강)
+  const effectiveEquipName =
+    (equipment && equipment.trim()) ||
+    (savedReadings[0]?.equipment?.trim()) ||
+    (class2 && class2.trim()) ||
+    "미지정";
+
+  const buildFileName = React.useCallback(() => {
+    const d = new Date();
+    const z = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+    const stamp = `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`;
+    return `기술진단결과_${effectiveEquipName}_${stamp}`;
+  }, [effectiveEquipName]);
+
+  const handlePdf = () => {
+    if (!resultHtml) return;
+    try {
+      // 이상한 JSON 조각 제거 후 PDF화 + 파일명 규칙 적용
+      const cleaned = sanitizeReportHtml(resultHtml);
+      downloadPdfFromHtml(cleaned, buildFileName());
+      toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
+    } catch (error) {
+      toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
+    }
+  };
 
   const handleGDocs = async () => {
     if (!resultHtml) {
-      toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
+      toast({ title: "내보낼 보고서가 없습니다.", variant: "destructive" });
       return;
     }
 
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-    const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-
-    if (!GOOGLE_CLIENT_ID) {
-      toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' });
+    const DRIVE_FOLDER_ID  = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
+    if (!GOOGLE_CLIENT_ID || !DRIVE_FOLDER_ID) {
+      toast({ title: "Google 설정이 비어있습니다.", description: "환경변수를 확인하세요.", variant: "destructive" });
       return;
     }
 
-    // ① 사용자 클릭과 동기적으로 새 탭 시도(차단 시 null)
-    let popup: Window | null = window.open('about:blank', '_blank', 'noopener,noreferrer');
-    const openedNewTab = !!popup;
-    if (popup) {
-      try {
-        popup.document.write(`
-          <html><head><title>Google Docs 생성 중...</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <style>html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif}</style>
-          </head><body><div>Google Docs 문서를 생성하고 있습니다…</div></body></html>
-        `);
-        popup.document.close();
-      } catch {}
-    } else {
-      toast({
-        title: '팝업이 차단되었습니다',
-        description:
-          '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요. (이번에는 현재 탭으로 열립니다.)',
-        variant: 'destructive'
-      });
-    }
-
     try {
-      // ② 유틸 모듈 로드(이름 불일치 방지: 존재 확인 후 호출)
-      const mod = await import('@/lib/googleExport');
-      const exportFn =
-        (mod as any).exportHtmlToGoogleDoc ||
-        (mod as any).exportHtmlToGoogleDocs ||
-        (mod as any).default;
-
-      if (typeof exportFn !== 'function') {
-        throw new Error('export function not found: exportHtmlToGoogleDoc(s)');
-      }
-
-      // 파일명 규칙: 기술진단결과_{설비}_{YYYY.MM.DD}
-      const today = new Date();
-      const y = today.getFullYear();
-      const m = String(today.getMonth() + 1).padStart(2, '0');
-      const d = String(today.getDate()).padStart(2, '0');
-      const safeEquip = (equipment && equipment.trim()) || '미지정';
-      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
-
-      const res: any = await exportFn({
+      // 화면 이동 없이 문서 생성 + 다운로드 링크 반환
+      const { downloadUrl, fileName } = await exportHtmlToGoogleDocs({
+        html: resultHtml,
+        equipmentName: effectiveEquipName,
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
-        html: resultHtml,
-        fileName,
-        onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
+        onToast: (t) =>
           toast({
-            title: t.type === 'success' ? '성공' : t.type === 'error' ? '오류' : '안내',
+            title: t.type === "success" ? "성공" : t.type === "info" ? "안내" : "오류",
             description: t.message,
-            variant: t.type === 'error' ? 'destructive' : 'default'
-          })
+            variant: t.type === "error" ? "destructive" : "default",
+          }),
       });
 
-      const docUrl: string =
-        res?.docUrl || res?.webViewLink || res?.alternateLink || res?.url || '';
+      setGdocsLink(downloadUrl);
+      setGdocsFileName(fileName);
 
-      if (docUrl) {
-        if (openedNewTab && popup) {
-          popup.location.href = docUrl;   // 팝업 허용: 새 탭 이동
-        } else {
-          window.location.href = docUrl;  // 팝업 차단: 현재 탭 이동
-        }
-        toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
-      } else {
-        try { popup?.close(); } catch {}
-        toast({
-          title: '문서 링크를 받지 못했습니다',
-          description: '문서는 생성되었을 수 있으니 Google Drive 폴더를 확인해 주세요.',
-          variant: 'destructive'
-        });
-      }
-    } catch (err) {
-      try { popup?.close(); } catch {}
-      console.error('Google Docs 내보내기 오류:', err);
-      toast({
-        title: 'Google Docs 내보내기 실패',
-        description: '네트워크/권한을 확인 후 다시 시도해주세요.',
-        variant: 'destructive'
-      });
+      // 로그에도 남겨 앱 내부 이력에서 링크 재확인 가능
+      onAddLogEntry("GoogleDocs", `생성 완료: ${fileName}\n${downloadUrl}`);
+    } catch (error) {
+      console.error("Google Docs 내보내기 오류:", error);
+      toast({ title: "Google Docs 내보내기 실패", description: "네트워크/권한을 확인 후 다시 시도해주세요.", variant: "destructive" });
     }
   };
 
@@ -235,10 +190,40 @@ const MainContent: React.FC<MainContentProps> = ({
         tempMessagesCount={tempMessagesCount}
       />
 
+      {/* Action Bar */}
       {(resultHtml || isProcessing) && (
-        <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
+        <ActionBar
+          html={resultHtml}
+          loading={isProcessing}
+          onPdf={handlePdf}
+          onGDocs={handleGDocs}
+        />
       )}
 
+      {/* Google Docs 다운로드 링크 표시(생성된 이후에만) */}
+      {gdocsLink && (
+        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">Google Docs 문서가 지정된 Google Drive 폴더에 저장되었습니다.</p>
+              <a
+                href={gdocsLink}
+                download={gdocsFileName || undefined}
+                className="text-blue-600 underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {gdocsFileName || "문서 다운로드 (DOCX)"}
+              </a>
+              <p className="text-xs text-muted-foreground">
+                링크는 DOCX 다운로드 전용입니다. (화면 이동 없이 기기에 저장)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 결과/로딩/로그 */}
       {resultHtml ? (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
@@ -246,7 +231,7 @@ const MainContent: React.FC<MainContentProps> = ({
               <div
                 id="report-content"
                 className="result-content prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: resultHtml }}
+                dangerouslySetInnerHTML={{ __html: sanitizeReportHtml(resultHtml) }}
               />
             </section>
           </CardContent>
