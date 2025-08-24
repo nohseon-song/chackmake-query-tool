@@ -39,6 +39,14 @@ const MainContent: React.FC<MainContentProps> = ({
   const { toast } = useToast();
   const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
+  // 설비명 자동 보정(미지정 방지)
+  const resolveEquipmentName = (): string => {
+    const a = (equipment || "").trim();
+    if (a) return a;
+    const last = savedReadings && savedReadings.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
+    return last || "미지정";
+  };
+
   const handlePdf = () => {
     if (!resultHtml) return;
     try {
@@ -46,8 +54,8 @@ const MainContent: React.FC<MainContentProps> = ({
       const y = now.getFullYear();
       const m = String(now.getMonth() + 1).padStart(2, "0");
       const d = String(now.getDate()).padStart(2, "0");
-      const safeEquip = (equipment || "미지정").trim();
-      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
+      const eq = resolveEquipmentName();
+      const fileName = `기술진단결과_${eq}_${y}.${m}.${d}`;
       downloadPdfFromHtml(resultHtml, fileName);
       toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
     } catch {
@@ -55,7 +63,7 @@ const MainContent: React.FC<MainContentProps> = ({
     }
   };
 
-  // 개인정보 보호: Drive 링크는 노출하지 않고 DOCX만 기기 저장
+  // 개인정보 보호: Drive 링크는 화면에 노출하지 않고 DOCX만 기기 저장
   const handleGDocs = async () => {
     if (!resultHtml) { toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' }); return; }
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
@@ -72,14 +80,14 @@ const MainContent: React.FC<MainContentProps> = ({
 
       const t = new Date();
       const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, '0'), d = String(t.getDate()).padStart(2, '0');
-      const safeEquip = (equipment && equipment.trim()) || '미지정';
-      const fileName = `기술진단결과_${safeEquip}_${y}.${m}.${d}`;
+      const eq = resolveEquipmentName();
+      const fileName = `기술진단결과_${eq}_${y}.${m}.${d}`;
 
       const res: any = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
-        equipmentName: safeEquip,
+        equipmentName: eq,
         fileName,
         onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
           toast({
@@ -91,26 +99,14 @@ const MainContent: React.FC<MainContentProps> = ({
 
       const dl = res?.download;
       if (dl?.blobUrl && dl?.fileName) {
-        // 자동 저장
         const a = document.createElement('a');
-        a.href = dl.blobUrl;
-        a.download = dl.fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // 화면에는 "다시 받기"만 노출
-        setDocxLink({ url: dl.blobUrl, name: dl.fileName });
+        a.href = dl.blobUrl; a.download = dl.fileName;
+        document.body.appendChild(a); a.click(); a.remove();
+        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만 노출
         toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
-
-        // 2분 뒤 메모리 해제(사용자가 다시 받기 버튼을 눌러도 충분)
         setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
       } else {
-        // blobUrl 생성 실패 시에도 개인정보 보호를 위해 링크는 노출하지 않음
-        toast({
-          title: '문서 링크 생성에 실패했습니다',
-          description: 'Google Drive 지정 폴더에는 저장되었습니다.',
-          variant: 'destructive'
-        });
+        toast({ title: '문서 링크 생성 실패', description: 'Google Drive 폴더에는 저장되었습니다.', variant: 'destructive' });
       }
     } catch (err) {
       console.error('Google Docs 내보내기 오류:', err);
@@ -198,7 +194,7 @@ const MainContent: React.FC<MainContentProps> = ({
           logs={logs} isDark={isDark} equipment={equipment}
           onDeleteLog={onDeleteLog}
           onDownloadPdf={onDownloadPdf}
-          onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, equipment) : undefined}
+          onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, resolveEquipmentName()) : undefined}
         />
       )}
     </main>
