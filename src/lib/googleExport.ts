@@ -8,80 +8,100 @@ export type ExportOptions = {
   equipmentName: string;
   clientId: string;
   folderId: string;
-  fileName?: string;        // 주면 그대로 사용
+  fileName?: string;
   onToast?: ToastFn;
 };
 
-function z(n: number) { return n < 10 ? `0${n}` : `${n}`; }
-function ymd(d = new Date()) { return `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`; }
-function assert(c: any, m: string): asserts c { if (!c) throw new Error(m); }
 const ILLEGAL = /[\\/:*?"<>|]+/g;
+const z = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+const ymd = (d = new Date()) => `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`;
+function assert(c: any, m: string): asserts c { if (!c) throw new Error(m); }
 
-// --- 안전 JSON 블록 인라인 함수 (문자열/이스케이프/중괄호 깊이 인식) ---
-function findBalancedJsonEnd(s: string, start: number) {
-  let depth = 0, inStr = false, esc = false;
-  for (let i = start; i < s.length; i++) {
+// ---------- 안전 파서: JSON 오브젝트만 정확히 치환 ----------
+function parseBlocksAndInline(text: string): string {
+  if (!text) return "";
+  const keys = ["final_report_html","precision_verification_html","final_summary_html","final_report","final_summary_text"];
+
+  let s = text;
+  let out = "";
+  let i = 0;
+  let inStr = false, esc = false, depth = 0, braceStart = -1;
+
+  while (i < s.length) {
     const ch = s[i];
+
     if (inStr) {
+      out += ch;
       if (esc) esc = false;
       else if (ch === "\\") esc = true;
       else if (ch === "\"") inStr = false;
-      continue;
+      i++; continue;
     }
-    if (ch === "\"") inStr = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") { depth--; if (depth === 0) return i; }
-  }
-  return -1;
-}
 
-function inlineJsonObjects(text: string) {
-  const keys = ["precision_verification_html","final_report_html","final_summary_html","final_report","final_summary_text"];
-  let s = text ?? "";
-  let idx = 0;
-  while (true) {
-    let pos = -1, key = "";
-    for (const k of keys) {
-      const p = s.indexOf(`"${k}"`, idx);
-      if (p !== -1 && (pos === -1 || p < pos)) { pos = p; key = k; }
+    if (ch === "\"") { inStr = true; out += ch; i++; continue; }
+
+    if (ch === "{") {
+      // 잠재적 JSON 시작: 이후 균형 잡힌 블록을 추출해 키 포함이면 치환
+      let j = i, d = 0, str = false, esc2 = false, end = -1;
+      while (j < s.length) {
+        const cj = s[j];
+        if (str) {
+          if (esc2) esc2 = false;
+          else if (cj === "\\") esc2 = true;
+          else if (cj === "\"") str = false;
+        } else {
+          if (cj === "\"") str = true;
+          else if (cj === "{") d++;
+          else if (cj === "}") { d--; if (d === 0) { end = j; break; } }
+        }
+        j++;
+      }
+      if (end !== -1) {
+        const block = s.slice(i, end + 1);
+        // 키 포함 여부 확인
+        if (keys.some(k => block.includes(`"${k}"`))) {
+          try {
+            const obj = JSON.parse(block);
+            const rep =
+              obj.final_report_html ??
+              obj.precision_verification_html ??
+              obj.final_summary_html ??
+              obj.final_report ??
+              (obj.final_summary_text ? `<p>${obj.final_summary_text}</p>` : "");
+            out += rep || "";
+            i = end + 1;
+            continue;
+          } catch {
+            // JSON 아니면 그대로 출력
+          }
+        }
+      }
+      // 키가 없거나 파싱 실패 → 원문 출력
+      out += ch; i++; continue;
     }
-    if (pos === -1) break;
-    const brace = s.indexOf("{", pos);
-    if (brace === -1) { idx = pos + key.length; continue; }
-    const end = findBalancedJsonEnd(s, brace);
-    if (end === -1) { idx = pos + key.length; continue; }
-    const jsonStr = s.slice(brace, end + 1);
-    try {
-      const obj = JSON.parse(jsonStr);
-      const html =
-        obj.final_report_html ??
-        obj.precision_verification_html ??
-        obj.final_summary_html ??
-        obj.final_report ??
-        (obj.final_summary_text ? `<div>${obj.final_summary_text}</div>` : "");
-      s = s.slice(0, brace) + (html ?? "") + s.slice(end + 1);
-      idx = brace + (html ? String(html).length : 0);
-    } catch {
-      idx = end + 1;
-    }
+
+    out += ch; i++;
   }
-  return s;
+
+  return out.trim();
 }
 
 function sanitizeHtml(raw: string): string {
   let t = (raw ?? "").toString().trim();
   if (!t) return "";
+  // 전체가 JSON이면 내부 HTML 필드 우선
   if (t.startsWith("{") || t.startsWith("[")) {
     try {
       const o = JSON.parse(t);
       const picked =
         o?.final_report_html ?? o?.precision_verification_html ??
         o?.final_summary_html ?? o?.final_report ??
-        (o?.final_summary_text ? `<div>${o.final_summary_text}</div>` : "");
+        (o?.final_summary_text ? `<p>${o.final_summary_text}</p>` : "");
       if (picked) return String(picked);
-    } catch {}
+    } catch {/* ignore */}
   }
-  return inlineJsonObjects(t).trim();
+  // 본문 중간 JSON → 안전 치환
+  return parseBlocksAndInline(t);
 }
 
 function wrapAsHtmlDocument(inner: string): string {
@@ -135,9 +155,15 @@ async function getAccessToken(clientId: string, onToast?: ToastFn): Promise<stri
   });
 }
 
-function makeFileName(eq: string, explicit?: string) {
+function guessEquipmentFromHtml(html: string): string | null {
+  const m = html?.match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
+  return m?.[1]?.trim() || null;
+}
+
+function makeFileName(eq: string, html?: string, explicit?: string) {
+  const guessed = (!eq || eq === "미지정") ? (guessEquipmentFromHtml(html || "") || "미지정") : eq;
   const name = explicit?.trim()
-    || `기술진단결과_${(eq || "미지정").trim().replace(ILLEGAL,"_")}_${ymd()}`;
+    || `기술진단결과_${guessed.replace(ILLEGAL,"_")}_${ymd()}`;
   return name.replace(/\.+$/, "");
 }
 
@@ -154,7 +180,7 @@ export async function exportHtmlToGoogleDocs({
   const token = await getAccessToken(clientId, onToast);
   const inner = sanitizeHtml(html);
   const cleanHtml = wrapAsHtmlDocument(inner);
-  const title = makeFileName(equipmentName, fileName);
+  const title = makeFileName(equipmentName, html, fileName);
 
   const boundary = "-------314159265358979323846";
   const metadata = { name: title, mimeType: "application/vnd.google-apps.document", parents: [folderId] };
@@ -174,7 +200,7 @@ export async function exportHtmlToGoogleDocs({
   const data = await res.json() as { id: string; webViewLink: string };
   const docUrl = data.webViewLink || `https://docs.google.com/document/d/${data.id}/edit`;
 
-  // 기기 저장용: DOCX export -> Blob (Drive 링크는 화면 노출 금지)
+  // 로컬 저장용 DOCX
   let dl: { blobUrl: string; mimeType: string; fileName: string } | undefined;
   try {
     const exp = await fetch(
