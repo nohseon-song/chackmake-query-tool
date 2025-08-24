@@ -39,13 +39,12 @@ const MainContent: React.FC<MainContentProps> = ({
   const { toast } = useToast();
   const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
-  // HTML에서 설비명 힌트 찾기 (추가 보정)
+  // HTML에서 설비명 힌트 추정
   const guessFromHtml = (html: string): string | null => {
     if (!html) return null;
     const m = html.match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
     return m?.[1]?.trim() || null;
   };
-
   // 설비명 보정: 선택값 → HTML 힌트 → 마지막 저장값 → '미지정'
   const resolveEquipmentName = () => {
     const a = (equipment || "").trim();
@@ -70,7 +69,7 @@ const MainContent: React.FC<MainContentProps> = ({
     }
   };
 
-  // Drive 링크는 노출하지 않고 DOCX만 기기 저장
+  // 개인정보 보호: Drive 링크는 화면에 노출하지 않고 DOCX만 기기 저장
   const handleGDocs = async () => {
     if (!resultHtml) { toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' }); return; }
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
@@ -79,7 +78,10 @@ const MainContent: React.FC<MainContentProps> = ({
 
     try {
       const mod = await import('@/lib/googleExport');
-      const exportFn = (mod as any).exportHtmlToGoogleDocs || (mod as any).exportHtmlToGoogleDoc || (mod as any).default;
+      const exportFn =
+        (mod as any).exportHtmlToGoogleDocs ||
+        (mod as any).exportHtmlToGoogleDoc ||
+        (mod as any).default;
       if (typeof exportFn !== 'function') throw new Error('export function not found');
 
       const t = new Date();
@@ -106,7 +108,7 @@ const MainContent: React.FC<MainContentProps> = ({
         const a = document.createElement('a');
         a.href = dl.blobUrl; a.download = dl.fileName;
         document.body.appendChild(a); a.click(); a.remove();
-        setDocxLink({ url: dl.blobUrl, name: dl.fileName });
+        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만
         toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
         setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
       } else {
@@ -203,4 +205,5 @@ const MainContent: React.FC<MainContentProps> = ({
     </main>
   );
 };
+
 export default MainContent;
