@@ -492,6 +492,42 @@ export type Database = {
           },
         ]
       }
+      job_results: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          html: string | null
+          html_url: string | null
+          job_id: string
+          organization_id: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          html?: string | null
+          html_url?: string | null
+          job_id?: string
+          organization_id?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          html?: string | null
+          html_url?: string | null
+          job_id?: string
+          organization_id?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       knowledge_base: {
         Row: {
           content: string
