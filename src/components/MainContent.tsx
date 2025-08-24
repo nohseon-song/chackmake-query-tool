@@ -30,30 +30,30 @@ interface MainContentProps {
   onAddLogEntry: (tag: string, content: any) => void;
 }
 
-const MainContent: React.FC<MainContentProps> = ({
-  equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
-  isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
-  onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
-  onGoogleAuth, onChatOpen, onAddLogEntry
-}) => {
+const MainContent: React.FC<MainContentProps> = (props) => {
+  const {
+    equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
+    isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
+    onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
+    onGoogleAuth, onChatOpen, onAddLogEntry
+  } = props;
+
   const { toast } = useToast();
   const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
-  // 설비명 자동 보정(미지정 방지)
-  const resolveEquipmentName = (): string => {
+  // 설비명 자동 보정: 선택값 → 마지막 저장값 → '미지정'
+  const resolveEquipmentName = () => {
     const a = (equipment || "").trim();
     if (a) return a;
-    const last = savedReadings && savedReadings.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
+    const last = savedReadings?.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
     return last || "미지정";
-  };
+    };
 
   const handlePdf = () => {
     if (!resultHtml) return;
     try {
       const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, "0");
-      const d = String(now.getDate()).padStart(2, "0");
+      const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, "0"), d = String(now.getDate()).padStart(2, "0");
       const eq = resolveEquipmentName();
       const fileName = `기술진단결과_${eq}_${y}.${m}.${d}`;
       downloadPdfFromHtml(resultHtml, fileName);
@@ -102,7 +102,7 @@ const MainContent: React.FC<MainContentProps> = ({
         const a = document.createElement('a');
         a.href = dl.blobUrl; a.download = dl.fileName;
         document.body.appendChild(a); a.click(); a.remove();
-        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만 노출
+        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만
         toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
         setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
       } else {
