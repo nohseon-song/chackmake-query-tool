@@ -1,55 +1,66 @@
 // src/utils/pdf.ts
-// 새 창 인쇄(파일명 힌트 최우선) + iframe 백업, 샘플 톤 CSS, 안전 JSON 인라인
+// 새 창 인쇄(파일명 힌트 최우선) + iframe 백업 + 부모 타이틀 임시 변경
+// 가독성 CSS 고정 + JSON 블록 안전 치환(본문 삭제 금지)
 
-function findBalancedJsonEnd(s: string, start: number) {
-  let depth = 0, inStr = false, esc = false;
-  for (let i = start; i < s.length; i++) {
+function parseBlocksAndInline(text: string): string {
+  const keys = ["final_report_html","precision_verification_html","final_summary_html","final_report","final_summary_text"];
+  if (!text) return "";
+  let s = text, out = "";
+  let i = 0, inStr = false, esc = false;
+
+  while (i < s.length) {
     const ch = s[i];
     if (inStr) {
+      out += ch;
       if (esc) esc = false;
       else if (ch === "\\") esc = true;
       else if (ch === "\"") inStr = false;
-      continue;
+      i++; continue;
     }
-    if (ch === "\"") inStr = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") { depth--; if (depth === 0) return i; }
-  }
-  return -1;
-}
-
-function inlineJsonObjects(text: string) {
-  const keys = ["precision_verification_html","final_report_html","final_summary_html","final_report","final_summary_text"];
-  let s = text ?? "";
-  let idx = 0;
-  while (true) {
-    let pos = -1, key = "";
-    for (const k of keys) {
-      const p = s.indexOf(`"${k}"`, idx);
-      if (p !== -1 && (pos === -1 || p < pos)) { pos = p; key = k; }
+    if (ch === "\"") { inStr = true; out += ch; i++; continue; }
+    if (ch === "{") {
+      // 균형 잡힌 JSON 블록 찾기
+      let j = i, d = 0, str = false, esc2 = false, end = -1;
+      while (j < s.length) {
+        const cj = s[j];
+        if (str) {
+          if (esc2) esc2 = false;
+          else if (cj === "\\") esc2 = true;
+          else if (cj === "\"") str = false;
+        } else {
+          if (cj === "\"") str = true;
+          else if (cj === "{") d++;
+          else if (cj === "}") { d--; if (d === 0) { end = j; break; } }
+        }
+        j++;
+      }
+      if (end !== -1) {
+        const block = s.slice(i, end + 1);
+        if (keys.some(k => block.includes(`"${k}"`))) {
+          try {
+            const obj = JSON.parse(block);
+            const rep =
+              obj.final_report_html ??
+              obj.precision_verification_html ??
+              obj.final_summary_html ??
+              obj.final_report ??
+              (obj.final_summary_text ? `<p>${obj.final_summary_text}</p>` : "");
+            out += rep || "";
+            i = end + 1;
+            continue;
+          } catch {/* keep going */}
+        }
+      }
+      out += ch; i++; continue;
     }
-    if (pos === -1) break;
-    const brace = s.indexOf("{", pos);
-    if (brace === -1) { idx = pos + key.length; continue; }
-    const end = findBalancedJsonEnd(s, brace);
-    if (end === -1) { idx = pos + key.length; continue; }
-    const jsonStr = s.slice(brace, end + 1);
-    try {
-      const obj = JSON.parse(jsonStr);
-      const html =
-        obj.final_report_html ?? obj.precision_verification_html ??
-        obj.final_summary_html ?? obj.final_report ??
-        (obj.final_summary_text ? `<div>${obj.final_summary_text}</div>` : "");
-      s = s.slice(0, brace) + (html ?? "") + s.slice(end + 1);
-      idx = brace + (html ? String(html).length : 0);
-    } catch { idx = end + 1; }
+    out += ch; i++;
   }
-  return s;
+  return out.trim();
 }
 
 export function downloadPdfFromHtml(html: string, filename: string) {
   const safeBase = (filename || "report").replace(/[\\/:*?"<>|]+/g, "_").replace(/\.+$/, "");
-  const bodyHtml = inlineJsonObjects((html ?? "").toString());
+  const bodyHtml = parseBlocksAndInline((html ?? "").toString());
 
   const style = `
     <style>
@@ -69,7 +80,7 @@ export function downloadPdfFromHtml(html: string, filename: string) {
   `;
   const htmlDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${safeBase}</title>${style}</head><body><div class="doc-wrap">${bodyHtml}</div></body></html>`;
 
-  // 1) 새 창 시도(파일명 힌트 최우선)
+  // 1) 새 창(파일명 힌트 최우선)
   let w: Window | null = null;
   try { w = window.open("", "_blank", "noopener"); } catch {}
   if (w) {
@@ -78,12 +89,13 @@ export function downloadPdfFromHtml(html: string, filename: string) {
       w.document.title = safeBase;
       w.focus(); w.print();
       return;
-    } catch {
-      try { w.close(); } catch {}
-    }
+    } catch { try { w.close(); } catch {} }
   }
 
-  // 2) 새 창 실패 → iframe 백업
+  // 2) 새 창 실패 → iframe + 부모 타이틀 임시 변경
+  const oldTitle = document.title;
+  document.title = safeBase;
+
   const blob = new Blob([htmlDoc], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement("iframe");
@@ -99,7 +111,11 @@ export function downloadPdfFromHtml(html: string, filename: string) {
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
     } finally {
-      setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(iframe); }, 1500);
+      setTimeout(() => {
+        try { document.title = oldTitle; } catch {}
+        URL.revokeObjectURL(url);
+        document.body.removeChild(iframe);
+      }, 1500);
     }
   };
   iframe.src = url;
