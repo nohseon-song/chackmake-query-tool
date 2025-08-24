@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
@@ -7,15 +7,35 @@ import LogDisplay from '@/components/LogDisplay';
 import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
 import { useToast } from '@/hooks/use-toast';
+import { cleanHtmlForApp } from '@/utils/cleanHtml';
 
-interface Reading { equipment: string; class1: string; class2: string; design: string; measure: string; }
-interface LogEntry { id: string; tag: string; content: string; isResponse?: boolean; timestamp: number; }
+interface Reading {
+  equipment: string;
+  class1: string;
+  class2: string;
+  design: string;
+  measure: string;
+}
+
+interface LogEntry {
+  id: string;
+  tag: string;
+  content: string;
+  isResponse?: boolean;
+  timestamp: number;
+}
 
 interface MainContentProps {
-  equipment: string; class1: string; class2: string;
+  equipment: string;
+  class1: string;
+  class2: string;
   equipmentTree: Record<string, any>;
-  savedReadings: Reading[]; logs: LogEntry[];
-  resultHtml: string; isProcessing: boolean; isDark: boolean; tempMessagesCount: number;
+  savedReadings: Reading[];
+  logs: LogEntry[];
+  resultHtml: string;
+  isProcessing: boolean;
+  isDark: boolean;
+  tempMessagesCount: number;
   onEquipmentChange: (value: string) => void;
   onClass1Change: (value: string) => void;
   onClass2Change: (value: string) => void;
@@ -30,71 +50,91 @@ interface MainContentProps {
   onAddLogEntry: (tag: string, content: any) => void;
 }
 
+const ILLEGAL = /[\\/:*?"<>|]+/g;
+const z2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+const buildFileBase = (equip: string) => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = z2(d.getMonth() + 1);
+  const day = z2(d.getDate());
+  const safeEquip = (equip?.trim() || '미지정').replace(ILLEGAL, '_');
+  return `기술진단결과_${safeEquip}_${y}.${m}.${day}`;
+};
+
 const MainContent: React.FC<MainContentProps> = ({
-  equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
-  isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
-  onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
-  onGoogleAuth, onChatOpen, onAddLogEntry
+  equipment,
+  class1,
+  class2,
+  equipmentTree,
+  savedReadings,
+  logs,
+  resultHtml,
+  isProcessing,
+  isDark,
+  tempMessagesCount,
+  onEquipmentChange,
+  onClass1Change,
+  onClass2Change,
+  onSaveReading,
+  onUpdateReading,
+  onDeleteReading,
+  onSubmit,
+  onDeleteLog,
+  onDownloadPdf,
+  onGoogleAuth,
+  onChatOpen,
+  onAddLogEntry
 }) => {
   const { toast } = useToast();
-  const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
-  // HTML에서 설비명 힌트 추정
-  const guessFromHtml = (html: string): string | null => {
-    if (!html) return null;
-    const m = html.match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
-    return m?.[1]?.trim() || null;
-  };
-  // 설비명 보정: 선택값 → HTML 힌트 → 마지막 저장값 → '미지정'
-  const resolveEquipmentName = () => {
-    const a = (equipment || "").trim();
-    if (a) return a;
-    const b = guessFromHtml(resultHtml);
-    if (b) return b;
-    const c = savedReadings?.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
-    return c || "미지정";
-  };
+  // 화면 표시용으로만 JSON 쓰레기 정리
+  const displayHtml = cleanHtmlForApp(resultHtml || "");
 
   const handlePdf = () => {
     if (!resultHtml) return;
     try {
-      const now = new Date();
-      const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, "0"), d = String(now.getDate()).padStart(2, "0");
-      const eq = resolveEquipmentName();
-      const fileName = `기술진단결과_${eq}_${y}.${m}.${d}`;
-      downloadPdfFromHtml(resultHtml, fileName);
-      toast({ title: "PDF 다운로드", description: "인쇄 대화상자가 열렸습니다." });
-    } catch {
+      const fileBase = buildFileBase(equipment);
+      // PDF에도 동일 파일명 규칙 적용
+      downloadPdfFromHtml(resultHtml, fileBase);
+      toast({ title: "PDF 다운로드", description: "인쇄/저장 대화상자가 열렸습니다." });
+    } catch (error) {
       toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
     }
   };
 
-  // 개인정보 보호: Drive 링크는 화면에 노출하지 않고 DOCX만 기기 저장
   const handleGDocs = async () => {
-    if (!resultHtml) { toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' }); return; }
+    if (!resultHtml) {
+      toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
+      return;
+    }
+
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
     const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-    if (!GOOGLE_CLIENT_ID) { toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' }); return; }
+
+    if (!GOOGLE_CLIENT_ID) {
+      toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' });
+      return;
+    }
+
+    const fileBase = buildFileBase(equipment);
 
     try {
       const mod = await import('@/lib/googleExport');
       const exportFn =
-        (mod as any).exportHtmlToGoogleDocs ||
         (mod as any).exportHtmlToGoogleDoc ||
+        (mod as any).exportHtmlToGoogleDocs ||
         (mod as any).default;
-      if (typeof exportFn !== 'function') throw new Error('export function not found');
 
-      const t = new Date();
-      const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, '0'), d = String(t.getDate()).padStart(2, '0');
-      const eq = resolveEquipmentName();
-      const fileName = `기술진단결과_${eq}_${y}.${m}.${d}`;
+      if (typeof exportFn !== 'function') {
+        throw new Error('export function not found: exportHtmlToGoogleDoc(s)');
+      }
 
       const res: any = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
-        equipmentName: eq,
-        fileName,
+        equipmentName: equipment,          // ← 규칙 적용 핵심
+        fileName: fileBase,                // ← 우선 적용(둘 다 넘겨 확실히)
         onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
           toast({
             title: t.type === 'success' ? '성공' : t.type === 'error' ? '오류' : '안내',
@@ -103,20 +143,32 @@ const MainContent: React.FC<MainContentProps> = ({
           })
       });
 
-      const dl = res?.download;
-      if (dl?.blobUrl && dl?.fileName) {
-        const a = document.createElement('a');
-        a.href = dl.blobUrl; a.download = dl.fileName;
-        document.body.appendChild(a); a.click(); a.remove();
-        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만
-        toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
-        setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
+      // 앱 화면에는 링크만 노출(Drive 폴더 UI는 열지 않음)
+      const docUrl: string = res?.docUrl || res?.webViewLink || '';
+      const dl = res?.download as { blobUrl?: string; fileName?: string } | undefined;
+
+      if (docUrl) {
+        onAddLogEntry('gdocs', {
+          message: 'Google Docs 문서가 생성되었습니다.',
+          url: docUrl,
+          downloadName: dl?.fileName,
+          downloadUrl: dl?.blobUrl
+        });
+        toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
       } else {
-        toast({ title: '문서 링크 생성 실패', description: 'Google Drive 폴더에는 저장되었습니다.', variant: 'destructive' });
+        toast({
+          title: '문서 링크를 받지 못했습니다',
+          description: '문서는 생성되었을 수 있으니 Google Drive 폴더를 확인해 주세요.',
+          variant: 'destructive'
+        });
       }
     } catch (err) {
       console.error('Google Docs 내보내기 오류:', err);
-      toast({ title: 'Google Docs 내보내기 실패', description: '네트워크/권한을 확인 후 다시 시도해주세요.', variant: 'destructive' });
+      toast({
+        title: 'Google Docs 내보내기 실패',
+        description: '네트워크/권한을 확인 후 다시 시도해주세요.',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -129,7 +181,9 @@ const MainContent: React.FC<MainContentProps> = ({
       <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
         <CardContent className="p-4 space-y-4">
           <EquipmentSelection
-            equipment={equipment} class1={class1} class2={class2}
+            equipment={equipment}
+            class1={class1}
+            class2={class2}
             equipmentTree={equipmentTree}
             onEquipmentChange={onEquipmentChange}
             onClass1Change={onClass1Change}
@@ -139,8 +193,11 @@ const MainContent: React.FC<MainContentProps> = ({
             onAddLogEntry={onAddLogEntry}
             isDark={isDark}
           />
+
           <ReadingsManagement
-            equipment={equipment} class1={class1} class2={class2}
+            equipment={equipment}
+            class1={class1}
+            class2={class2}
             showInputs={showInputs}
             savedReadings={savedReadings}
             onSaveReading={onSaveReading}
@@ -164,22 +221,16 @@ const MainContent: React.FC<MainContentProps> = ({
         <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {docxLink && (
-        <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
-          <CardContent className="p-4">
-            <p className="mb-2 font-medium">문서가 기기에 저장되었습니다.</p>
-            <a className="text-blue-600 underline break-all" href={docxLink.url} download={docxLink.name}>
-              DOCX 다시 받기
-            </a>
-          </CardContent>
-        </Card>
-      )}
-
       {resultHtml ? (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
             <section aria-live="polite" aria-busy={false}>
-              <div id="report-content" className="result-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: resultHtml }} />
+              <div
+                id="report-content"
+                className="result-content prose dark:prose-invert max-w-none"
+                // 화면에만 정제된 HTML 표시(생성 로직에는 영향 없음)
+                dangerouslySetInnerHTML={{ __html: displayHtml }}
+              />
             </section>
           </CardContent>
         </Card>
@@ -196,10 +247,12 @@ const MainContent: React.FC<MainContentProps> = ({
         </Card>
       ) : (
         <LogDisplay
-          logs={logs} isDark={isDark} equipment={equipment}
+          logs={logs}
+          isDark={isDark}
+          equipment={equipment}
           onDeleteLog={onDeleteLog}
           onDownloadPdf={onDownloadPdf}
-          onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, resolveEquipmentName()) : undefined}
+          onGoogleAuth={onGoogleAuth ? (html) => onGoogleAuth(html, equipment) : undefined}
         />
       )}
     </main>
