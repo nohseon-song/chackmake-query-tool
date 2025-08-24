@@ -30,24 +30,31 @@ interface MainContentProps {
   onAddLogEntry: (tag: string, content: any) => void;
 }
 
-const MainContent: React.FC<MainContentProps> = (props) => {
-  const {
-    equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
-    isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
-    onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
-    onGoogleAuth, onChatOpen, onAddLogEntry
-  } = props;
-
+const MainContent: React.FC<MainContentProps> = ({
+  equipment, class1, class2, equipmentTree, savedReadings, logs, resultHtml,
+  isProcessing, isDark, tempMessagesCount, onEquipmentChange, onClass1Change, onClass2Change,
+  onSaveReading, onUpdateReading, onDeleteReading, onSubmit, onDeleteLog, onDownloadPdf,
+  onGoogleAuth, onChatOpen, onAddLogEntry
+}) => {
   const { toast } = useToast();
   const [docxLink, setDocxLink] = useState<{ url: string; name: string } | null>(null);
 
-  // 설비명 자동 보정: 선택값 → 마지막 저장값 → '미지정'
+  // HTML에서 설비명 힌트 찾기 (추가 보정)
+  const guessFromHtml = (html: string): string | null => {
+    if (!html) return null;
+    const m = html.match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
+    return m?.[1]?.trim() || null;
+  };
+
+  // 설비명 보정: 선택값 → HTML 힌트 → 마지막 저장값 → '미지정'
   const resolveEquipmentName = () => {
     const a = (equipment || "").trim();
     if (a) return a;
-    const last = savedReadings?.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
-    return last || "미지정";
-    };
+    const b = guessFromHtml(resultHtml);
+    if (b) return b;
+    const c = savedReadings?.length ? (savedReadings[savedReadings.length - 1].equipment || "").trim() : "";
+    return c || "미지정";
+  };
 
   const handlePdf = () => {
     if (!resultHtml) return;
@@ -63,7 +70,7 @@ const MainContent: React.FC<MainContentProps> = (props) => {
     }
   };
 
-  // 개인정보 보호: Drive 링크는 화면에 노출하지 않고 DOCX만 기기 저장
+  // Drive 링크는 노출하지 않고 DOCX만 기기 저장
   const handleGDocs = async () => {
     if (!resultHtml) { toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' }); return; }
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
@@ -72,10 +79,7 @@ const MainContent: React.FC<MainContentProps> = (props) => {
 
     try {
       const mod = await import('@/lib/googleExport');
-      const exportFn =
-        (mod as any).exportHtmlToGoogleDocs ||
-        (mod as any).exportHtmlToGoogleDoc ||
-        (mod as any).default;
+      const exportFn = (mod as any).exportHtmlToGoogleDocs || (mod as any).exportHtmlToGoogleDoc || (mod as any).default;
       if (typeof exportFn !== 'function') throw new Error('export function not found');
 
       const t = new Date();
@@ -102,7 +106,7 @@ const MainContent: React.FC<MainContentProps> = (props) => {
         const a = document.createElement('a');
         a.href = dl.blobUrl; a.download = dl.fileName;
         document.body.appendChild(a); a.click(); a.remove();
-        setDocxLink({ url: dl.blobUrl, name: dl.fileName }); // 화면엔 "다시 받기"만
+        setDocxLink({ url: dl.blobUrl, name: dl.fileName });
         toast({ title: '문서 저장 완료', description: '기기에 DOCX 파일이 저장되었습니다.' });
         setTimeout(() => { try { URL.revokeObjectURL(dl.blobUrl); } catch {} }, 120000);
       } else {
@@ -158,7 +162,6 @@ const MainContent: React.FC<MainContentProps> = (props) => {
         <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {/* 개인정보 보호: Drive 링크 대신 "다시 받기"만 제공 */}
       {docxLink && (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-4`}>
           <CardContent className="p-4">
