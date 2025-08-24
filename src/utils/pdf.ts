@@ -1,34 +1,42 @@
 // src/utils/pdf.ts
-// 기존 시그니처 유지: 새 창 프린트 방식에서, 팝업 차단에 강한 "히든 iframe 프린트"로 변경.
-// 파일명 규칙 보정 + 가독성 CSS + JSON 쓰레기 블록 제거까지 포함.
+// 히든 iframe 프린트(팝업차단 회피) + 샘플 톤 가독성 + 파일명/JSON 정리
+
+function stripJsonBlocks(text: string, keys = ["precision_verification_html","final_report_html","final_summary_text"]) {
+  let t = text ?? "";
+  for (const key of keys) {
+    let idx = 0;
+    while (true) {
+      const pos = t.indexOf(`"${key}"`, idx);
+      if (pos === -1) break;
+      let start = t.lastIndexOf("{", pos);
+      if (start < 0) { idx = pos + key.length; continue; }
+      let depth = 0, end = -1;
+      for (let i = start; i < t.length; i++) {
+        const ch = t[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+      }
+      if (end !== -1) { t = t.slice(0, start) + t.slice(end + 1); idx = start; }
+      else { idx = pos + key.length; }
+    }
+  }
+  return t;
+}
 
 export function downloadPdfFromHtml(html: string, filename: string) {
   try {
-    // 1) 파일명 보정(불법문자 제거 + 말단 점 제거)
     const safeBase = (filename || "report")
       .replace(/[\\/:*?"<>|]+/g, "_")
       .replace(/\.+$/, "");
 
-    // 2) 본문 정리: HTML에 섞인 JSON 조각 제거
-    let t = (html ?? "").toString();
-    const keys = ["precision_verification_html","final_report_html","final_summary_text"];
-    for (const k of keys) {
-      const re = new RegExp(
-        String.raw`\{\s*"(?:${k})"\s*:\s*"(?:[\s\S]*?)"\s*(?:,\s*"(?:[\s\S]*?)"\s*:\s*"(?:[\s\S]*?)"\s*)*\}`,
-        "g"
-      );
-      t = t.replace(re, "");
-    }
-    const rePairs = new RegExp(String.raw`"(?:${keys.join("|")})"\s*:\s*"(?:[\s\S]*?)"`, "g");
-    t = t.replace(rePairs, "");
+    const bodyHtml = stripJsonBlocks((html ?? "").toString());
 
-    // 3) 프린트용 CSS(샘플 PDF 스타일 참고)
     const style = `
       <style>
         @page { size: A4; margin: 14mm; }
         html, body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
         body { line-height: 1.6; font-size: 12pt; font-weight: 400; color: #111; }
-        strong, b { font-weight: 600; } /* 볼드 도배 방지 */
+        strong, b { font-weight: 600; }
         .prose { max-width: none; }
         .prose h1, .prose h2, .prose h3 { margin: 12px 0 8px; font-weight: 700; }
         .prose p { margin: 8px 0; }
@@ -40,8 +48,7 @@ export function downloadPdfFromHtml(html: string, filename: string) {
       </style>
     `;
 
-    // 4) 히든 iframe에 문서 주입 후 print (팝업 차단 회피)
-    const htmlDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${safeBase}</title>${style}</head><body>${t}</body></html>`;
+    const htmlDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${safeBase}</title>${style}</head><body>${bodyHtml}</body></html>`;
     const blob = new Blob([htmlDoc], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
@@ -53,8 +60,9 @@ export function downloadPdfFromHtml(html: string, filename: string) {
 
     iframe.onload = () => {
       try {
-        const doc = iframe.contentWindow?.document!;
+        const doc = iframe.contentDocument!;
         doc.open(); doc.write(htmlDoc); doc.close();
+        doc.title = safeBase;               // 파일명 힌트
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
       } finally {
@@ -66,6 +74,6 @@ export function downloadPdfFromHtml(html: string, filename: string) {
     };
     iframe.src = url;
   } catch {
-    // 호출측에서 토스트 띄우므로 여기선 조용히 종료
+    /* 호출부에서 토스트 처리 */
   }
 }
