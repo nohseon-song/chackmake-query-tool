@@ -3,11 +3,11 @@
 // <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 type ExportOptions = {
-  html: string;               // 최종 리포트 HTML
+  html: string;               // 최종 리포트 HTML (가끔 JSON 문자열이 들어올 수도 있음)
   equipmentName: string;      // 예: '펌프'
   clientId: string;           // VITE_GOOGLE_CLIENT_ID
   folderId: string;           // VITE_DRIVE_TARGET_FOLDER_ID
-  openNewTab?: boolean;       // 새 탭 열기 여부(기본 false: 현재 탭에서 열어 팝업차단 최소화)
+  openNewTab?: boolean;       // 새 탭 열기 여부(기본 false: 현재 탭 사용)
   onToast?: (p: { type: "success" | "error" | "info"; message: string }) => void;
 };
 
@@ -33,6 +33,51 @@ async function ensureGisLoaded() {
   });
 }
 
+/** ① HTML 정제: raw가 JSON이면 본문 HTML 필드만 추출, 아니면 원문 유지 */
+function sanitizeHtml(raw: string): string {
+  const text = (raw ?? "").toString().trim();
+  if (!text) return "";
+
+  // JSON 문자열인 경우: 리포트 본문 HTML 필드 우선 사용
+  if (text.startsWith("{") || text.startsWith("[")) {
+    try {
+      const obj = JSON.parse(text);
+      // 가장 가능성 높은 필드들만 가볍게 지원 (없으면 원문 유지)
+      // 사용 중인 백엔드에서 반환하는 최종 본문 키를 우선합니다.
+      if (obj?.final_report_html) return String(obj.final_report_html);
+      if (obj?.final_summary_html) return String(obj.final_summary_html);
+      if (obj?.final_report) return String(obj.final_report);
+      if (obj?.html) return String(obj.html);
+      // text-only가 있다면 최소 div로 감싸서 반환
+      if (obj?.final_summary_text) {
+        return `<div>${String(obj.final_summary_text)}</div>`;
+      }
+      // 위 키들이 없다면 JSON 전체는 무시하고 원문을 그대로 사용
+    } catch {
+      // JSON 파싱 실패 → 원문 사용
+    }
+  }
+  return text;
+}
+
+/** ② 변환 안정화를 위한 최소 HTML 문서 래핑 */
+function wrapAsHtmlDocument(innerHtml: string): string {
+  const body = innerHtml || "";
+  return [
+    "<!DOCTYPE html>",
+    "<html>",
+    "<head>",
+    '<meta charset="UTF-8" />',
+    // 필요 시 간단한 기본 스타일(문단 간격 등)만 추가
+    "<style>body{white-space:normal;line-height:1.5} p{margin:0 0 10px}</style>",
+    "</head>",
+    "<body>",
+    body,
+    "</body>",
+    "</html>",
+  ].join("");
+}
+
 export async function exportHtmlToGoogleDocs({
   html,
   equipmentName,
@@ -54,7 +99,7 @@ export async function exportHtmlToGoogleDocs({
     try { win = window.open("", "_blank", "noopener"); } catch { /* ignore */ }
   }
 
-  // 2) 토큰 받기(GIS Token Client) — 승인된 JavaScript 원본(origin) 필요
+  // 2) 토큰 받기(GIS Token Client)
   const scopes = [
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/documents",
@@ -82,18 +127,21 @@ export async function exportHtmlToGoogleDocs({
       reject(e);
     }
   }).catch((e: any) => {
-    // 가장 흔한 설정 오류: origin 미등록
     if (String(e?.message || e).includes("origin_mismatch") || String(e).includes("mismatch")) {
       onToast?.({ type: "error", message: "Google Cloud Console의 ‘승인된 JavaScript 원본’에 현재 주소를 추가하세요." });
     }
     throw e;
   });
 
-  // 3) 파일명 규칙
+  // ✅ 3) 업로드용 HTML 정제 + 래핑
+  const cleanInner = sanitizeHtml(html);
+  const cleanHtml = wrapAsHtmlDocument(cleanInner);
+
+  // ✅ 4) 파일명 규칙
   const safeEquip = (equipmentName || "미지정").trim();
   const fileName = `기술진단결과_${safeEquip}_${fmtDateYYYYMMDD()}`;
 
-  // 4) Drive 업로드(HTML → Google Docs 변환, 지정 폴더 저장)
+  // 5) Drive 업로드(HTML → Google Docs 변환, 지정 폴더 저장)
   const boundary = "-------314159265358979323846";
   const metadata = {
     name: fileName,
@@ -107,7 +155,7 @@ export async function exportHtmlToGoogleDocs({
     JSON.stringify(metadata) +
     `\r\n--${boundary}\r\n` +
     `Content-Type: text/html; charset=UTF-8\r\n\r\n` +
-    html +
+    cleanHtml +
     `\r\n--${boundary}--`;
 
   const res = await fetch(
@@ -130,13 +178,12 @@ export async function exportHtmlToGoogleDocs({
 
   const data = (await res.json()) as { id: string; webViewLink: string };
 
-  // 5) 링크 열기(새 탭 열었으면 그 탭에서, 아니면 현재 탭에서)
+  // 6) 링크 열기(새 탭이면 그 탭, 아니면 현재 탭)
   if (data.webViewLink) {
     if (win) {
       try { win.location.replace(data.webViewLink); }
       catch { window.open(data.webViewLink, "_blank", "noopener"); }
     } else {
-      // 현재 탭: 팝업차단과 무관
       window.location.assign(data.webViewLink);
     }
   }
