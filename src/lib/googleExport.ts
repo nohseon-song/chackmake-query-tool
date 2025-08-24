@@ -8,7 +8,7 @@ export type ExportOptions = {
   equipmentName: string;
   clientId: string;
   folderId: string;
-  fileName?: string;
+  fileName?: string;        // 주면 그대로 사용
   onToast?: ToastFn;
 };
 
@@ -17,35 +17,57 @@ function ymd(d = new Date()) { return `${d.getFullYear()}.${z(d.getMonth() + 1)}
 function assert(c: any, m: string): asserts c { if (!c) throw new Error(m); }
 const ILLEGAL = /[\\/:*?"<>|]+/g;
 
-/** 본문 중간 JSON 블록만 '정확히' 제거(중괄호 깊이 계산) */
-function stripJsonBlocks(text: string, keys = ["precision_verification_html","final_report_html","final_summary_text"]) {
-  let t = text ?? "";
-  for (const key of keys) {
-    let idx = 0;
-    while (true) {
-      const pos = t.indexOf(`"${key}"`, idx);
-      if (pos === -1) break;
-      // 가장 가까운 { 부터 깊이 계산
-      let start = t.lastIndexOf("{", pos);
-      if (start < 0) { idx = pos + key.length; continue; }
-      let depth = 0, end = -1;
-      for (let i = start; i < t.length; i++) {
-        const ch = t[i];
-        if (ch === "{") depth++;
-        else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
-      }
-      if (end !== -1) {
-        t = t.slice(0, start) + t.slice(end + 1);
-        idx = start;
-      } else {
-        idx = pos + key.length;
-      }
+// --- 안전 JSON 블록 인라인 함수 (문자열/이스케이프/중괄호 깊이 인식) ---
+function findBalancedJsonEnd(s: string, start: number) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === "\"") inStr = false;
+      continue;
     }
+    if (ch === "\"") inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return i; }
   }
-  return t;
+  return -1;
 }
 
-/** 전체가 JSON이면 우선 HTML 필드를 꺼내고, 아니면 본문만 정리 */
+function inlineJsonObjects(text: string) {
+  const keys = ["precision_verification_html","final_report_html","final_summary_html","final_report","final_summary_text"];
+  let s = text ?? "";
+  let idx = 0;
+  while (true) {
+    let pos = -1, key = "";
+    for (const k of keys) {
+      const p = s.indexOf(`"${k}"`, idx);
+      if (p !== -1 && (pos === -1 || p < pos)) { pos = p; key = k; }
+    }
+    if (pos === -1) break;
+    const brace = s.indexOf("{", pos);
+    if (brace === -1) { idx = pos + key.length; continue; }
+    const end = findBalancedJsonEnd(s, brace);
+    if (end === -1) { idx = pos + key.length; continue; }
+    const jsonStr = s.slice(brace, end + 1);
+    try {
+      const obj = JSON.parse(jsonStr);
+      const html =
+        obj.final_report_html ??
+        obj.precision_verification_html ??
+        obj.final_summary_html ??
+        obj.final_report ??
+        (obj.final_summary_text ? `<div>${obj.final_summary_text}</div>` : "");
+      s = s.slice(0, brace) + (html ?? "") + s.slice(end + 1);
+      idx = brace + (html ? String(html).length : 0);
+    } catch {
+      idx = end + 1;
+    }
+  }
+  return s;
+}
+
 function sanitizeHtml(raw: string): string {
   let t = (raw ?? "").toString().trim();
   if (!t) return "";
@@ -53,33 +75,34 @@ function sanitizeHtml(raw: string): string {
     try {
       const o = JSON.parse(t);
       const picked =
-        o?.final_report_html || o?.final_summary_html || o?.precision_verification_html ||
-        o?.final_report || o?.html || (o?.final_summary_text ? `<div>${o.final_summary_text}</div>` : "");
-      if (picked) return picked;
-    } catch { /* ignore */ }
+        o?.final_report_html ?? o?.precision_verification_html ??
+        o?.final_summary_html ?? o?.final_report ??
+        (o?.final_summary_text ? `<div>${o.final_summary_text}</div>` : "");
+      if (picked) return String(picked);
+    } catch {}
   }
-  return stripJsonBlocks(t).trim();
+  return inlineJsonObjects(t).trim();
 }
 
-/** Docs 변환 안정화 + 가독성 고정 */
 function wrapAsHtmlDocument(inner: string): string {
   return [
     "<!DOCTYPE html><html><head><meta charset=\"UTF-8\" />",
     "<style>",
-    "body{line-height:1.6;font-size:14px;font-weight:400;color:#111;margin:0}",
+    "body{margin:0;line-height:1.6;font-size:14px;font-weight:400;color:#111}",
     "strong,b{font-weight:600}",
     "p{margin:0 0 10px}",
     "table{border-collapse:collapse;width:100%;margin:10px 0}",
     "th,td{border:1px solid #ddd;padding:6px 8px;vertical-align:top}",
     "th{background:#f5f5f5;font-weight:700}",
-    "</style></head><body>",
+    ".doc-wrap{max-width:820px;margin:0 auto}",
+    "</style></head><body><div class=\"doc-wrap\">",
     inner || "",
-    "</body></html>"
+    "</div></body></html>"
   ].join("");
 }
 
 async function ensureGisLoaded() {
-  if (typeof window !== "undefined" && (window as any).google?.accounts?.oauth2) return;
+  if ((window as any).google?.accounts?.oauth2) return;
   await new Promise<void>((res, rej) => {
     const s = document.createElement("script");
     s.src = "https://accounts.google.com/gsi/client"; s.async = true; s.defer = true;
@@ -118,7 +141,6 @@ function makeFileName(eq: string, explicit?: string) {
   return name.replace(/\.+$/, "");
 }
 
-/** Drive에 Google Docs 생성 + DOCX export 반환(Drive 링크는 화면에 노출하지 말 것) */
 export async function exportHtmlToGoogleDocs({
   html, equipmentName, clientId, folderId, fileName, onToast,
 }: ExportOptions): Promise<{
@@ -152,7 +174,7 @@ export async function exportHtmlToGoogleDocs({
   const data = await res.json() as { id: string; webViewLink: string };
   const docUrl = data.webViewLink || `https://docs.google.com/document/d/${data.id}/edit`;
 
-  // 사용자 기기 저장: DOCX export → Blob → 링크(Drive 링크는 화면에 노출하지 않음)
+  // 기기 저장용: DOCX export -> Blob (Drive 링크는 화면 노출 금지)
   let dl: { blobUrl: string; mimeType: string; fileName: string } | undefined;
   try {
     const exp = await fetch(
@@ -164,12 +186,11 @@ export async function exportHtmlToGoogleDocs({
       const blobUrl = URL.createObjectURL(blob);
       dl = { blobUrl, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: `${title}.docx` };
     }
-  } catch { /* export 실패해도 업로드 자체는 성공 */ }
+  } catch {}
 
   onToast?.({ type: "success", message: "Google Docs 저장 완료(기기 다운로드 가능)" });
   return { ...data, docUrl, download: dl };
 }
 
-// 호환용
 export const exportHtmlToGoogleDoc = exportHtmlToGoogleDocs;
 export default exportHtmlToGoogleDocs;
