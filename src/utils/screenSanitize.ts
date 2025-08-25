@@ -1,34 +1,22 @@
 // src/utils/screenSanitize.ts
-// 화면 렌더 직전에만 적용하는 "쓰레기 제거 + 본문 인라인" 정리기
+// 목적: 화면 표시 전용 정리(쓰레기 제거). PDF/Docs 변환 로직에는 영향 X.
 
-/** 균형 잡힌 JSON 블록 끝 찾기(문자열/이스케이프/중괄호 깊이 인식) */
-function findBalancedJsonEnd(s: string, start: number) {
-  let depth = 0, inStr = false, esc = false;
-  for (let i = start; i < s.length; i++) {
-    const ch = s[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === "\\") esc = true;
-      else if (ch === "\"") inStr = false;
-      continue;
-    }
-    if (ch === "\"") inStr = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") { depth--; if (depth === 0) return i; }
-  }
-  return -1;
-}
-const nonEmpty = (v: any): v is string => typeof v === "string" && v.trim().length > 0;
-
-/** ```json … ``` 코드펜스 제거 */
-function stripCodeFences(s: string) {
-  return s.replace(/```(?:json|html)?\s*([\s\S]*?)\s*```/gi, "$1");
+// 코드펜스 마커만 제거(내용은 보존)
+function stripFenceMarkers(s: string): string {
+  if (!s) return "";
+  // ```json, ``` → 마커만 삭제
+  return s.replace(/```json\s*/gi, "").replace(/```/g, "");
 }
 
-/** 화면 표시 전용: JSON 오브젝트를 본문에 인라인(삭제 금지, 요약문 포함) */
-export function sanitizeForScreen(raw: string): string {
+// 값이 "비어있지 않은 문자열"인지
+function nonEmpty(v: any): v is string {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+/** 본문 중간 JSON 오브젝트를 안전하게 치환(삭제 금지, 비어있는 HTML 건너뜀, 요약문은 포함) */
+function inlineJsonBlocksSafe(raw: string): string {
   if (!raw) return "";
-  let s = stripCodeFences(raw);
+  let s = stripFenceMarkers(raw);
 
   const keys = [
     "final_report_html",
@@ -38,7 +26,26 @@ export function sanitizeForScreen(raw: string): string {
     "final_summary_text",
   ];
 
-  let out = "", i = 0, inStr = false, esc = false;
+  let out = "";
+  let i = 0, inStr = false, esc = false;
+
+  function findBalancedJsonEnd(str: string, start: number) {
+    let depth = 0, _in = false, _esc = false;
+    for (let k = start; k < str.length; k++) {
+      const ch = str[k];
+      if (_in) {
+        if (_esc) _esc = false;
+        else if (ch === "\\") _esc = true;
+        else if (ch === "\"") _in = false;
+        continue;
+      }
+      if (ch === "\"") _in = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (depth === 0) return k; }
+    }
+    return -1;
+  }
+
   while (i < s.length) {
     const ch = s[i];
 
@@ -60,7 +67,7 @@ export function sanitizeForScreen(raw: string): string {
             const obj = JSON.parse(block);
             const htmlCandidate =
               [obj.final_report_html, obj.precision_verification_html, obj.final_summary_html, obj.final_report]
-                .map(v => typeof v === "string" ? v.trim() : v)
+                .map((v: any) => (typeof v === "string" ? v.trim() : v))
                 .find(nonEmpty);
             const summary = nonEmpty(obj.final_summary_text) ? `<p>${obj.final_summary_text.trim()}</p>` : "";
             const replacement = nonEmpty(htmlCandidate)
@@ -80,11 +87,16 @@ export function sanitizeForScreen(raw: string): string {
   return out;
 }
 
-/** 파일명용 장비명 추정기(화면 HTML에서 백업 추출) */
-export function inferEquipmentFromHtml(html?: string): string | null {
+/** 화면 표시용 정리 함수 (MainContent에서 사용) */
+export function sanitizeForScreen(raw: string): string {
+  if (!raw) return "";
+  // 코드펜스 제거 후 JSON 안전 인라인
+  return inlineJsonBlocksSafe(raw);
+}
+
+/** 화면에서 파일명 규칙용 장비명 추정(없으면 null) */
+export function inferEquipmentFromHtml(html: string): string | null {
   if (!html) return null;
-  const s = String(html);
-  // "대상 설비" 라벨 근처의 단어를 추출
-  const m = s.match(/대상\s*설비[^:：]*[:：]\s*([^\s<>\n\r]+)/);
+  const m = html.match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
   return m?.[1]?.trim() || null;
 }
