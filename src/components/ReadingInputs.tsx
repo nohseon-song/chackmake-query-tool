@@ -110,7 +110,7 @@ const ReadingInputs: React.FC<ReadingInputsProps> = ({
         <Button
           onClick={downloadPDF}
           variant="outline"
-          className="px-6 py-2 text-sm flex items-center gap-2"
+          className="px-6 py-2 text-sm flex items-center gap-2 hidden"
         >
           <FileDown className="w-4 h-4" />
           PDF 다운로드
