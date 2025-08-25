@@ -200,26 +200,24 @@ export const exchangeCodeForToken = async (
 
 /* ---------------- 보고서 → Google Docs 변환 엔진 ---------------- */
 /**
- * ✅ 변경 요약
- * 1) (신규) patchDanglingFinalSummary/ dropEmptyPlaceholders/ stripCodeFences 로 '끊어진 JSON 꼬리'만 보수
- * 2) 기존 inlineJsonBlocksSafe + sanitizeGoogleReportHtml 그대로 사용
- * 3) 나머지 라인/스타일 변환 로직은 그대로 유지
- * → 앱 화면/PDF 경로에는 영향 없음(이 함수는 Google Docs 변환 전용)
+ * 가독성 규칙 적용을 위해:
+ * - 제목 라인을 Google Docs "Named Style(H1/H2/H3)"로 지정 (프리셋 색/간격 자동 적용)
+ * - 나머지 로직/시그니처는 유지
  */
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
-  // 0) 원문 보수 패치: 끊어진 요약 꼬리/빈 자리표시자/코드펜스
+  // 0) 원문 보수 패치
   let processedHtml = htmlContent || '';
   processedHtml = patchDanglingFinalSummary(processedHtml);
   processedHtml = dropEmptyPlaceholders(processedHtml);
   processedHtml = stripCodeFences(processedHtml);
 
-  // 1) 임베디드 JSON 블록 정리(요약 포함)
+  // 1) 임베디드 JSON 블록 정리
   processedHtml = inlineJsonBlocksSafe(processedHtml);
 
-  // 2) 문자열 전체가 JSON이면 본문 키만 추출
+  // 2) 전체가 JSON이면 본문 키만 추출
   processedHtml = sanitizeGoogleReportHtml(processedHtml);
 
-  // 3) 엔티티/개행 정리(기존 로직)
+  // 3) 엔티티/개행 정리
   processedHtml = htmlEntitiesDecode(processedHtml)
     .replace(/\r\n/g, '\n')
     .replace(/<\s*br\s*\/?>/gi, '\n')
@@ -247,7 +245,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   }
   processedHtml = uniqueLines.join('\n').trim();
 
-  // 5) Google Docs batchUpdate 요청 구성(기존 그대로)
+  // 5) Docs 요청 구성
   const requests: any[] = [];
   let currentIndex = 1;
   let isFirstLine = true;
@@ -275,22 +273,51 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     requests.push({ insertText: { location: { index: startIndex }, text: textToInsert } });
     const endIndex = startIndex + textToInsert.length;
 
+    // 기본 텍스트 스타일(크기/굵기)
     const textStyle: any = { fontSize: { magnitude: 11, unit: 'PT' }, bold: false };
     let fields = 'fontSize,bold';
 
+    // --- 제목 감지 + Named Style 지정 ---
+    let namedStyleType: 'HEADING_1' | 'HEADING_2' | 'HEADING_3' | null = null;
+
     if (/^기계설비 성능점검.*Troubleshooting$/i.test(txt) || /^기술검토 및 진단 종합 보고서$/.test(txt)) {
-      textStyle.fontSize = { magnitude: 20, unit: 'PT' }; textStyle.bold = true;
-    } else if (/^(Overview|프로필|핵심 진단|최종 종합 의견|요약|요약 및 권고)/.test(txt) || isNumberedHeading) {
-      textStyle.fontSize = { magnitude: 16, unit: 'PT' }; textStyle.bold = true;
+      textStyle.fontSize = { magnitude: 20, unit: 'PT' };
+      textStyle.bold = true;
+      namedStyleType = 'HEADING_1'; // H1(검정)
+    } else if (/^(Overview|개요|프로필|핵심 진단|최종 종합 의견|요약|요약 및 권고)/.test(txt) || isNumberedHeading) {
+      textStyle.fontSize = { magnitude: 16, unit: 'PT' };
+      textStyle.bold = true;
+      namedStyleType = 'HEADING_2'; // H2(파랑) — 프리셋 색/간격 적용
     } else if (/^(핵심 진단 요약|정밀 검증|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|단위 변환 공식|압력값 변환|유량 변환|양정\(H\) 계산|경제성 분석|종합 평가)/.test(txt)) {
-      textStyle.fontSize = { magnitude: 14, unit: 'PT' }; textStyle.bold = true;
+      textStyle.fontSize = { magnitude: 14, unit: 'PT' };
+      textStyle.bold = true;
+      namedStyleType = 'HEADING_3'; // H3(파랑)
     } else if (/^(전문분야:|배경:|주요 조언:|핵심 조언:)/.test(txt)) {
       textStyle.bold = true;
     }
 
+    // 텍스트 스타일 적용
     requests.push({ updateTextStyle: { range: { startIndex, endIndex: endIndex - 1 }, textStyle, fields } });
+
+    // 글머리표
     if (bullet) {
-      requests.push({ createParagraphBullets: { range: { startIndex, endIndex: endIndex - 1 }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } });
+      requests.push({
+        createParagraphBullets: {
+          range: { startIndex, endIndex: endIndex - 1 },
+          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE'
+        }
+      });
+    }
+
+    // 제목 문단은 Named Style로 지정(프리셋이 자동 색/간격 부여)
+    if (namedStyleType) {
+      requests.push({
+        updateParagraphStyle: {
+          range: { startIndex, endIndex: endIndex - 1 },
+          paragraphStyle: { namedStyleType },
+          fields: 'namedStyleType'
+        }
+      });
     }
 
     currentIndex = endIndex;
@@ -380,7 +407,7 @@ function _buildReadabilityPresetRequests(documentEndIndex = 1_000_000) {
   ];
 }
 
-/** 문서 생성 직후, 가독성 프리셋 1회 적용 (REST/fetch 사용) */
+/** 문서 생성/삽입 시 가독성 프리셋 1회 적용 (REST/fetch 사용) */
 export async function applyDocsReadabilityPreset(documentId: string, accessToken: string) {
   const requests = _buildReadabilityPresetRequests();
   const resp = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
@@ -389,9 +416,9 @@ export async function applyDocsReadabilityPreset(documentId: string, accessToken
     body: JSON.stringify({ requests }),
   });
   if (!resp.ok) {
-    const t = await resp.text().catch(()=>'');
+    const t = await resp.text().catch(()=> '');
     console.warn('Docs preset failed:', resp.status, t);
-    // 프리셋 실패여도 문서 생성/콘텐츠 삽입은 계속 진행 (안정성 우선)
+    // 프리셋 실패여도 문서 작성은 계속 (안정성 우선)
   }
 }
 
@@ -450,7 +477,7 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
-  // ▶▶ [추가] 가독성 프리셋 1회 적용 (작성 규칙만)
+  // ▶ 문서 생성 직후 프리셋 1회 적용
   await applyDocsReadabilityPreset(documentId, accessToken);
 
   // 2) 본문 변환 & 삽입
@@ -469,6 +496,10 @@ export const createGoogleDoc = async (
       console.error('Google Docs API Error:', errorBody);
       throw new Error(`Google Docs 서식 적용 실패: ${errorBody}`);
     }
+
+    // ▶ 본문 삽입 후 프리셋 재적용(삽입된 문단까지 규칙 확정)
+    await applyDocsReadabilityPreset(documentId, accessToken);
+
   } else {
     console.warn('내보낼 콘텐츠가 없어 빈 문서가 생성되었습니다.');
   }
