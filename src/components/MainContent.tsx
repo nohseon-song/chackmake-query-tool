@@ -7,7 +7,7 @@ import LogDisplay from '@/components/LogDisplay';
 import ActionBar from '@/components/ActionBar';
 import { downloadPdfFromHtml } from '@/utils/pdf';
 import { useToast } from '@/hooks/use-toast';
-import { cleanHtmlForApp } from '@/utils/cleanHtml';
+import { sanitizeForScreen, inferEquipmentFromHtml } from '@/utils/screenSanitize';
 
 interface Reading {
   equipment: string;
@@ -16,7 +16,6 @@ interface Reading {
   design: string;
   measure: string;
 }
-
 interface LogEntry {
   id: string;
   tag: string;
@@ -24,7 +23,6 @@ interface LogEntry {
   isResponse?: boolean;
   timestamp: number;
 }
-
 interface MainContentProps {
   equipment: string;
   class1: string;
@@ -49,17 +47,6 @@ interface MainContentProps {
   onChatOpen: () => void;
   onAddLogEntry: (tag: string, content: any) => void;
 }
-
-const ILLEGAL = /[\\/:*?"<>|]+/g;
-const z2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-const buildFileBase = (equip: string) => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = z2(d.getMonth() + 1);
-  const day = z2(d.getDate());
-  const safeEquip = (equip?.trim() || '미지정').replace(ILLEGAL, '_');
-  return `기술진단결과_${safeEquip}_${y}.${m}.${day}`;
-};
 
 const MainContent: React.FC<MainContentProps> = ({
   equipment,
@@ -87,16 +74,25 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
   const { toast } = useToast();
 
-  // 화면 표시용으로만 JSON 쓰레기 정리
-  const displayHtml = cleanHtmlForApp(resultHtml || "");
+  // 화면 표시 전용 정리(쓰레기 제거). PDF/Docs에는 영향 없음.
+  const displayHtml = sanitizeForScreen(resultHtml || "");
+
+  // 파일명용 장비명: 선택값 → 미존재 시 화면 HTML에서 백업 추정
+  const equipForNaming =
+    (equipment && equipment.trim()) ||
+    inferEquipmentFromHtml(resultHtml || "") ||
+    '미지정';
 
   const handlePdf = () => {
     if (!resultHtml) return;
     try {
-      const fileBase = buildFileBase(equipment);
-      // PDF에도 동일 파일명 규칙 적용
-      downloadPdfFromHtml(resultHtml, fileBase);
-      toast({ title: "PDF 다운로드", description: "인쇄/저장 대화상자가 열렸습니다." });
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      const fileName = `기술진단결과_${equipForNaming}_${y}.${m}.${d}`;
+      downloadPdfFromHtml(resultHtml, fileName);
+      toast({ title: "PDF 다운로드", description: "미리보기에서 ‘PDF 저장(인쇄)’을 눌러 저장하세요." });
     } catch (error) {
       toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
     }
@@ -107,16 +103,33 @@ const MainContent: React.FC<MainContentProps> = ({
       toast({ title: '내보낼 보고서가 없습니다.', variant: 'destructive' });
       return;
     }
-
     const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
     const DRIVE_FOLDER_ID = import.meta.env.VITE_DRIVE_TARGET_FOLDER_ID as string;
-
     if (!GOOGLE_CLIENT_ID) {
       toast({ title: 'Google Client ID가 설정되지 않았습니다.', variant: 'destructive' });
       return;
     }
 
-    const fileBase = buildFileBase(equipment);
+    // 새 탭(허용 시) 안내 페이지
+    let popup: Window | null = window.open('about:blank', '_blank', 'noopener,noreferrer');
+    const openedNewTab = !!popup;
+    if (popup) {
+      try {
+        popup.document.write(`
+          <html><head><title>Google Docs 생성 중...</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif}</style>
+          </head><body><div>Google Docs 문서를 생성하고 있습니다…</div></body></html>
+        `);
+        popup.document.close();
+      } catch {}
+    } else {
+      toast({
+        title: '팝업이 차단되었습니다',
+        description: '브라우저 주소창 우측의 팝업 차단 아이콘을 눌러 허용해 주세요.',
+        variant: 'destructive'
+      });
+    }
 
     try {
       const mod = await import('@/lib/googleExport');
@@ -129,12 +142,18 @@ const MainContent: React.FC<MainContentProps> = ({
         throw new Error('export function not found: exportHtmlToGoogleDoc(s)');
       }
 
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
+      const fileName = `기술진단결과_${equipForNaming}_${y}.${m}.${d}`;
+
       const res: any = await exportFn({
         clientId: GOOGLE_CLIENT_ID,
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
-        equipmentName: equipment,          // ← 규칙 적용 핵심
-        fileName: fileBase,                // ← 우선 적용(둘 다 넘겨 확실히)
+        fileName,
+        equipmentName: equipForNaming,
         onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
           toast({
             title: t.type === 'success' ? '성공' : t.type === 'error' ? '오류' : '안내',
@@ -143,19 +162,13 @@ const MainContent: React.FC<MainContentProps> = ({
           })
       });
 
-      // 앱 화면에는 링크만 노출(Drive 폴더 UI는 열지 않음)
       const docUrl: string = res?.docUrl || res?.webViewLink || '';
-      const dl = res?.download as { blobUrl?: string; fileName?: string } | undefined;
-
       if (docUrl) {
-        onAddLogEntry('gdocs', {
-          message: 'Google Docs 문서가 생성되었습니다.',
-          url: docUrl,
-          downloadName: dl?.fileName,
-          downloadUrl: dl?.blobUrl
-        });
+        if (openedNewTab && popup) popup.location.href = docUrl;
+        else window.location.href = docUrl;
         toast({ title: 'Google Docs로 내보내기 완료', description: '지정 폴더에 저장되었습니다.' });
       } else {
+        try { popup?.close(); } catch {}
         toast({
           title: '문서 링크를 받지 못했습니다',
           description: '문서는 생성되었을 수 있으니 Google Drive 폴더를 확인해 주세요.',
@@ -163,6 +176,7 @@ const MainContent: React.FC<MainContentProps> = ({
         });
       }
     } catch (err) {
+      try { popup?.close(); } catch {}
       console.error('Google Docs 내보내기 오류:', err);
       toast({
         title: 'Google Docs 내보내기 실패',
@@ -228,7 +242,7 @@ const MainContent: React.FC<MainContentProps> = ({
               <div
                 id="report-content"
                 className="result-content prose dark:prose-invert max-w-none"
-                // 화면에만 정제된 HTML 표시(생성 로직에는 영향 없음)
+                // 화면 표시용으로만 정리된 HTML 사용
                 dangerouslySetInnerHTML={{ __html: displayHtml }}
               />
             </section>
