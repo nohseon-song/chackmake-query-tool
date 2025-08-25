@@ -200,8 +200,7 @@ export const exchangeCodeForToken = async (
 
 /* ---------------- 보고서 → Google Docs 변환 엔진 ---------------- */
 /**
- * 가독성 규칙 적용을 위해:
- * - 제목 라인을 Google Docs "Named Style(H1/H2/H3)"로 지정 (프리셋 색/간격 자동 적용)
+ * - 제목 라인을 Google Docs Named Style(H1/H2/H3)로 지정 → 프리셋 색/간격 자동 적용
  * - 나머지 로직/시그니처는 유지
  */
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
@@ -287,7 +286,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     } else if (/^(Overview|개요|프로필|핵심 진단|최종 종합 의견|요약|요약 및 권고)/.test(txt) || isNumberedHeading) {
       textStyle.fontSize = { magnitude: 16, unit: 'PT' };
       textStyle.bold = true;
-      namedStyleType = 'HEADING_2'; // H2(파랑) — 프리셋 색/간격 적용
+      namedStyleType = 'HEADING_2'; // H2(파랑)
     } else if (/^(핵심 진단 요약|정밀 검증|기술 검토 보완 요약|심층 검증 결과|추가 및 대안 권고|최종 정밀 검증 완료|단위 변환 공식|압력값 변환|유량 변환|양정\(H\) 계산|경제성 분석|종합 평가)/.test(txt)) {
       textStyle.fontSize = { magnitude: 14, unit: 'PT' };
       textStyle.bold = true;
@@ -369,15 +368,17 @@ function _buildReadabilityPresetRequests(documentEndIndex = 1_000_000) {
         fields: 'lineSpacing,spaceBelow',
       },
     },
-    // 본문 글자색: 진한 검정
+    // 본문 기본 글꼴색은 NORMAL_TEXT Named Style로만 지정 (전역 덮어쓰기 금지)
     {
-      updateTextStyle: {
-        range: WHOLE,
-        textStyle: { foregroundColor: { color: { rgbColor: _COLOR_BASE } } },
-        fields: 'foregroundColor',
+      updateNamedStyle: {
+        namedStyleType: 'NORMAL_TEXT',
+        style: {
+          textStyle: { foregroundColor: { color: { rgbColor: _COLOR_BASE } } }
+        },
+        fields: 'textStyle.foregroundColor',
       },
     },
-    // 제목 스타일 색/여백(문서의 NamedStyle 정의만 교정; 문단에 적용은 기존 로직 유지)
+    // 제목 스타일 색/여백 (프리셋 정의)
     {
       updateNamedStyle: {
         namedStyleType: 'HEADING_2',
