@@ -1,22 +1,19 @@
 // src/utils/pdf.ts
-// 목적: A4 흰 배경 + 검정 본문 + 파란 포인트(#2563EB)로 가독성 100% PDF 생성
-// 주의: 이 파일만 교체. 앱의 다른 부분은 수정하지 않음.
+// 목적: A4 흰 배경 + 검정 본문 + 포인트 블루(#2563EB)로 100% 가독성 PDF 생성
+// 범위 제한: 이 파일만 교체. 앱의 다른 부분은 수정 금지.
 
-// ------------------------ 1) html2pdf 동적 로더 (기존 체계 유지) ------------------------
+// ------------------------ 1) html2pdf 동적 로더 ------------------------
 const loadHtml2Pdf = () =>
   new Promise((resolve, reject) => {
     if ((window as any).html2pdf) return resolve((window as any).html2pdf);
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    script.onload = () => {
-      if ((window as any).html2pdf) resolve((window as any).html2pdf);
-      else reject(new Error('html2pdf 로드 실패'));
-    };
-    script.onerror = () => reject(new Error('html2pdf 스크립트 로드 실패'));
-    document.head.appendChild(script);
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload = () => (window as any).html2pdf ? resolve((window as any).html2pdf) : reject(new Error('html2pdf 로드 실패'));
+    s.onerror = () => reject(new Error('html2pdf 스크립트 로드 실패'));
+    document.head.appendChild(s);
   });
 
-// ------------------------ 2) 내용 전처리 유틸 (현행 로직 보존) ------------------------
+// ------------------------ 2) 기존 전처리 유틸 (그대로 유지) ------------------------
 function stripFenceMarkers(s: string): string {
   return (s || '').replace(/```json\s*/gi, '').replace(/```/g, '');
 }
@@ -72,24 +69,72 @@ function inlineJsonBlocksSafe(raw: string): string {
         ? (summary ? htmlCandidate + summary : htmlCandidate)
         : summary;
       out += replacement || '';
-      i = end + 1;
-      continue;
-    } catch {
-      out += ch; i++; continue;
-    }
+      i = end + 1; continue;
+    } catch { out += ch; i++; continue; }
   }
   return out;
 }
 
-// ------------------------ 3) 메인: iframe 샌드박스에서 캡처 ------------------------
+// ------------------------ 3) 색/배경 "중립화" (핵심 추가) ------------------------
+/**
+ * 원본 HTML의 인라인 색/배경/필터를 제거해 라이트 테마로 강제.
+ * 레이아웃 관련 스타일은 유지, 텍스트 강조(strong/b)는 유지.
+ */
+function neutralizeInlineColors(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div id="root">${html}</div>`, 'text/html');
+  const root = doc.getElementById('root')!;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+
+  // 제거 대상 클래스 prefix (tailwind/shadcn 등 공통)
+  const classDropPrefixes = /^(dark|bg-|text-|from-|to-|via-|fill-|stroke-)/;
+
+  // 순회
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const el = node as HTMLElement;
+
+    // data-theme 등 테마 속성 제거
+    el.removeAttribute('data-theme');
+
+    // 인라인 스타일에서 color/background 관련만 제거
+    const style = el.getAttribute('style');
+    if (style) {
+      const cleaned = style
+        .replace(/(?:^|;)\s*color\s*:[^;]*;?/gi, '')
+        .replace(/(?:^|;)\s*background(?:-color)?\s*:[^;]*;?/gi, '')
+        .replace(/(?:^|;)\s*filter\s*:[^;]*;?/gi, '')
+        .replace(/(?:^|;)\s*mix-blend-mode\s*:[^;]*;?/gi, '')
+        .replace(/(?:^|;)\s*text-shadow\s*:[^;]*;?/gi, '')
+        .replace(/;;+/g, ';').replace(/^\s*;\s*|\s*;\s*$/g, '');
+      if (cleaned.trim()) el.setAttribute('style', cleaned);
+      else el.removeAttribute('style');
+    }
+
+    // 색/배경을 강제하는 클래스 제거 (레이아웃 클래스는 유지)
+    if (el.className) {
+      const kept = el.className
+        .split(/\s+/)
+        .filter(c => c && !classDropPrefixes.test(c))
+        .join(' ');
+      if (kept) el.className = kept; else el.removeAttribute('class');
+    }
+  }
+
+  return root.innerHTML;
+}
+
+// ------------------------ 4) 메인: iframe 샌드박스에서 캡처 ------------------------
 export async function downloadPdfFromHtml(html: string, filename: string) {
   const fileBase = (filename || 'report').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.+$/, '');
   const html2pdf = await loadHtml2Pdf();
 
+  // 4-1) 전처리
   const pre = stripFenceMarkers(html || '');
-  const cleanedHtml = inlineJsonBlocksSafe(pre);
+  const inlined = inlineJsonBlocksSafe(pre);
+  const sanitized = neutralizeInlineColors(inlined);
 
-  // 라이트 테마 & 가독성 보장 스타일(샘플 기준)
+  // 4-2) 라이트 테마 & 가독성 보장 스타일
   const styleBlock = `
   <style>
     @page { size: A4; margin: 18mm 16mm; }
@@ -101,16 +146,16 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
       line-height:1.7; font-weight:400; color:#111111 !important;
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    * { background-image:none !important; box-shadow:none; filter:none !important; mix-blend-mode:normal !important; }
-    :root, .prose, body {
-      --background:#ffffff; --foreground:#111111;
-      --muted:#f5f5f5; --muted-foreground:#444444;
-      --card:#ffffff; --border:#e5e7eb; --ring:#2563EB;
-    }
+
+    /* 전역 리셋 - 배경 투명화, 색은 상속 */
+    * { background-image:none !important; mix-blend-mode:normal !important; }
+    /* 강조는 굵기만 유지(색 강조는 제목/번호로 제한) */
+    strong, b { font-weight:700; color:#000000 !important; }
+
     .prose { max-width:none; padding:0; margin:0; }
     .prose > :first-child { margin-top:0 !important; padding-top:0 !important; }
 
-    /* 제목/포인트 컬러 */
+    /* 제목/포인트 블루 */
     .prose h1, .prose h2, .prose h3, .prose h4 {
       font-weight:700; page-break-after:avoid; color:#111111 !important;
     }
@@ -129,37 +174,35 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     th, td { border:1px solid #e5e7eb; padding:6pt; text-align:left; vertical-align:top; color:#111111 !important; }
     th { background:#f5f5f5 !important; font-weight:700; }
 
-    /* 강조/카드 */
-    strong, b { font-weight:700; color:#000000 !important; }
+    /* 카드/박스(둥근 모서리) */
     div[style*="border-radius"], .card, .box, .panel {
       border:1px solid #e5e7eb !important; background:#f9fafb !important;
       padding:12pt !important; margin:12pt 0 !important; border-radius:8px !important;
     }
   </style>`.trim();
 
-  // 1) 샌드박스 iframe 생성(보이지 않게)
+  // 4-3) 샌드박스 iframe
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.position = 'fixed';
   iframe.style.left = '-10000px';
   iframe.style.top = '0';
-  iframe.style.width = '794px';   // A4 width @96dpi 근사
-  iframe.style.height = '1123px'; // A4 height @96dpi 근사
+  iframe.style.width = '794px';   // A4 @96dpi 근사
+  iframe.style.height = '1123px';
   iframe.style.background = '#ffffff';
   document.body.appendChild(iframe);
 
-  // 2) 완전한 문서 작성
   const doc = iframe.contentDocument!;
   doc.open();
   doc.write(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>${fileBase}</title>${styleBlock}</head>
-<body><div class="prose">${cleanedHtml}</div></body></html>`);
+<body><div class="prose">${sanitized}</div></body></html>`);
   doc.close();
 
-  // 3) 레이아웃 안정 대기
+  // 레이아웃 안정 대기
   await new Promise((r) => setTimeout(r, 50));
 
-  // 4) PDF 생성
+  // 4-4) PDF 생성
   const options = {
     margin: 0,
     filename: `${fileBase}.pdf`,
@@ -173,13 +216,13 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     await (html2pdf as any)().set(options).from(doc.body).save();
   } catch (err) {
     console.error('PDF 생성 실패:', err);
-    const textContent = (html || '').replace(/<[^>]+>/g, '\n').replace(/\n\n+/g, '\n\n');
+    const textContent = (sanitized || '').replace(/<[^>]+>/g, '\n').replace(/\n\n+/g, '\n\n');
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `${fileBase}.txt`; a.click(); URL.revokeObjectURL(url);
     throw new Error('PDF 생성에 실패하여 텍스트 파일로 대체 다운로드합니다.');
   } finally {
-    iframe.remove(); // 생성물 정리
+    iframe.remove();
   }
 }
