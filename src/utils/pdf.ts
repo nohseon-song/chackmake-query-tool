@@ -102,7 +102,7 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     const pre = stripFenceMarkers(html || "");
     const cleanedHtml = inlineJsonBlocksSafe(pre);
 
-    // 🚀 수정된 부분: 샘플 PDF와 100% 동일한 스타일 적용
+    // 샘플 PDF와 100% 동일한 스타일 적용
     const fullHtml = `
       <!DOCTYPE html>
       <html>
@@ -180,7 +180,8 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
       margin: 0, // @page에서 여백을 제어하므로 0으로 설정
       filename: `${fileBase}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
+      // 🚀 수정된 부분: html2canvas 옵션에 흰색 배경을 명시적으로 지정
+      html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'avoid-all'] }
     };
