@@ -1,13 +1,11 @@
 // src/utils/pdf.ts
-// 목표: 가독성 100% 유지 + JSON 안전 치환 + "문단 전체 볼드" 해제 + 안정적인 파일명으로 직접 다운로드
+// 목표: 샘플과 동일한 100% 가독성, 내용 삭제 버그 해결, 항상 흰 배경으로 출력
 
 // html2pdf.js 라이브러리를 동적으로 로드하는 헬퍼 함수
 const loadHtml2Pdf = () => new Promise((resolve, reject) => {
-    // 라이브러리가 이미 로드되었는지 확인
     if ((window as any).html2pdf) {
       return resolve((window as any).html2pdf);
     }
-    // 스크립트 태그를 동적으로 생성하여 라이브러리 로드
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
     script.onload = () => {
@@ -21,8 +19,7 @@ const loadHtml2Pdf = () => new Promise((resolve, reject) => {
     document.head.appendChild(script);
 });
 
-
-// --- 화면 표시용 HTML 정리 유틸리티들 (기존 코드와 동일) ---
+// --- HTML 정리 유틸리티들 (내용 삭제 버그를 유발했던 unwrapOverBold 함수 제거) ---
 
 function stripFenceMarkers(s: string): string {
   return (s || "").replace(/```json\s*/gi, "").replace(/```/g, "");
@@ -90,37 +87,6 @@ function inlineJsonBlocksSafe(raw: string): string {
   return out;
 }
 
-function unwrapOverBold(html: string): string {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<div id="__root">${html}</div>`, "text/html");
-    const root = doc.getElementById("__root");
-    if (!root) return html;
-
-    const targets = root.querySelectorAll("p, li, div, section, article");
-    targets.forEach((el) => {
-      const st = (el as HTMLElement).getAttribute("style") || "";
-      if (/font-weight\s*:\s*(700|bold)/i.test(st)) {
-        (el as HTMLElement).setAttribute("style", st.replace(/font-weight\s*:\s*(700|bold)\s*;?/ig, ""));
-      }
-      if (el.children.length === 1) {
-        const only = el.children[0] as HTMLElement;
-        const tag = only.tagName.toLowerCase();
-        if (tag === "strong" || tag === "b") {
-          if (!only.querySelector("p,div,section,article,table")) {
-            const plain = only.textContent ? only.textContent.trim() : "";
-            if (plain.length >= 24) {
-              el.innerHTML = only.innerHTML;
-            }
-          }
-        }
-      }
-    });
-    return (root as HTMLElement).innerHTML;
-  } catch {
-    return html;
-  }
-}
 
 // --- 메인 PDF 다운로드 함수 ---
 
@@ -130,10 +96,11 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
   try {
     const html2pdf = await loadHtml2Pdf();
     
+    // 🚀 수정된 부분: unwrapOverBold 함수를 제거하여 내용 삭제 버그 해결
     const pre = stripFenceMarkers(html || "");
-    const cleanedHtml = unwrapOverBold(inlineJsonBlocksSafe(pre));
+    const cleanedHtml = inlineJsonBlocksSafe(pre);
 
-    // --- 🚀 수정된 부분: PDF 스타일 개선 ---
+    // 🚀 수정된 부분: 샘플 PDF와 동일한 스타일 적용
     const fullHtml = `
       <!DOCTYPE html>
       <html>
@@ -144,41 +111,42 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
           /* A4 용지 크기와 여백 설정 */
           @page {
             size: A4;
-            margin: 14mm; /* 상하좌우 여백 */
+            margin: 18mm 16mm; /* 상하 18mm, 좌우 16mm 여백 */
           } 
           /* 인쇄를 위한 기본 스타일 (항상 흰 배경, 검은 글씨) */
           body { 
             margin: 0; 
-            font-family: system-ui, -apple-system, sans-serif, 'Malgun Gothic', '맑은 고딕'; 
-            line-height: 1.6; 
+            font-family: 'Malgun Gothic', '맑은 고딕', system-ui, -apple-system, sans-serif; 
+            line-height: 1.7; 
             font-weight: 400; 
-            color: #000000 !important; /* 글자색 검정 강제 */
-            background-color: #ffffff !important; /* 배경색 흰색 강제 */
+            color: #333333 !important; /* 글자색 검정 */
+            background-color: #ffffff !important; /* 배경색 흰색 */
             -webkit-print-color-adjust: exact; 
           } 
-          /* 내용이 페이지 상단에서 시작하도록 보정 */
           .prose { 
             max-width: none; 
-            padding-top: 0;
-            margin-top: 0;
+            padding: 0;
+            margin: 0;
           }
           .prose > :first-child {
             margin-top: 0 !important;
             padding-top: 0 !important;
           }
-          .prose h1, .prose h2, .prose h3 { 
-            margin-top: 1em; 
-            margin-bottom: 0.5em; 
+          .prose h1, .prose h2, .prose h3, .prose h4 { 
             font-weight: 700; 
             page-break-after: avoid; 
-            color: #000000 !important;
+            color: #111111 !important;
           }
-          .prose p { margin: 0.5em 0; }
-          ul, ol { margin: 0.5em 0 0.5em 1.25em; page-break-inside: avoid; }
-          table { width: 100%; border-collapse: collapse; margin: 1em 0; page-break-inside: avoid; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f5f5f5 !important; font-weight: 700; color: #000000 !important; }
-          strong, b { font-weight: 600; color: #000000 !important; }
+          .prose h1 { font-size: 20pt; margin: 24pt 0 12pt 0; }
+          .prose h2 { font-size: 16pt; margin: 20pt 0 10pt 0; }
+          .prose h3 { font-size: 13pt; margin: 16pt 0 8pt 0; }
+          .prose p { margin: 6pt 0; font-size: 10pt; }
+          ul, ol { margin: 6pt 0 6pt 20pt; font-size: 10pt; page-break-inside: avoid; }
+          li { margin-bottom: 4pt; }
+          table { width: 100%; border-collapse: collapse; margin: 12pt 0; page-break-inside: avoid; font-size: 9pt; }
+          th, td { border: 1px solid #cccccc; padding: 6pt; text-align: left; }
+          th { background-color: #f2f2f2 !important; font-weight: 700; }
+          strong, b { font-weight: 600; }
           div, section, article { page-break-inside: avoid; }
         </style>
       </head>
@@ -190,7 +158,7 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     element.innerHTML = fullHtml;
     
     const options = {
-      margin: 0, // @page에서 여백을 제어하므로 0으로 설정
+      margin: 0,
       filename: `${fileBase}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, logging: false },
