@@ -189,13 +189,19 @@ export const exchangeCodeForToken = async (
 /* ---------------- 보고서 → Google Docs 변환 엔진 ---------------- */
 /** 기존 함수 이름/리턴 유지. 내부에서 HTML 정규화만 강화 */
 const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
-  // ☆☆☆ 핵심 1줄: 본문 어딘가에 섞인 JSON 블록을 먼저 안전 치환(요약 포함) ☆☆☆
+  // ☆☆☆ 1) 본문 어딘가에 섞인 JSON 블록을 먼저 안전 치환(요약 포함) ☆☆☆
   let processedHtml = inlineJsonBlocksSafe(htmlContent || '');
 
-  // 이후, "문자열 자체가 JSON"인 경우를 보정(기존 함수 재사용)
+  // ☆☆☆ 1-보강) Docs/DOCX에서 문장 소실 유발하던 잔여 패턴(껍데기만 제거, 문장은 살림) ☆☆☆
+  processedHtml = processedHtml.replace(
+    /,\s*"final_summary_text"\s*:\s*"([\s\S]*?)"\s*}\s*/g,
+    ' $1 '
+  );
+
+  // 2) "문자열 자체가 JSON"인 경우 보정
   processedHtml = sanitizeGoogleReportHtml(processedHtml);
 
-  // 엔티티/개행 정리(기존 로직 그대로)
+  // 3) 엔티티/개행/태그 정리(기존 로직 그대로)
   processedHtml = htmlEntitiesDecode(processedHtml)
     .replace(/\r\n/g, '\n')
     .replace(/<\s*br\s*\/?>/gi, '\n')
@@ -211,7 +217,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // 중복 라인 억제
+  // 4) 중복 라인 억제
   const lines = processedHtml.split('\n');
   const uniqueLines: string[] = [];
   let lastNonBlank = '';
@@ -223,7 +229,7 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   }
   processedHtml = uniqueLines.join('\n').trim();
 
-  // Google Docs batchUpdate 요청 구성(기존 그대로)
+  // 5) Google Docs batchUpdate 요청 구성(기존 그대로)
   const requests: any[] = [];
   let currentIndex = 1;
   let isFirstLine = true;
@@ -283,6 +289,12 @@ const getDriveFolderId = (): string => {
   return env.VITE_DRIVE_TARGET_FOLDER_ID || FALLBACK_FOLDER_ID;
 };
 
+/** HTML에서 설비명 추정(없으면 null) — 파일명 규칙 보강용 */
+function guessEquipmentFromHtml(html: string): string | null {
+  const m = (html || '').match(/대상\s*설비[^:：]*[:：]\s*([^\s<]+)/);
+  return m?.[1]?.trim() || null;
+}
+
 const generateReportFileName = (equipmentName?: string): string => {
   const equipment = (equipmentName?.trim() || '미지정').replace(/[\\/:*?"<>|]/g, '_');
   return `기술진단결과_${equipment}_${fmtDate()}`;
@@ -319,11 +331,17 @@ export const createGoogleDoc = async (
   accessToken: string,
   equipmentName?: string,
 ): Promise<string> => {
-  // 1) 규칙 제목으로 생성
+  // 1) 파일명 규칙 보강: 미지정이면 본문에서 설비명 추정
+  const resolvedName = generateReportFileName(
+    (equipmentName && equipmentName !== '미지정')
+      ? equipmentName
+      : (guessEquipmentFromHtml(htmlContent) || equipmentName)
+  );
+
   const createResp = await fetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: generateReportFileName(equipmentName) }),
+    body: JSON.stringify({ title: resolvedName }),
   });
   if (!createResp.ok) {
     throw new Error(`Google Docs 문서 생성 실패: ${await createResp.text()}`);
