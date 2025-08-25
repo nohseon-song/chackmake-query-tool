@@ -130,11 +130,10 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
   try {
     const html2pdf = await loadHtml2Pdf();
     
-    // 1) 코드펜스 마커 제거 → 2) JSON 안전 치환 → 3) 문단 전체 볼드 언랩
     const pre = stripFenceMarkers(html || "");
     const cleanedHtml = unwrapOverBold(inlineJsonBlocksSafe(pre));
 
-    // PDF로 변환할 전체 HTML 구조 생성
+    // --- 🚀 수정된 부분: PDF 스타일 개선 ---
     const fullHtml = `
       <!DOCTYPE html>
       <html>
@@ -142,16 +141,44 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
         <meta charset="UTF-8" />
         <title>${fileBase}</title>
         <style> 
-          @page{ size: A4; margin: 14mm; } 
-          body{ margin:0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; font-weight: 400; color:#111; -webkit-print-color-adjust: exact; } 
-          .prose { max-width: none; }
-          .prose h1, .prose h2, .prose h3 { margin-top: 1em; margin-bottom: 0.5em; font-weight: 700; page-break-after: avoid; }
+          /* A4 용지 크기와 여백 설정 */
+          @page {
+            size: A4;
+            margin: 14mm; /* 상하좌우 여백 */
+          } 
+          /* 인쇄를 위한 기본 스타일 (항상 흰 배경, 검은 글씨) */
+          body { 
+            margin: 0; 
+            font-family: system-ui, -apple-system, sans-serif, 'Malgun Gothic', '맑은 고딕'; 
+            line-height: 1.6; 
+            font-weight: 400; 
+            color: #000000 !important; /* 글자색 검정 강제 */
+            background-color: #ffffff !important; /* 배경색 흰색 강제 */
+            -webkit-print-color-adjust: exact; 
+          } 
+          /* 내용이 페이지 상단에서 시작하도록 보정 */
+          .prose { 
+            max-width: none; 
+            padding-top: 0;
+            margin-top: 0;
+          }
+          .prose > :first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+          .prose h1, .prose h2, .prose h3 { 
+            margin-top: 1em; 
+            margin-bottom: 0.5em; 
+            font-weight: 700; 
+            page-break-after: avoid; 
+            color: #000000 !important;
+          }
           .prose p { margin: 0.5em 0; }
           ul, ol { margin: 0.5em 0 0.5em 1.25em; page-break-inside: avoid; }
           table { width: 100%; border-collapse: collapse; margin: 1em 0; page-break-inside: avoid; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f5f5f5; font-weight: 700; }
-          strong, b { font-weight: 600; }
+          th { background-color: #f5f5f5 !important; font-weight: 700; color: #000000 !important; }
+          strong, b { font-weight: 600; color: #000000 !important; }
           div, section, article { page-break-inside: avoid; }
         </style>
       </head>
@@ -162,9 +189,8 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     const element = document.createElement('div');
     element.innerHTML = fullHtml;
     
-    // PDF 생성 옵션
     const options = {
-      margin: 14, // mm 단위
+      margin: 0, // @page에서 여백을 제어하므로 0으로 설정
       filename: `${fileBase}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, logging: false },
@@ -172,12 +198,10 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
       pagebreak: { mode: ['css', 'avoid-all'] }
     };
 
-    // PDF 생성 및 저장 실행
     await (html2pdf as any)().set(options).from(element).save();
 
   } catch (error) {
     console.error("PDF 생성 실패:", error);
-    // PDF 생성 실패 시, 텍스트 파일로 대체 다운로드
     const textContent = html.replace(/<[^>]+>/g, '\n').replace(/\n\n+/g, '\n\n');
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
