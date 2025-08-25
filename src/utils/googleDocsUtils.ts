@@ -300,6 +300,101 @@ const convertHtmlToGoogleDocsRequests = (htmlContent: string): any[] => {
   return requests;
 };
 
+// ====== [추가] Google Docs 가독성 프리셋 ======
+type RGB = { red: number; green: number; blue: number };
+const _rgb = (hex: string): RGB => {
+  const n = hex.replace('#', '');
+  return {
+    red:   parseInt(n.slice(0,2),16)/255,
+    green: parseInt(n.slice(2,4),16)/255,
+    blue:  parseInt(n.slice(4,6),16)/255,
+  };
+};
+
+const _COLOR_BASE = _rgb('#111111');   // 본문 기본색(진한 검정)
+const _COLOR_ACC  = _rgb('#2563EB');   // 포인트(제목용 파랑)
+
+function _buildReadabilityPresetRequests(documentEndIndex = 1_000_000) {
+  const WHOLE = { startIndex: 1, endIndex: documentEndIndex };
+
+  return [
+    // 문서: A4 + 여백
+    {
+      updateDocumentStyle: {
+        documentStyle: {
+          pageSize: {
+            width:  { magnitude: 595, unit: 'PT' },
+            height: { magnitude: 842, unit: 'PT' },
+          },
+          marginTop:    { magnitude: 51, unit: 'PT' },
+          marginBottom: { magnitude: 51, unit: 'PT' },
+          marginLeft:   { magnitude: 45, unit: 'PT' },
+          marginRight:  { magnitude: 45, unit: 'PT' },
+        },
+        fields: 'pageSize,marginTop,marginBottom,marginLeft,marginRight',
+      },
+    },
+    // 문단 기본: 줄간격 1.5, 단락 뒤 6pt
+    {
+      updateParagraphStyle: {
+        range: WHOLE,
+        paragraphStyle: { lineSpacing: 150, spaceBelow: { magnitude: 6, unit: 'PT' } },
+        fields: 'lineSpacing,spaceBelow',
+      },
+    },
+    // 본문 글자색: 진한 검정
+    {
+      updateTextStyle: {
+        range: WHOLE,
+        textStyle: { foregroundColor: { color: { rgbColor: _COLOR_BASE } } },
+        fields: 'foregroundColor',
+      },
+    },
+    // 제목 스타일 색/여백(문서의 NamedStyle 정의만 교정; 문단에 적용은 기존 로직 유지)
+    {
+      updateNamedStyle: {
+        namedStyleType: 'HEADING_2',
+        style: {
+          textStyle: { bold: true, foregroundColor: { color: { rgbColor: _COLOR_ACC } } },
+          paragraphStyle: {
+            spaceAbove: { magnitude: 10, unit: 'PT' },
+            spaceBelow: { magnitude: 10, unit: 'PT' },
+          },
+        },
+        fields: 'textStyle.bold,textStyle.foregroundColor,paragraphStyle.spaceAbove,paragraphStyle.spaceBelow',
+      },
+    },
+    {
+      updateNamedStyle: {
+        namedStyleType: 'HEADING_3',
+        style: {
+          textStyle: { bold: true, foregroundColor: { color: { rgbColor: _COLOR_ACC } } },
+          paragraphStyle: {
+            spaceAbove: { magnitude: 8, unit: 'PT' },
+            spaceBelow: { magnitude: 8, unit: 'PT' },
+          },
+        },
+        fields: 'textStyle.bold,textStyle.foregroundColor,paragraphStyle.spaceAbove,paragraphStyle.spaceBelow',
+      },
+    },
+  ];
+}
+
+/** 문서 생성 직후, 가독성 프리셋 1회 적용 (REST/fetch 사용) */
+export async function applyDocsReadabilityPreset(documentId: string, accessToken: string) {
+  const requests = _buildReadabilityPresetRequests();
+  const resp = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests }),
+  });
+  if (!resp.ok) {
+    const t = await resp.text().catch(()=>'');
+    console.warn('Docs preset failed:', resp.status, t);
+    // 프리셋 실패여도 문서 생성/콘텐츠 삽입은 계속 진행 (안정성 우선)
+  }
+}
+
 /* ---------------- 폴더/파일명 규칙 ---------------- */
 const FALLBACK_FOLDER_ID = '1Ndsjt8XGOTkH0mSg2LLfclc3wjO9yiR7'; // 기존 값 유지(안전 폴백)
 const getDriveFolderId = (): string => {
