@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useEffect, useState, useRef } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import EquipmentSelection from '@/components/EquipmentSelection';
 import ReadingsManagement from '@/components/ReadingsManagement';
 import ActionButtons from '@/components/ActionButtons';
@@ -73,27 +73,39 @@ const MainContent: React.FC<MainContentProps> = ({
   onAddLogEntry
 }) => {
   const { toast } = useToast();
+  // --- 🚀 수정된 부분 1: 마지막으로 제출한 설비명을 기억하기 위한 저장소 ---
+  const lastSubmittedEquipment = useRef<string>('');
+
+  useEffect(() => {
+    // 진단 요청이 시작될 때 (isProcessing이 true가 될 때) 현재 설비명을 저장해둠
+    if (isProcessing && equipment) {
+      lastSubmittedEquipment.current = equipment;
+    }
+  }, [isProcessing, equipment]);
+
 
   // 화면 표시 전용 정리(쓰레기 제거). PDF/Docs 변환엔 영향 없음.
   const displayHtml = sanitizeForScreen(resultHtml || "");
 
-  // 파일명용 장비명: 선택값 → 없으면 화면 HTML에서 추정 → 그래도 없으면 '미지정'
+  // --- 🚀 수정된 부분 2: 파일명 생성 규칙 수정 ---
+  // 파일명용 장비명: 현재 선택값 > 없으면 마지막 제출값 > 그래도 없으면 HTML에서 추정 > 최후엔 '미지정'
   const equipForNaming =
     (equipment && equipment.trim()) ||
+    lastSubmittedEquipment.current ||
     inferEquipmentFromHtml(resultHtml || "") ||
     '미지정';
 
-  // Google Docs 생성 후, 기기로 저장할 다운로드 정보(DOCX blob)
-  const [gdocsDownload, setGdocsDownload] = useState<{ url: string; name: string } | null>(null);
+  // --- 🚀 수정된 부분 3: Google Docs 결과(문서 URL + 다운로드 URL)를 함께 저장 ---
+  const [gdocsResult, setGdocsResult] = useState<{ docUrl: string; download?: { url: string; name: string } } | null>(null);
 
   // blob URL 정리
   useEffect(() => {
     return () => {
-      if (gdocsDownload?.url) {
-        try { URL.revokeObjectURL(gdocsDownload.url); } catch {}
+      if (gdocsResult?.download?.url) {
+        try { URL.revokeObjectURL(gdocsResult.download.url); } catch {}
       }
     };
-  }, [gdocsDownload?.url]);
+  }, [gdocsResult?.download?.url]);
 
   const handlePdf = () => {
     if (!resultHtml) return;
@@ -102,9 +114,10 @@ const MainContent: React.FC<MainContentProps> = ({
       const y = now.getFullYear();
       const m = String(now.getMonth() + 1).padStart(2, "0");
       const d = String(now.getDate()).padStart(2, "0");
+      // 수정된 equipForNaming을 사용해서 정확한 파일명을 생성
       const fileName = `기술진단결과_${equipForNaming}_${y}.${m}.${d}`;
       downloadPdfFromHtml(resultHtml, fileName);
-      toast({ title: "PDF 미리보기", description: "상단의 ‘PDF 저장(인쇄)’으로 저장하세요." });
+      // PDF는 라이브러리를 통해 직접 다운로드 되므로, 미리보기 안내는 제거
     } catch {
       toast({ title: "PDF 다운로드 실패", description: "다시 시도해주세요.", variant: "destructive" });
     }
@@ -134,6 +147,7 @@ const MainContent: React.FC<MainContentProps> = ({
       const y = now.getFullYear();
       const m = String(now.getMonth() + 1).padStart(2, "0");
       const d = String(now.getDate()).padStart(2, "0");
+      // 수정된 equipForNaming을 사용해서 정확한 파일명을 생성
       const fileBase = `기술진단결과_${equipForNaming}_${y}.${m}.${d}`;
 
       // Drive 폴더 저장 + 기기 저장용 DOCX blob URL 획득
@@ -142,7 +156,7 @@ const MainContent: React.FC<MainContentProps> = ({
         folderId: DRIVE_FOLDER_ID,
         html: resultHtml,
         fileName: fileBase,
-        equipmentName: equipForNaming,
+        equipmentName: equipForNaming, // 수정된 equipForNaming 전달
         onToast: (t: { type: 'success' | 'error' | 'info'; message: string }) =>
           toast({
             title: t.type === 'success' ? '성공' : t.type === 'error' ? '오류' : '안내',
@@ -151,28 +165,18 @@ const MainContent: React.FC<MainContentProps> = ({
           })
       });
 
-      // 절대 화면 이동/Drive 열지 않음. 다운로드만 제공.
-      const blobUrl = res?.download?.blobUrl as string | undefined;
-      const downloadName = (res?.download?.fileName as string | undefined) || `${fileBase}.docx`;
-
-      if (blobUrl) {
-        setGdocsDownload({ url: blobUrl, name: downloadName });
-
-        // iOS 등 일부 브라우저에서 자동 저장 보조
-        try {
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = downloadName;
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        } catch {}
-        toast({ title: 'Google Docs 생성 완료', description: '화면의 다운로드 링크로 저장할 수 있습니다.' });
+      // --- 🚀 수정된 부분 4: 결과 처리 로직 개선 ---
+      // 결과 state에 구글 문서 URL과 다운로드 링크(DOCX)를 모두 저장
+      if (res?.docUrl) {
+        setGdocsResult({
+          docUrl: res.docUrl,
+          download: res.download ? { url: res.download.blobUrl, name: res.download.fileName } : undefined
+        });
+        toast({ title: 'Google Docs 생성 완료', description: '아래 링크를 통해 확인 및 저장할 수 있습니다.' });
       } else {
         toast({
-          title: '다운로드 링크 생성 실패',
-          description: '문서는 Drive 폴더에 저장되었습니다. 폴더에서 확인해 주세요.',
+          title: '결과 처리 실패',
+          description: '문서는 Drive에 저장되었을 수 있으나, 링크를 가져오지 못했습니다.',
           variant: 'destructive'
         });
       }
@@ -234,18 +238,33 @@ const MainContent: React.FC<MainContentProps> = ({
         <ActionBar html={resultHtml} loading={isProcessing} onPdf={handlePdf} onGDocs={handleGDocs} />
       )}
 
-      {/* Google Docs 다운로드 안내 카드(Drive 링크 노출 없음) */}
-      {gdocsDownload && (
+      {/* --- 🚀 수정된 부분 5: Google Docs 결과 표시 카드 --- */}
+      {gdocsResult && (
         <Card className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} mt-3`}>
-          <CardContent className="p-4">
-            <div className="text-sm mb-2">Google Docs 문서가 지정된 폴더에 저장되었습니다.</div>
+          <CardHeader>
+            <CardTitle className="text-lg">Google Docs 문서 생성 완료</CardTitle>
+            <CardDescription>
+              문서가 지정된 Drive 폴더에 저장되었습니다. 아래 링크를 이용하세요.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-2 text-sm">
             <a
-              href={gdocsDownload.url}
-              download={gdocsDownload.name}
-              className="text-blue-600 underline"
+              href={gdocsResult.docUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline block hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
             >
-              다운로드 링크 (DOCX) — {gdocsDownload.name}
+              🔗 Google Docs에서 문서 열기
             </a>
+            {gdocsResult.download && (
+              <a
+                href={gdocsResult.download.url}
+                download={gdocsResult.download.name}
+                className="text-blue-600 underline block hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                📄 DOCX 파일로 다운로드 — {gdocsResult.download.name}
+              </a>
+            )}
           </CardContent>
         </Card>
       )}
