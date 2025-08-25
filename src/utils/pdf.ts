@@ -1,7 +1,11 @@
 // src/utils/pdf.ts
-// 목표: 가독성 100% 유지 + JSON 안전 치환 + "문단 전체 볼드"만 해제 + 화면 전환 없이 미리보기
-// 추가개선: 인쇄 저장 시 파일명 보장(일부 브라우저는 부모 문서 제목을 따르므로 부모/자식 타이틀 모두 설정 후 복구)
+// 목표: 가독성 100% 유지 + JSON 안전 치환 + "문단 전체 볼드" 해제 + 화면 전환 없이 미리보기
 
+function stripFenceMarkers(s: string): string {
+  return (s || "").replace(/```json\s*/gi, "").replace(/```/g, "");
+}
+
+/** 균형 잡힌 JSON 블록 끝 위치(문자열/이스케이프/중괄호 깊이 인식) */
 function findBalancedJsonEnd(s: string, start: number) {
   let depth = 0, inStr = false, esc = false;
   for (let i = start; i < s.length; i++) {
@@ -18,11 +22,15 @@ function findBalancedJsonEnd(s: string, start: number) {
   }
   return -1;
 }
-function nonEmpty(v: any): v is string { return typeof v === "string" && v.trim().length > 0; }
+
+function nonEmpty(v: any): v is string {
+  return typeof v === "string" && v.trim().length > 0;
+}
 
 /** 본문 중간 JSON 오브젝트를 안전하게 치환(삭제 금지, 비어있는 HTML 건너뛰고 요약문 포함) */
 function inlineJsonBlocksSafe(raw: string): string {
   if (!raw) return "";
+  let s = raw; // ← 이미 stripFenceMarkers 로 전처리해서 들어옴
   const keys = [
     "final_report_html",
     "precision_verification_html",
@@ -30,10 +38,13 @@ function inlineJsonBlocksSafe(raw: string): string {
     "final_report",
     "final_summary_text",
   ];
-  let s = raw, out = "", i = 0, inStr = false, esc = false;
+
+  let out = "";
+  let i = 0, inStr = false, esc = false;
 
   while (i < s.length) {
     const ch = s[i];
+
     if (inStr) {
       out += ch;
       if (esc) esc = false;
@@ -93,7 +104,7 @@ function unwrapOverBold(html: string): string {
           if (!only.querySelector("p,div,section,article,table")) {
             const plain = only.textContent ? only.textContent.trim() : "";
             if (plain.length >= 24) {
-              el.innerHTML = only.innerHTML; // 언랩
+              el.innerHTML = only.innerHTML;
             }
           }
         }
@@ -102,26 +113,6 @@ function unwrapOverBold(html: string): string {
     return (root as HTMLElement).innerHTML;
   } catch {
     return html;
-  }
-}
-
-/** PDF 저장 시 일부 브라우저가 부모 문서 title을 쓰는 문제 대비: 잠깐 바꿨다가 복구 */
-function withTempDocTitle(temp: string, fn: () => void) {
-  const prev = document.title;
-  let restored = false;
-  const restore = () => {
-    if (restored) return;
-    restored = true;
-    try { document.title = prev; } catch {}
-    try { window.removeEventListener("afterprint", restore as any); } catch {}
-  };
-  try {
-    document.title = temp;
-    window.addEventListener("afterprint", restore as any);
-    fn();
-  } finally {
-    // afterprint 이벤트가 없는 환경 대비 타임아웃 복구
-    setTimeout(restore, 1500);
   }
 }
 
@@ -178,7 +169,7 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
   let blobUrl: string | null = null;
 
   try {
-    (frame as any).srcdoc = htmlDoc;        // srcdoc 선호
+    (frame as any).srcdoc = htmlDoc;
   } catch {
     const blob = new Blob([htmlDoc], { type: "text/html;charset=utf-8" });
     blobUrl = URL.createObjectURL(blob);
@@ -189,15 +180,8 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
     try {
       const cw = frame.contentWindow;
       if (!cw) return;
-
-      // ① 인쇄 대상(iframe)의 제목 지정
       try { cw.document.title = fileBase; } catch {}
-
-      // ② 일부 브라우저는 부모 문서 제목을 저장 파일명으로 사용 → 잠깐 부모도 동일하게 변경
-      withTempDocTitle(fileBase, () => {
-        cw.focus();
-        cw.print();
-      });
+      cw.focus(); cw.print();
     } catch {}
   };
 
@@ -209,7 +193,10 @@ function openOverlayWithIframe(htmlDoc: string, fileBase: string) {
 
 export function downloadPdfFromHtml(html: string, filename: string) {
   const fileBase = (filename || "report").replace(/[\\/:*?"<>|]+/g, "_").replace(/\.+$/, "");
-  const cleaned = unwrapOverBold(inlineJsonBlocksSafe(html || ""));
+
+  // 1) 코드펜스 마커 제거 → 2) JSON 안전 치환 → 3) 문단 전체 볼드 언랩
+  const pre = stripFenceMarkers(html || "");
+  const cleaned = unwrapOverBold(inlineJsonBlocksSafe(pre));
 
   const htmlDoc = `
     <!DOCTYPE html>
@@ -218,7 +205,6 @@ export function downloadPdfFromHtml(html: string, filename: string) {
       <meta charset="UTF-8" />
       <title>${fileBase}</title>
       <style> 
-        /* 가독성 100% 기본 스타일 */
         @page{ size: A4; margin: 14mm } 
         body{ margin:0; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; font-weight: 400; color:#111; } 
         .prose { max-width: none; }
@@ -228,13 +214,11 @@ export function downloadPdfFromHtml(html: string, filename: string) {
         table { width: 100%; border-collapse: collapse; margin: 1em 0; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f5f5f5; font-weight: 700; }
-        strong, b { font-weight: 600; } /* 부분 강조는 유지 */
+        strong, b { font-weight: 600; }
       </style>
     </head>
     <body>${cleaned}</body>
     </html>
   `;
-
-  // 화면 전환 없이 앱 내 미리보기 → 사용자가 "PDF 저장(인쇄)" 클릭 시 저장
   openOverlayWithIframe(htmlDoc, fileBase);
 }
