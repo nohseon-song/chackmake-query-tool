@@ -3,9 +3,11 @@
 
 // html2pdf.js 라이브러리를 동적으로 로드하는 헬퍼 함수
 const loadHtml2Pdf = () => new Promise((resolve, reject) => {
+    // 라이브러리가 이미 로드되었는지 확인
     if ((window as any).html2pdf) {
       return resolve((window as any).html2pdf);
     }
+    // 스크립트 태그를 동적으로 생성하여 라이브러리 로드
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
     script.onload = () => {
@@ -18,6 +20,7 @@ const loadHtml2Pdf = () => new Promise((resolve, reject) => {
     script.onerror = () => reject(new Error('html2pdf 스크립트 로드 실패'));
     document.head.appendChild(script);
 });
+
 
 // --- HTML 정리 유틸리티들 (내용 삭제 버그를 유발했던 unwrapOverBold 함수 제거) ---
 
@@ -119,10 +122,11 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
             font-family: 'Malgun Gothic', '맑은 고딕', system-ui, -apple-system, sans-serif; 
             line-height: 1.7; 
             font-weight: 400; 
-            color: #333333 !important; /* 글자색 검정 */
-            background-color: #ffffff !important; /* 배경색 흰색 */
+            color: #333333 !important; /* 글자색 검정 강제 */
+            background-color: #ffffff !important; /* 배경색 흰색 강제 */
             -webkit-print-color-adjust: exact; 
           } 
+          /* 내용이 페이지 상단에서 시작하도록 보정 */
           .prose { 
             max-width: none; 
             padding: 0;
@@ -158,7 +162,7 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
     element.innerHTML = fullHtml;
     
     const options = {
-      margin: 0,
+      margin: 0, // @page에서 여백을 제어하므로 0으로 설정
       filename: `${fileBase}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, logging: false },
@@ -170,6 +174,7 @@ export async function downloadPdfFromHtml(html: string, filename: string) {
 
   } catch (error) {
     console.error("PDF 생성 실패:", error);
+    // PDF 생성 실패 시, 텍스트 파일로 대체 다운로드
     const textContent = html.replace(/<[^>]+>/g, '\n').replace(/\n\n+/g, '\n\n');
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
