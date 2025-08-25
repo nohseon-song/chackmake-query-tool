@@ -450,6 +450,9 @@ export const createGoogleDoc = async (
   const createdDoc = await createResp.json();
   const documentId = createdDoc.documentId as string;
 
+  // ▶▶ [추가] 가독성 프리셋 1회 적용 (작성 규칙만)
+  await applyDocsReadabilityPreset(documentId, accessToken);
+
   // 2) 본문 변환 & 삽입
   const requests = convertHtmlToGoogleDocsRequests(htmlContent);
   if (requests.length > 0) {
