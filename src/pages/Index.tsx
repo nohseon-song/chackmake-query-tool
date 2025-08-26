@@ -137,7 +137,7 @@ const Index = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-center sm:text-left">
               <h1 className="text-lg sm:text-xl font-bold">CheckMake Pro-Ultra 2.0</h1>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">기계설비 성능점검 + 유지관리 현장 기술 진단 App</p>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">⌬ RAG ｜ ⚙︎ Multi-Agent ｜ ∞ Data Flywheel</p>
             </div>
             
             {/* 사용자 정보와 액션 버튼들 */}
