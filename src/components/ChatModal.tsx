@@ -69,7 +69,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
       <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} w-full max-h-[70%] rounded-t-2xl flex flex-col border-t`}>
         {/* Header with close button */}
         <div className={`flex justify-between items-center p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <h3 className="text-lg font-semibold">채팅</h3>
+          <h3 className="text-lg font-semibold">⬢ Agent Team ⬢</h3>
           <Button
             onClick={onClose}
             variant="ghost"
