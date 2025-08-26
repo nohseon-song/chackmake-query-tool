@@ -76,7 +76,7 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
       {selectedEquipment && (
         <div>
           <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
-            🎯 주요 점검 부분 선택
+            ✹ 주요 점검부 선택 ✹
           </Label>
           <Select value={class1} onValueChange={onClass1Change}>
             <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
