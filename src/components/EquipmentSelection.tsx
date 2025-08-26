@@ -46,7 +46,7 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
     <>
       <div>
         <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-          🔧 대상 설비를 선택해 주세요.
+          ◉ 대상 설비를 선택해 주세요 ◉
         </Label>
         <div className="grid grid-cols-3 gap-3 mb-4">
           {EQUIPMENT_ITEMS.map((item) => (
