@@ -94,7 +94,7 @@ const EquipmentSelection: React.FC<EquipmentSelectionProps> = ({
       {selectedClass1 && Array.isArray(selectedClass1) && (
         <div>
           <Label className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
-            📋 세부 점검 항목
+            ✦ 세부 점검 항목 ✦
           </Label>
           <Select value={class2} onValueChange={onClass2Change}>
             <SelectTrigger className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50'}`}>
