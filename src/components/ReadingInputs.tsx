@@ -105,7 +105,7 @@ const ReadingInputs: React.FC<ReadingInputsProps> = ({
           variant="outline"
           className="px-4 py-2 text-sm"
         >
-          임시저장
+          임시 분석데이터 저장
         </Button>
         <Button
           onClick={downloadPDF}
