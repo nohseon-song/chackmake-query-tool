@@ -6,34 +6,34 @@
 
 @layer base {
   :root {
-    /* 최고 대비 라이트모드 색상 - 순백/순검 */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
+    /* 눈피로 완화 라이트모드 색상 - 부드러운 오프화이트 */
+    --background: 30 8% 97%;
+    --foreground: 0 0% 12%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card: 30 6% 98%;
+    --card-foreground: 0 0% 12%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover: 30 6% 98%;
+    --popover-foreground: 0 0% 12%;
 
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 0 0% 15%;
+    --primary-foreground: 30 6% 97%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 30 4% 94%;
+    --secondary-foreground: 0 0% 15%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 30 4% 94%;
+    --muted-foreground: 0 0% 48%;
 
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 30 4% 94%;
+    --accent-foreground: 0 0% 15%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 30 6% 97%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 96%;
-    --ring: 0 0% 0%;
+    --border: 30 3% 88%;
+    --input: 30 4% 94%;
+    --ring: 0 0% 15%;
 
     --radius: 0.5rem;
 
