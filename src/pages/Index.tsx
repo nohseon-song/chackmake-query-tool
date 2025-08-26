@@ -136,7 +136,7 @@ const Index = () => {
           {/* 상단 라인: 타이틀과 사용자 정보/버튼들 */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-center sm:text-left">
-              <h1 className="text-lg sm:text-xl font-bold">CheckMake Pro-Ultra 2.0</h1>
+              <h1 className="text-lg sm:text-xl font-bold">CheckMake PRO-Ultra 2.0</h1>
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">⌬ RAG ｜ ⚙︎ Multi-Agent ｜ ∞ Data Flywheel</p>
             </div>
             
