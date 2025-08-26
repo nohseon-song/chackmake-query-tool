@@ -76,7 +76,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
             <span>처리 중... {Math.round(progress)}%</span>
           </div>
         ) : (
-          '전문 기술검토 및 진단 받기'
+          '⌬⚙︎∞ Activate Intelligence ∞⚙︎⌬'
         )}
       </Button>
       
