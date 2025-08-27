@@ -35,6 +35,10 @@
     --input: 30 4% 94%;
     --ring: 0 0% 15%;
 
+    /* High-contrast blue button for intelligence activation */
+    --button-intelligence: 217 91% 60%;
+    --button-intelligence-foreground: 0 0% 100%;
+
     --radius: 0.5rem;
 
     --sidebar-background: 210 25% 92%;
@@ -83,6 +87,11 @@
     --border: 0 0% 14%;
     --input: 0 0% 14%;
     --ring: 0 0% 83%;
+    
+    /* High-contrast blue button for intelligence activation - darker in dark mode */
+    --button-intelligence: 217 91% 50%;
+    --button-intelligence-foreground: 0 0% 100%;
+    
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;

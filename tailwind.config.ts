@@ -61,6 +61,10 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				'button-intelligence': {
+					DEFAULT: 'hsl(var(--button-intelligence))',
+					foreground: 'hsl(var(--button-intelligence-foreground))'
 				}
 			},
 			borderRadius: {

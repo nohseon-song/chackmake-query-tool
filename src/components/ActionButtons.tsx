@@ -68,7 +68,8 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
       <Button
         onClick={onSubmit}
         disabled={!hasDataToSubmit || isProcessing}
-        className="w-full bg-primary hover:bg-primary/80 text-primary-foreground py-3 rounded-full transition-all duration-300 border-2 border-primary font-semibold shadow-lg"
+        variant="intelligence"
+        className="w-full py-3 rounded-full transition-all duration-300 border-2 border-button-intelligence font-semibold"
       >
         {isProcessing ? (
           <div className="flex items-center space-x-2">
