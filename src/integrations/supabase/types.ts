@@ -558,6 +558,7 @@ export type Database = {
           embedding: string
           id: string
           metadata: Json
+          organization_id: string | null
         }
         Insert: {
           content: string
@@ -565,6 +566,7 @@ export type Database = {
           embedding: string
           id?: string
           metadata: Json
+          organization_id?: string | null
         }
         Update: {
           content?: string
@@ -572,6 +574,7 @@ export type Database = {
           embedding?: string
           id?: string
           metadata?: Json
+          organization_id?: string | null
         }
         Relationships: []
       }
