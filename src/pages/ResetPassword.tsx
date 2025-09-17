@@ -1,12 +1,6 @@
 // src/pages/ResetPassword.tsx
 import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  // ↓ Supabase 대시보드(Project settings → API)에서 복사한 값으로 교체
-  "https://rigbiqjmszdlacjdkhep.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZ2JpcWptc3pkbGFjamRraGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzNjc2NjcsImV4cCI6MjA2NDk0MzY2N30.d2qfGwW5f2mg5X1LRzeVLdrvm-MZbQFUCmM0O_ZcDMw"
-);
+import { supabase } from "@/integrations/supabase/client";
 
 const ResetPassword: React.FC = () => {
   const [password, setPassword] = useState("");
@@ -15,13 +9,13 @@ const ResetPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false); // 세션 준비 여부
 
-  // 1) 페이지 진입 시 URL에 포함된 토큰/코드를 세션으로 교환
+  // 1) 페이지가 열리면 URL에 포함된 토큰을 세션으로 교환
   useEffect(() => {
     const run = async () => {
       try {
         const url = new URL(window.location.href);
 
-        // A) PKCE/매직링크 방식 (?code=...)
+        // A) ?code=... (Supabase 비밀번호 재설정 링크 기본 형태)
         const code = url.searchParams.get("code");
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -30,49 +24,41 @@ const ResetPassword: React.FC = () => {
           return;
         }
 
-        // B) 해시 토큰 방식 (#access_token=...&refresh_token=...)
+        // B) #access_token=...&refresh_token=... (해시 기반 세션)
         if (url.hash && url.hash.includes("access_token")) {
           const hash = new URLSearchParams(url.hash.substring(1));
           const access_token = hash.get("access_token") || undefined;
           const refresh_token = hash.get("refresh_token") || undefined;
           if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
+            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
             if (error) throw error;
             setReady(true);
             return;
           }
         }
 
-        // C) token_hash & type=recovery 방식
+        // C) ?token_hash=...&type=recovery (OTP 기반)
         const token_hash = url.searchParams.get("token_hash");
         const type = url.searchParams.get("type");
         if (token_hash && type === "recovery") {
-          const { error } = await supabase.auth.verifyOtp({
-            type: "recovery",
-            token_hash,
-          });
+          const { error } = await supabase.auth.verifyOtp({ type: "recovery", token_hash });
           if (error) throw error;
           setReady(true);
           return;
         }
 
-        // 위 세 가지 모두 없다면: 이메일 링크를 통해 오지 않은 것
-        setErr("이 페이지는 이메일의 재설정 링크를 통해서만 접근할 수 있습니다.");
+        // 세션이 전혀 없으면 직접 접근한 경우
+        setErr("이 페이지는 이메일의 비밀번호 재설정 링크를 통해서만 접근할 수 있습니다.");
       } catch (e: any) {
         setErr(e?.message ?? "세션 복구 중 오류가 발생했습니다.");
       } finally {
-        // 세션이 없더라도 폼은 표시하되, 제출 시 에러 안내를 보여주기 위해 ready를 true로 둠
         setReady(true);
       }
     };
-
     run();
   }, []);
 
-  // 2) 비밀번호 변경
+  // 2) 비밀번호 변경 처리
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setOk(null);
@@ -89,9 +75,16 @@ const ResetPassword: React.FC = () => {
       if (!sessionData.session) {
         throw new Error("인증 세션이 없습니다. 이메일의 비밀번호 재설정 링크로 다시 들어와 주세요.");
       }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      setOk("비밀번호가 변경되었습니다. 이제 새 비밀번호로 로그인하세요.");
+
+      // ✅ UX 개선: 성공 메시지 → 세션 정리 → 로그인 페이지(/auth)로 자동 이동
+      setOk("비밀번호가 성공적으로 변경되었습니다. 로그인 화면으로 이동합니다.");
+      await supabase.auth.signOut();
+      setTimeout(() => {
+        window.location.href = "/auth"; // 로그인 페이지 경로
+      }, 1200);
     } catch (e: any) {
       setErr(e?.message ?? "비밀번호 변경 중 오류가 발생했습니다.");
     } finally {
