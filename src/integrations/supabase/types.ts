@@ -933,6 +933,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_organization_users: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          is_active: boolean
+          user_id: string
+          user_name: string
+          user_role: string
+        }[]
+      }
       get_user_api_summary_for_billing_cycle: {
         Args: { billing_reference_date: string; company_name?: string }
         Returns: {
@@ -952,6 +962,14 @@ export type Database = {
           total_cost_usd: number
           total_requests: number
           total_tokens_used: number
+        }[]
+      }
+      get_user_contact_for_admin: {
+        Args: { target_user_id: string }
+        Returns: {
+          user_email: string
+          user_name: string
+          user_phone: string
         }[]
       }
       is_admin: {
