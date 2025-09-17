@@ -551,6 +551,30 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_vectors: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string
+          id: string
+          metadata: Json
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding: string
+          id?: string
+          metadata: Json
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string
+          id?: string
+          metadata?: Json
+        }
+        Relationships: []
+      }
       measurement_items: {
         Row: {
           created_at: string | null
@@ -874,6 +898,15 @@ export type Database = {
         Args: { billing_ref_date: string; company_name?: string }
         Returns: undefined
       }
+      compose_system_prompt: {
+        Args: {
+          p_lang?: string
+          p_org: string
+          p_stage: string
+          p_user: string
+        }
+        Returns: string
+      }
       execute_sql: {
         Args: { sql: string }
         Returns: {
@@ -923,6 +956,18 @@ export type Database = {
         Returns: boolean
       }
       match_documents: {
+        Args: {
+          match_count: number
+          match_threshold: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          similarity: number
+        }[]
+      }
+      match_knowledge: {
         Args: {
           match_count: number
           match_threshold: number
