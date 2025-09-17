@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/signup" element={<SignUp />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
