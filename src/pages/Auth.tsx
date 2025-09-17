@@ -118,6 +118,17 @@ const Auth = () => {
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
 
+            {/* ✅ 비밀번호 찾기 버튼 */}
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => window.location.href = '/forgot'}
+                className="text-sm text-primary hover:underline"
+              >
+                비밀번호 찾기
+              </button>
+            </div>
+
             {/* 회원가입 페이지 링크 */}
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
