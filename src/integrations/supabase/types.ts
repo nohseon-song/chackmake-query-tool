@@ -933,6 +933,25 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_inspector_contact_for_admin: {
+        Args: { target_inspector_id: string }
+        Returns: {
+          inspector_email: string
+          inspector_name: string
+          inspector_phone: string
+        }[]
+      }
+      get_organization_inspectors: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          inspector_id: string
+          inspector_name: string
+          inspector_position: string
+          is_team_leader: boolean
+          location_id: string
+          technical_grade: string[]
+        }[]
+      }
       get_organization_users: {
         Args: Record<PropertyKey, never>
         Returns: {
