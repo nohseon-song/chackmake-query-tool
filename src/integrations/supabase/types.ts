@@ -423,6 +423,13 @@ export type Database = {
             foreignKeyName: "inspector_contacts_inspector_id_fkey"
             columns: ["inspector_id"]
             isOneToOne: false
+            referencedRelation: "inspector_basic_info"
+            referencedColumns: ["inspector_id"]
+          },
+          {
+            foreignKeyName: "inspector_contacts_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
             referencedRelation: "inspectors"
             referencedColumns: ["id"]
           },
@@ -773,6 +780,13 @@ export type Database = {
             foreignKeyName: "performance_inspections_inspector_id_fkey"
             columns: ["inspector_id"]
             isOneToOne: false
+            referencedRelation: "inspector_basic_info"
+            referencedColumns: ["inspector_id"]
+          },
+          {
+            foreignKeyName: "performance_inspections_inspector_id_fkey"
+            columns: ["inspector_id"]
+            isOneToOne: false
             referencedRelation: "inspectors"
             referencedColumns: ["id"]
           },
@@ -890,7 +904,35 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      inspector_basic_info: {
+        Row: {
+          has_email: boolean | null
+          has_phone: boolean | null
+          inspector_id: string | null
+          inspector_name: string | null
+          is_team_leader: boolean | null
+          location_id: string | null
+          organization_id: string | null
+          position: string | null
+          technical_grade: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspectors_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspectors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_and_and_store_monthly_api_billings: {
@@ -936,6 +978,15 @@ export type Database = {
       get_inspector_contact_for_admin: {
         Args: { target_inspector_id: string }
         Returns: {
+          inspector_email: string
+          inspector_name: string
+          inspector_phone: string
+        }[]
+      }
+      get_inspector_contact_secure: {
+        Args: { target_inspector_id: string }
+        Returns: {
+          access_level: string
           inspector_email: string
           inspector_name: string
           inspector_phone: string
