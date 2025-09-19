@@ -182,8 +182,14 @@ function makeFileName(eq: string, html?: string, explicit?: string) {
 // parents를 선택적으로 포함하여 Google Doc 생성
 async function uploadAsGoogleDoc(token: string, html: string, title: string, parents?: string[]) {
   const boundary = "-------314159265358979323846";
-  const metadata: any = { name: title, mimeType: "application/vnd.google-apps.document" };
-  if (parents && parents.length) metadata.parents = parents;
+
+  // ✅ 메타데이터: parents는 있을 때만 포함, appProperties로 수집 표식 추가
+  const metadata: any = {
+    name: title,
+    mimeType: "application/vnd.google-apps.document",
+    ...(parents && parents.length ? { parents } : {}),
+    appProperties: { app: "checkmake" } // ← 수집기 식별 표식
+  };
 
   const body =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
