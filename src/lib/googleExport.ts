@@ -240,33 +240,49 @@ export async function exportHtmlToGoogleDocs({
   let data: { id: string; webViewLink?: string } | null = null;
   let triedFolder = false;
 
-  // 1차: 지정 폴더 시도
+  // 1차: 지정 폴더 시도 (권한 없으면 404/403이 정상적으로 발생 → 폴백)
   if (folderId) {
     try {
       data = await uploadAsGoogleDoc(token, cleanHtml, title, [folderId]);
       triedFolder = true;
     } catch (e: any) {
       const msg = String(e?.message || e);
-      // 권한/존재 문제로 판단되면 폴백
-      if (msg.includes("notFound") || msg.includes("insufficientFilePermissions") || msg.includes("File not found") || msg.includes("folder")) {
+      console.info("[export] folder upload failed → fallback:", msg);
+      if (
+        msg.includes("notFound") ||
+        msg.includes("insufficientFilePermissions") ||
+        msg.includes("File not found") ||
+        msg.toLowerCase().includes("folder")
+      ) {
         onToast?.({ type: "info", message: "지정 폴더 접근 불가 → ‘내 드라이브’에 저장합니다." });
       } else {
+        // 폴더 권한 문제가 아니면 그대로 에러 처리
         throw new Error("Google Drive 업로드 실패: " + msg);
       }
     }
   }
 
-  // 2차: 폴더 없이(사용자 내 드라이브) 업로드
+  // 2차: 폴더 없이(사용자 ‘내 드라이브’) 업로드
   if (!data) {
-    data = await uploadAsGoogleDoc(token, cleanHtml, title);
+    try {
+      data = await uploadAsGoogleDoc(token, cleanHtml, title);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      console.error("[export] fallback upload failed:", msg);
+      throw new Error("Google Drive 업로드(내 드라이브) 실패: " + msg);
+    }
   }
 
-  // 수집자에게 자동 공유(선택)
-  await shareToCollector(token, data.id, COLLECTOR);
+  // 수집자 자동 공유(선택)
+  try {
+    await shareToCollector(token, data.id, COLLECTOR);
+  } catch (e) {
+    console.warn("[export] shareToCollector warning:", e);
+  }
 
   const docUrl = data.webViewLink || `https://docs.google.com/document/d/${data.id}/edit`;
 
-  // 로컬 저장용 DOCX
+  // 로컬 저장용 DOCX (실패해도 치명적 아님)
   let dl: { blobUrl: string; mimeType: string; fileName: string } | undefined;
   try {
     const exp = await fetch(
@@ -275,10 +291,15 @@ export async function exportHtmlToGoogleDocs({
     );
     if (exp.ok) {
       const blob = await exp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      dl = { blobUrl, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileName: `${title}.docx` };
+      dl = {
+        blobUrl: URL.createObjectURL(blob),
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fileName: `${title}.docx`
+      };
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[export] docx export warning:", e);
+  }
 
   onToast?.({ type: "success", message: triedFolder ? "Google Docs 저장 완료" : "Google Docs 저장 완료(내 드라이브)" });
   return { id: data.id, webViewLink: data.webViewLink || "", docUrl, download: dl };
