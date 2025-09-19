@@ -76,7 +76,8 @@ const Auth = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSignIn} className="space-y-4">
+          {/* 이메일/비밀번호 로그인 폼 - 숨김 처리 (롤백용으로 보존) */}
+          <form onSubmit={handleSignIn} className="space-y-4" style={{display: 'none'}}>
             {/* 이메일 입력 필드 */}
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>
@@ -109,7 +110,7 @@ const Auth = () => {
               </Alert>
             )}
 
-            {/* 로그인 버튼 */}
+            {/* 기존 로그인 버튼 - 숨김 처리 */}
             <Button
               type="submit"
               className="w-full"
@@ -117,6 +118,28 @@ const Auth = () => {
             >
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
+          </form>
+
+          {/* Google OAuth 로그인 버튼 */}
+          <div className="space-y-4">
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => window.location.href = 'https://rigbiqjmszdlacjdkhep.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Fchackmake-query-tool.lovable.app%2F&scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&include_granted_scopes=true&access_type=offline'}
+            >
+              로그인
+            </Button>
+
+            {/* Google 권한 재연결 링크 - 숨김 처리 (운영 시 필요 시만 노출) */}
+            <div className="text-center" style={{display: 'none'}}>
+              <button
+                type="button"
+                onClick={() => window.location.href = 'https://rigbiqjmszdlacjdkhep.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Fchackmake-query-tool.lovable.app%2F&scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&include_granted_scopes=false&prompt=consent&access_type=offline'}
+                className="text-sm text-primary hover:underline"
+              >
+                Google 권한 재연결
+              </button>
+            </div>
 
             {/* ✅ 비밀번호 찾기 버튼 */}
             <div className="text-center">
@@ -142,7 +165,7 @@ const Auth = () => {
                 </button>
               </p>
             </div>
-          </form>
+          </div>
         </CardContent>
       </Card>
     </div>
