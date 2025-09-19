@@ -7,7 +7,8 @@ export type ExportOptions = {
   html: string;
   equipmentName: string;
   clientId: string;
-  folderId: string;
+  // ✅ 옵션 처리: 폴더 ID는 선택값(없어도 동작)
+  folderId?: string;
   fileName?: string;
   onToast?: ToastFn;
 };
@@ -181,7 +182,8 @@ export async function exportHtmlToGoogleDocs({
 }> {
   assert(html && html.trim(), "빈 보고서는 내보낼 수 없습니다.");
   assert(clientId, "Google Client ID가 비어있습니다.");
-  assert(folderId, "Drive 대상 폴더 ID가 비어있습니다.");
+  // ❌ (삭제됨) 폴더 ID 강제 검사
+  // assert(folderId, "Drive 대상 폴더 ID가 비어있습니다.");
 
   const token = await getAccessToken(clientId, onToast);
   // 코드펜스 제거 + 안전 치환
@@ -190,7 +192,10 @@ export async function exportHtmlToGoogleDocs({
   const title = makeFileName(equipmentName, html, fileName);
 
   const boundary = "-------314159265358979323846";
-  const metadata = { name: title, mimeType: "application/vnd.google-apps.document", parents: [folderId] };
+  // ✅ 폴더가 있을 때만 parents 추가 (없으면 사용자 '내 드라이브'에 저장)
+  const metadata: any = { name: title, mimeType: "application/vnd.google-apps.document" };
+  if (folderId) metadata.parents = [folderId];
+
   const body =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
     JSON.stringify(metadata) +
