@@ -7,7 +7,7 @@ export type ExportOptions = {
   html: string;
   equipmentName: string;
   clientId: string;
-  // ✅ 옵션 처리: 폴더 ID는 선택값(없어도 동작)
+  // ✅ 선택값: 폴더가 없어도 동작
   folderId?: string;
   fileName?: string;
   onToast?: ToastFn;
@@ -17,6 +17,9 @@ const ILLEGAL = /[\\/:*?"<>|]+/g;
 const z = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const ymd = (d = new Date()) => `${d.getFullYear()}.${z(d.getMonth() + 1)}.${z(d.getDate())}`;
 function assert(c: any, m: string): asserts c { if (!c) throw new Error(m); }
+
+// 선택: 자동 공유 대상(수집자) 이메일
+const COLLECTOR = (import.meta.env.VITE_COLLECTOR_EMAIL as string | undefined)?.trim() || undefined;
 
 // 코드펜스 마커만 제거(내용 보존)
 function stripFenceMarkers(s: string): string {
@@ -174,6 +177,52 @@ function makeFileName(eq: string, html?: string, explicit?: string) {
   return name.replace(/\.+$/, "");
 }
 
+/* ========== 업로드/공유 헬퍼 ========== */
+
+// parents를 선택적으로 포함하여 Google Doc 생성
+async function uploadAsGoogleDoc(token: string, html: string, title: string, parents?: string[]) {
+  const boundary = "-------314159265358979323846";
+  const metadata: any = { name: title, mimeType: "application/vnd.google-apps.document" };
+  if (parents && parents.length) metadata.parents = parents;
+
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) +
+    `\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n` +
+    html +
+    `\r\n--${boundary}--`;
+
+  const url = "https://www.googleapis.com/upload/drive/v3/files"
+            + "?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink";
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+    body
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ id: string; webViewLink?: string }>;
+}
+
+// 수집자(네 이메일)에게 자동 공유
+async function shareToCollector(token: string, fileId: string, email?: string) {
+  if (!email) return;
+  const endpoint = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true&sendNotificationEmail=false`;
+  for (const role of ["writer", "reader"]) {
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "user", role, emailAddress: email })
+    });
+    if (r.ok) return;
+    // writer 실패 시 reader로 폴백
+  }
+  // 실패해도 사용자 저장은 이미 끝났으므로 치명 아님
+}
+
+/* ========== 메인 함수 ========== */
+
 export async function exportHtmlToGoogleDocs({
   html, equipmentName, clientId, folderId, fileName, onToast,
 }: ExportOptions): Promise<{
@@ -182,52 +231,57 @@ export async function exportHtmlToGoogleDocs({
 }> {
   assert(html && html.trim(), "빈 보고서는 내보낼 수 없습니다.");
   assert(clientId, "Google Client ID가 비어있습니다.");
-  // ❌ (삭제됨) 폴더 ID 강제 검사
-  // assert(folderId, "Drive 대상 폴더 ID가 비어있습니다.");
 
   const token = await getAccessToken(clientId, onToast);
-  // 코드펜스 제거 + 안전 치환
   const inner = sanitizeHtml(html);
   const cleanHtml = wrapAsHtmlDocument(inner);
   const title = makeFileName(equipmentName, html, fileName);
 
-  const boundary = "-------314159265358979323846";
-  // ✅ 폴더가 있을 때만 parents 추가 (없으면 사용자 '내 드라이브'에 저장)
-  const metadata: any = { name: title, mimeType: "application/vnd.google-apps.document" };
-  if (folderId) metadata.parents = [folderId];
+  let data: { id: string; webViewLink?: string } | null = null;
+  let triedFolder = false;
 
-  const body =
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
-    JSON.stringify(metadata) +
-    `\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n` +
-    cleanHtml +
-    `\r\n--${boundary}--`;
+  // 1차: 지정 폴더 시도
+  if (folderId) {
+    try {
+      data = await uploadAsGoogleDoc(token, cleanHtml, title, [folderId]);
+      triedFolder = true;
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      // 권한/존재 문제로 판단되면 폴백
+      if (msg.includes("notFound") || msg.includes("insufficientFilePermissions") || msg.includes("File not found") || msg.includes("folder")) {
+        onToast?.({ type: "info", message: "지정 폴더 접근 불가 → ‘내 드라이브’에 저장합니다." });
+      } else {
+        throw new Error("Google Drive 업로드 실패: " + msg);
+      }
+    }
+  }
 
-  const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
-    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body }
-  );
-  if (!res.ok) throw new Error(`Google Drive 업로드 실패: ${await res.text()}`);
+  // 2차: 폴더 없이(사용자 내 드라이브) 업로드
+  if (!data) {
+    data = await uploadAsGoogleDoc(token, cleanHtml, title);
+  }
 
-  const data = await res.json() as { id: string; webViewLink: string };
+  // 수집자에게 자동 공유(선택)
+  await shareToCollector(token, data.id, COLLECTOR);
+
   const docUrl = data.webViewLink || `https://docs.google.com/document/d/${data.id}/edit`;
 
   // 로컬 저장용 DOCX
   let dl: { blobUrl: string; mimeType: string; fileName: string } | undefined;
   try {
     const exp = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${data.id}/export?mimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document&alt=media`,
+      `https://www.googleapis.com/drive/v3/files/${data.id}/export?supportsAllDrives=true&mimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document&alt=media`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (exp.ok) {
       const blob = await exp.blob();
       const blobUrl = URL.createObjectURL(blob);
-      dl = { blobUrl, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: `${title}.docx` };
+      dl = { blobUrl, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileName: `${title}.docx` };
     }
   } catch {}
 
-  onToast?.({ type: "success", message: "Google Docs 저장 완료(기기 다운로드 가능)" });
-  return { ...data, docUrl, download: dl };
+  onToast?.({ type: "success", message: triedFolder ? "Google Docs 저장 완료" : "Google Docs 저장 완료(내 드라이브)" });
+  return { id: data.id, webViewLink: data.webViewLink || "", docUrl, download: dl };
 }
 
 export const exportHtmlToGoogleDoc = exportHtmlToGoogleDocs;
