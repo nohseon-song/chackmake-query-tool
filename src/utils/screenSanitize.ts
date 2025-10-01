@@ -87,11 +87,18 @@ function inlineJsonBlocksSafe(raw: string): string {
   return out;
 }
 
-/** 화면 표시용 정리 함수 (MainContent에서 사용) */
+/** 화면 표시용 정리 함수 (MainContent에서 사용) - Always sanitized with DOMPurify */
 export function sanitizeForScreen(raw: string): string {
   if (!raw) return "";
   // 코드펜스 제거 후 JSON 안전 인라인
-  return inlineJsonBlocksSafe(raw);
+  const processed = inlineJsonBlocksSafe(raw);
+  
+  // Always use DOMPurify to sanitize HTML before rendering
+  if (typeof window !== 'undefined' && (window as any).DOMPurify) {
+    return (window as any).DOMPurify.sanitize(processed);
+  }
+  
+  return processed;
 }
 
 /** 화면에서 파일명 규칙용 장비명 추정(없으면 null) */

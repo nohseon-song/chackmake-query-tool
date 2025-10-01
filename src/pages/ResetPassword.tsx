@@ -1,6 +1,8 @@
 // src/pages/ResetPassword.tsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resetPasswordSchema } from "@/lib/validation";
+import { z } from "zod";
 
 const ResetPassword: React.FC = () => {
   const [password, setPassword] = useState("");
@@ -64,19 +66,17 @@ const ResetPassword: React.FC = () => {
     setOk(null);
     setErr(null);
 
-    if (password.length < 6) {
-      setErr("비밀번호는 최소 6자 이상이어야 합니다.");
-      return;
-    }
-
     try {
+      // Validate password using Zod schema
+      const validatedData = resetPasswordSchema.parse({ password });
+      
       setLoading(true);
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         throw new Error("인증 세션이 없습니다. 이메일의 비밀번호 재설정 링크로 다시 들어와 주세요.");
       }
 
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await supabase.auth.updateUser({ password: validatedData.password });
       if (error) throw error;
 
       // ✅ UX 개선: 성공 메시지 → 세션 정리 → 로그인 페이지(/auth)로 자동 이동
@@ -86,7 +86,11 @@ const ResetPassword: React.FC = () => {
         window.location.href = "/auth"; // 로그인 페이지 경로
       }, 1200);
     } catch (e: any) {
-      setErr(e?.message ?? "비밀번호 변경 중 오류가 발생했습니다.");
+      if (e instanceof z.ZodError) {
+        setErr(e.issues[0].message);
+      } else {
+        setErr(e?.message ?? "비밀번호 변경 중 오류가 발생했습니다.");
+      }
     } finally {
       setLoading(false);
     }
@@ -104,11 +108,14 @@ const ResetPassword: React.FC = () => {
         <input
           id="pw"
           type="password"
-          placeholder="6자 이상"
+          placeholder="최소 12자, 대/소문자, 숫자, 특수문자 포함"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
         />
+        <p style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+          비밀번호는 최소 12자 이상이며, 대문자, 소문자, 숫자, 특수문자를 각각 1개 이상 포함해야 합니다.
+        </p>
 
         <button
           type="submit"

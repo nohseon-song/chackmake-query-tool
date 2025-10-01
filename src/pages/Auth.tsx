@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { signInSchema, type SignInInput } from '@/lib/validation';
+import { z } from 'zod';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -26,19 +28,16 @@ const Auth = () => {
   // 로그인 처리
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.email || !formData.password) {
-      setError('이메일과 비밀번호를 모두 입력해주세요.');
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
+      // Validate input using Zod schema
+      const validatedData = signInSchema.parse(formData);
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
+        email: validatedData.email,
+        password: validatedData.password,
       });
 
       if (error) {
@@ -59,8 +58,12 @@ const Auth = () => {
       navigate('/');
 
     } catch (error) {
-      console.error('로그인 오류:', error);
-      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      if (error instanceof z.ZodError) {
+        // Display first validation error
+        setError(error.issues[0].message);
+      } else {
+        setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setIsLoading(false);
     }

@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { signUpSchema, type SignUpInput } from '@/lib/validation';
+import { z } from 'zod';
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -31,52 +33,31 @@ const SignUp = () => {
   };
 
   // 입력 검증
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    // 이름 검증
-    if (!formData.name.trim()) {
-      newErrors.name = '회사명 및 이름을 입력해주세요.';
+  const validateForm = (): { valid: boolean; data?: SignUpInput } => {
+    try {
+      const validatedData = signUpSchema.parse(formData);
+      setErrors({});
+      return { valid: true, data: validatedData };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        error.issues.forEach((err) => {
+          if (err.path[0]) {
+            newErrors[err.path[0] as string] = err.message;
+          }
+        });
+        setErrors(newErrors);
+      }
+      return { valid: false };
     }
-
-    // 전화번호 검증
-    if (!formData.phone.trim()) {
-      newErrors.phone = '전화번호를 입력해주세요.';
-    }
-
-    // 이메일 검증
-    if (!formData.email.trim()) {
-      newErrors.email = '이메일을 입력해주세요.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = '올바른 이메일 형식을 입력해주세요.';
-    }
-
-    // 비밀번호 검증
-    if (!formData.password) {
-      newErrors.password = '비밀번호를 입력해주세요.';
-    } else if (formData.password.length < 6) {
-      newErrors.password = '비밀번호는 최소 6자 이상이어야 합니다.';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // 폼이 유효한지 확인
-  const isFormValid = () => {
-    return formData.name.trim() && 
-           formData.phone.trim() && 
-           formData.email.trim() && 
-           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
-           formData.password.length >= 6 &&
-           Object.keys(errors).length === 0;
   };
 
   // 회원가입 처리
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    const validation = validateForm();
+    if (!validation.valid || !validation.data) {
       return;
     }
 
@@ -86,12 +67,12 @@ const SignUp = () => {
     try {
       // Supabase 회원가입 (이름과 전화번호를 options.data에 포함)
       const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
+        email: validation.data.email,
+        password: validation.data.password,
         options: {
           data: {
-            name: formData.name,
-            phone: formData.phone
+            name: validation.data.name,
+            phone: validation.data.phone
           },
           emailRedirectTo: `${window.location.origin}/`
         }
@@ -104,7 +85,7 @@ const SignUp = () => {
         if (error.message.includes('User already registered')) {
           errorMessage = '이미 가입된 이메일입니다.';
         } else if (error.message.includes('Password should be at least')) {
-          errorMessage = '비밀번호가 너무 짧습니다.';
+          errorMessage = '비밀번호 요구사항을 충족하지 못했습니다.';
         } else if (error.message.includes('Invalid email')) {
           errorMessage = '올바른 이메일 형식을 입력해주세요.';
         }
@@ -128,7 +109,6 @@ const SignUp = () => {
       }, 3000);
 
     } catch (error) {
-      console.error('회원가입 오류:', error);
       setMessage({
         type: 'error',
         text: '회원가입 중 오류가 발생했습니다. 다시 시도해주세요.'
@@ -203,7 +183,7 @@ const SignUp = () => {
               <Input
                 id="password"
                 type="password"
-                placeholder="최소 6자 이상"
+                placeholder="최소 12자, 대/소문자, 숫자, 특수문자 포함"
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
                 className={errors.password ? 'border-destructive' : ''}
@@ -211,6 +191,9 @@ const SignUp = () => {
               {errors.password && (
                 <p className="text-sm text-destructive">{errors.password}</p>
               )}
+              <p className="text-xs text-muted-foreground">
+                비밀번호는 최소 12자 이상이며, 대문자, 소문자, 숫자, 특수문자를 각각 1개 이상 포함해야 합니다.
+              </p>
             </div>
 
             {/* 메시지 표시 */}
@@ -225,7 +208,7 @@ const SignUp = () => {
             <Button
               type="submit"
               className="w-full"
-              disabled={!isFormValid() || isLoading}
+              disabled={isLoading}
             >
               {isLoading ? '처리 중...' : '회원가입'}
             </Button>
