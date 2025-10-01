@@ -423,13 +423,6 @@ export type Database = {
             foreignKeyName: "inspector_contacts_inspector_id_fkey"
             columns: ["inspector_id"]
             isOneToOne: false
-            referencedRelation: "inspector_basic_info"
-            referencedColumns: ["inspector_id"]
-          },
-          {
-            foreignKeyName: "inspector_contacts_inspector_id_fkey"
-            columns: ["inspector_id"]
-            isOneToOne: false
             referencedRelation: "inspectors"
             referencedColumns: ["id"]
           },
@@ -780,13 +773,6 @@ export type Database = {
             foreignKeyName: "performance_inspections_inspector_id_fkey"
             columns: ["inspector_id"]
             isOneToOne: false
-            referencedRelation: "inspector_basic_info"
-            referencedColumns: ["inspector_id"]
-          },
-          {
-            foreignKeyName: "performance_inspections_inspector_id_fkey"
-            columns: ["inspector_id"]
-            isOneToOne: false
             referencedRelation: "inspectors"
             referencedColumns: ["id"]
           },
@@ -904,35 +890,7 @@ export type Database = {
       }
     }
     Views: {
-      inspector_basic_info: {
-        Row: {
-          has_email: boolean | null
-          has_phone: boolean | null
-          inspector_id: string | null
-          inspector_name: string | null
-          is_team_leader: boolean | null
-          location_id: string | null
-          organization_id: string | null
-          position: string | null
-          technical_grade: string[] | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "inspectors_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "inspection_locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "inspectors_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       calculate_and_and_store_monthly_api_billings: {
@@ -974,6 +932,20 @@ export type Database = {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_inspector_basic_info: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          has_email: boolean
+          has_phone: boolean
+          inspector_id: string
+          inspector_name: string
+          is_team_leader: boolean
+          location_id: string
+          organization_id: string
+          position: string
+          technical_grade: string[]
+        }[]
       }
       get_inspector_contact_for_admin: {
         Args: { target_inspector_id: string }
